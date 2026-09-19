@@ -1,0 +1,7 @@
+[tools]
+lute = "luau-lang/lute@1.0.1-nightly.20260823"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.69.0"
+rojo = "rojo-rbx/rojo@7.7.0"
+stylua = "JohnnyMorganz/StyLua@2.5.2"
+lune = "lune-org/lune@0.10.5"
+luau = "luau-lang/luau@0.736.0"

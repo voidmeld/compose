@@ -1,0 +1,15 @@
+# Tool caches and generated evidence
+.rokit/
+.luau-analyze-cache/
+.lute/
+bench/results/*
+!bench/results/README.md
+build/
+
+# Editor and local scratch
+.DS_Store
+*.swp
+.vscode/
+.idea/
+.claude/
+.scratch/
