@@ -1,0 +1,19 @@
+{
+  "name": "compose-engine-verification",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "ComposeVerificationIdentity": {
+        "$path": "../build/ComposeVerificationIdentity.luau"
+      },
+      "compose": {
+        "$className": "Folder",
+        "core": { "$path": "../src/core" },
+        "roblox": { "$path": "../src/roblox" }
+      }
+    },
+    "ServerScriptService": {
+      "ComposeVerification": { "$path": "roblox" }
+    }
+  }
+}
