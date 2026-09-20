@@ -76,6 +76,13 @@ local STEPS: { Step } = {
 		slow = false,
 	},
 	{
+		name = "types:readable",
+		why = "cells satisfy Readable under the new type solver",
+		command = { "luau-lsp", "analyze", "--flag:LuauSolverV2=true", "--platform=standard", "--base-luaurc=.luaurc" },
+		targets = { "tests/types/readable.luau" },
+		slow = false,
+	},
+	{
 		name = "test-manifest",
 		why = "the committed run manifest is the corpus on disk, so what runs is a reviewed artefact",
 

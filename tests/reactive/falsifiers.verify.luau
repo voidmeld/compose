@@ -11,7 +11,27 @@ local function domain()
 	return reactor, Compose.createOwner(reactor)
 end
 
+local function cellAsReadable<T>(value: Compose.Cell<T>): Compose.Readable<T>
+	return value
+end
+
 describe("falsifiers", function()
+	it("accepts cells through the generic readable contract", function()
+		local source: Compose.Cell<number> = Compose.cell(2)
+		local readable = cellAsReadable(source)
+		local derived: Compose.Formula<number> = Compose.formula(function(use)
+			return use(readable) * 2
+		end)
+		expect(derived:peek()):toBe(4)
+		source:set(3)
+		source:update(function(previous)
+			return previous + 1
+		end)
+		expect(readable:peek()):toBe(4)
+		expect(derived:peek()):toBe(8)
+		derived:dispose()
+	end)
+
 	describe("released dependencies", function()
 		it("stops the remaining direct listeners when their owner is disposed during delivery", function()
 			local _, owner = domain()

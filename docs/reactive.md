@@ -1,6 +1,9 @@
 # Cells, formulas, watches, and reactors
 
 Cells, formulas and watches represent application values. Reactors schedule their updates.
+
+`Cell<T>` can be passed directly to APIs that accept `Readable<T>`. Its `peek` method uses the
+readable receiver type, while `set` and `update` preserve the writable cell contract.
 The application supplies scheduling triggers and decides how to organize state.
 
 ## The protocol

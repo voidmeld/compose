@@ -9,7 +9,7 @@ export type Readable<T> = {
 }
 
 export type Cell<T> = {
-	peek: (self: Cell<T>) -> T,
+	peek: (self: Readable<T>) -> T,
 	set: (self: Cell<T>, value: T) -> (),
 	update: (self: Cell<T>, change: (previous: T) -> T) -> (),
 }
