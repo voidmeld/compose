@@ -25,6 +25,29 @@ Cells hold state; formulas derive state. Every reactive body receives `use`, inc
 watches, bound properties and structural sources. Reading through `use` records a dependency.
 Outside a body, use `:peek()` for an explicit untracked read.
 
+### A value, or a source of one
+
+`Compose.Given<T>` is the type of an argument that accepts one of four things:
+
+- a plain `T`,
+- a cell that reads as `T`,
+- a formula that reads as `T`,
+- a body that returns `T`.
+
+An option field uses `Given` when the field does not care which of the four the caller has.
+
+```luau
+type Options = {
+    seconds: Compose.Given<number>?,
+}
+
+runtime.tween(opacity, { seconds = 0.25 })
+runtime.tween(opacity, { seconds = configuredSeconds })
+```
+
+`Source<T>` is the narrower union. It accepts a cell, a formula or a body, but not a plain value.
+If a constant is a mistake for the field, use `Source`. If a constant is correct, use `Given`.
+
 ### `Compose.cell`
 
 `cell(initial, equals?) -> Cell`
@@ -113,6 +136,27 @@ Outside a mount, use `owner.watch(body, label?)` with an explicit owner, or
 label names this otherwise-handleless watch in a running [`Compose.profile`](#composeprofile)
 capture; it is not retained when the profiler is off.
 
+#### Reacting to changes only
+
+No option suppresses the first run. The first run registers the dependencies, so it must happen.
+To act only on later changes, give the watch one flag:
+
+```luau
+local delivered = false
+Compose.watch(function(use)
+    local current = use(health)
+    if not delivered then
+        delivered = true
+        return
+    end
+    flash(current)
+end, "health flash")
+```
+
+The first run is synchronous. It happens inside the `watch` call itself, before an enclosing batch
+closes. A write made later in that same batch is therefore a change. The watch runs again when the
+batch settles. The body then reads the value the batch left behind, not the value it started with.
+
 ### `Compose.accumulator`
 
 `accumulator { from, reduce, initial?, equals? } -> Readable`
@@ -160,6 +204,24 @@ reactor:pending()                  -- how many watches are waiting
 ```
 
 A write outside a batch settles every domain it reached, before it returns.
+
+A reactor needs no host. Cells, formulas and watches are the whole reactive layer, and none of
+them touches a host. `Compose.createRuntime(host)` creates a reactor because a runtime also builds
+nodes. Some models have no tree: a server-side store, a simulation, a test. For such a model,
+create a reactor, create an owner on that reactor, and do not create a runtime.
+
+```luau
+local reactor = Compose.reactor()
+local owner = Compose.createOwner(reactor)
+local ledger = Compose.cell(0)
+
+owner.watch(function(use)
+    persist(use(ledger))
+end)
+
+reactor:batch(function() ... end)
+owner.dispose()
+```
 
 ### `Compose.sample`
 
@@ -348,6 +410,9 @@ A `Runtime` has:
 | `spring(source, options?)` | follows `source` with spring physics |
 | `tween(source, options?)` | follows `source` along an easing curve; `seconds` is a number or a source of seconds sampled at each retarget |
 | `timeline(options?)` | one owned clock many properties can read |
+
+The `spring` and `tween` option tables both accept `reducedMotion`, a
+[reduced motion policy](#reduced-motion).
 
 Bind `local Host = runtime.constructors` once and use host-kind fields directly. Reading a field
 lazily caches its constructor; calling it builds through this runtime's host and ownership rules:
@@ -789,10 +854,37 @@ while the reported offset is unchanged, so repeated reflows accumulate without l
 anchor. Reporting the requested offset acknowledges it; reporting a different offset treats
 that as an explicit scroll. No host scroll is performed by Compose.
 
-`status` is a cell it writes after every pass: `total`, `retained`, `first`, `last`,
-`firstRow`, `lastRow`, `rowCount`, `extent`, `following`, `desiredOffset` and `measured`.
-`controls` is a table it fills with `offsetOf(index, align, size)`, `indexOfKey(key)` and
-`placementOf(index)`, for driving your own viewport.
+`status` is a cell. The collection writes it **only when one of its fields differs**, not on every
+pass. A scroll that keeps the retained range, the geometry and the measurements writes nothing.
+An adapter that watches `status` therefore stays asleep on a frame with nothing to apply.
+`controls` is a table the collection fills with `offsetOf(index, align, size)`, `indexOfKey(key)`
+and `placementOf(index)`, to drive your own viewport.
+
+`placementOf(index)` returns a frozen placement. It returns the same table for the same index
+until the geometry or a measurement moves that index. A retained row's placement readable holds
+the same table, so a repaint that changes nothing allocates nothing.
+
+`controls` has no `slotAt(offset)` and no `boundaryBetween(a, b)`. Both values derive from
+`placementOf`, so core does not carry them. The boundary before slot `index` is
+`placementOf(index).offset`. The boundary after that slot is `.offset + .size`. To find the slot
+at an offset, run a binary search over `placementOf`. The offset of a placement rises with the
+index, and each probe costs one tree descent:
+
+```luau
+local function slotAt(controls, total, offset)
+    local low, high = 1, total
+    while low < high do
+        local middle = (low + high) // 2
+        local placement = controls.placementOf(middle)
+        if offset < placement.offset + placement.size then
+            high = middle
+        else
+            low = middle + 1
+        end
+    end
+    return low
+end
+```
 
 `follow = "end"` keeps the view at the newest item. It disengages when the reader scrolls
 away, but stays active when new content arrives.
@@ -801,6 +893,11 @@ Scrolling costs the retained slice, not the population: the range is a division 
 rows and a tree descent otherwise. Work proportional to the whole list happens when the list
 changes, which is detected by identity, or measured geometry is rebuilt for changed layout
 values. Returning an equivalent layout table does not rebuild geometry.
+
+A change to one row's measured size is incremental. Publishing a new `measured` table walks the
+keys of that table to find what differs. Each size that did change costs one row maximum and one
+prefix-tree update. That is a tree descent, not a rebuild. Compose rebuilds the geometry only when
+the list identity or a layout value changes.
 
 ### `Compose.SpatialCollection`
 
@@ -1014,6 +1111,26 @@ outside that range to produce overshoot.
 ```luau
 runtime.tween(opacity, { seconds = 0.25, ease = Compose.easing.outQuad })
 ```
+
+### Reduced motion
+
+`spring` and `tween` both accept `reducedMotion`. The policy is a cell, a formula or a body that
+reads a boolean. It is a source, not a plain boolean, because the setting changes while the
+application runs. A value that is neither raises `animation/bad-reduced-motion`.
+
+```luau
+local calm = Compose.cell(GuiService.ReducedMotionEnabled)
+runtime.spring(health, { period = 0.3, reducedMotion = calm })
+```
+
+While the policy reads true, the animated value reaches each new target on the frame that
+retargets it. Compose interpolates nothing, holds no frame listener, and writes once per change
+instead of once per frame. If the policy turns true in mid-flight, the value lands on its current
+target at once and the integrator settles. A policy that turns false again therefore starts from
+rest, not from a stale velocity. An absent or false policy leaves the animation unchanged.
+
+Compose reads the policy; it does not discover the setting. Core cannot read an accessibility
+preference. Read the preference in your application and write it into a cell.
 
 ### `Compose.registerCodec`
 

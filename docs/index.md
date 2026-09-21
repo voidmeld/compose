@@ -7,6 +7,7 @@ Start with [quickstart.md](quickstart.md). Then read the contract for your task:
 - [reactive.md](reactive.md): explicit dependency reads, batching and settling.
 - [host-protocol.md](host-protocol.md): the host-neutral node boundary.
 - [roblox.md](roblox.md): engine adapter, viewport and input contracts.
+- [scenes.md](scenes.md): existing instances, 3D scenes and tests that run with no engine.
 - [../authoring/README.md](../authoring/README.md): build-time semantic sets and project trees.
 - [benchmarks.md](benchmarks.md): representative parity, timing and retention checks.
 - [agent-acceptance.md](agent-acceptance.md): one bounded fresh-agent task.

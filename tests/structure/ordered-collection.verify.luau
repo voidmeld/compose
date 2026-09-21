@@ -656,6 +656,124 @@ describe("OrderedCollection", function()
 		end)
 	end)
 
+	describe("scrolling inside one window", function()
+		it("hands back the same placement for a row the window keeps", function()
+			local viewport = Compose.cell({ offset = 0, size = 100 } :: Compose.OrderedCollectionViewport)
+			local controls: Compose.OrderedCollectionControls<string> = {}
+			local dispose = mount { count = 10000, mode = "windowed", viewport = viewport, controls = controls }
+			local placementOf = controls.placementOf :: (number) -> Compose.Placement
+			local held = placementOf(5)
+			expect(table.isfrozen(held)):toBe(true)
+			for offset = 0, 9 do
+				viewport:set { offset = offset, size = 100 }
+				world.settle()
+				expect(placementOf(5)):toBe(held)
+			end
+			dispose()
+		end)
+
+		it("touches the host no further once the retained range settles", function()
+			local viewport = Compose.cell({ offset = 0, size = 100 } :: Compose.OrderedCollectionViewport)
+			local dispose = mount { count = 10000, mode = "windowed", viewport = viewport }
+			viewport:set { offset = 1, size = 100 }
+			world.settle()
+			world.host.resetCounts()
+			for offset = 1, 9 do
+				viewport:set { offset = offset, size = 100 }
+				world.settle()
+			end
+			local counts = world.host.counts()
+			expect(counts.createNode):toBe(0)
+			expect(counts.destroyNode):toBe(0)
+			expect(counts.setProperty):toBe(0)
+			expect(counts.insertChild):toBe(0)
+			expect(counts.moveChild):toBe(0)
+			expect(counts.removeChild):toBe(0)
+			dispose()
+		end)
+
+		it("leaves the status alone while every published field stays the same", function()
+			local viewport = Compose.cell({ offset = 0, size = 100 } :: Compose.OrderedCollectionViewport)
+			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local dispose = mount { count = 10000, mode = "windowed", viewport = viewport, status = status }
+			viewport:set { offset = 1, size = 100 }
+			world.settle()
+			local writes = 0
+			local owner = Compose.createOwner(world.runtime.reactor)
+			owner.watch(function(use)
+				use(status)
+				writes += 1
+			end)
+			expect(writes):toBe(1)
+			for offset = 1, 9 do
+				viewport:set { offset = offset, size = 100 }
+				world.settle()
+			end
+			expect(writes):toBe(1)
+			viewport:set { offset = 40, size = 100 }
+			world.settle()
+			expect(writes):toBe(2)
+			expect(status:peek().first):toBe(5)
+			owner.dispose()
+			dispose()
+		end)
+
+		it("drops the cached placements when a measurement moves a later row", function()
+			local viewport = Compose.cell({ offset = 0, size = 100 } :: Compose.OrderedCollectionViewport)
+			local measured = Compose.cell({} :: { [string]: number })
+			local controls: Compose.OrderedCollectionControls<string> = {}
+			local dispose = mount {
+				count = 10000,
+				mode = "windowed",
+				viewport = viewport,
+				measured = measured,
+				controls = controls,
+			}
+			local placementOf = controls.placementOf :: (number) -> Compose.Placement
+			local before = placementOf(5)
+			expect(before.offset):toBe(40)
+			measured:set { r2 = 30 }
+			world.settle()
+			local after = placementOf(5)
+			expect(after).never:toBe(before)
+			expect(after.offset):toBe(60)
+			dispose()
+		end)
+
+		it("re-reads a list a body hands back after changing it in place", function()
+			local viewport = Compose.cell({ offset = 0, size = 100 } :: Compose.OrderedCollectionViewport)
+			local list = rows(40)
+			local revision = Compose.cell(0)
+			local dispose, root = world.runtime.mount(function()
+				return world.create "Frame" {
+					Compose.OrderedCollection {
+						from = function(use)
+							use(revision)
+							return list
+						end,
+						key = idOf,
+						mode = "windowed",
+						viewport = viewport,
+						layout = { itemSize = 10 },
+						render = function(value)
+							return world.create "Row" {
+								Id = function(use)
+									return use(value).id
+								end,
+							}
+						end,
+					},
+				}
+			end, world.root)
+			expect(idsOf(root)[1]):toBe "r1"
+			list[1] = { id = "moved", label = "row 1" }
+			revision:set(1)
+			world.settle()
+			expect(idsOf(root)[1]):toBe "moved"
+			dispose()
+		end)
+	end)
+
 	describe("lifetime", function()
 		it("returns every node when the collection goes", function()
 			local viewport = Compose.cell({ offset = 0, size = 30 } :: Compose.OrderedCollectionViewport)

@@ -63,6 +63,69 @@ describe("ownership", function()
 			expect(tostring(err)):toContain "middle blew up"
 		end)
 
+		it("hands back the one failure exactly as it was raised", function()
+			local raised = { code = "cleanup/exploded" }
+			local owner = Compose.createOwner()
+			local ran = false
+			owner.own(function()
+				ran = true
+			end)
+			owner.own(function()
+				error(raised, 0)
+			end)
+
+			local ok, err: any = pcall(owner.dispose)
+			expect(ok):toBe(false)
+			expect(err):toBe(raised)
+			expect(ran):toBe(true)
+		end)
+
+		it("runs a cleanup a failing cleanup registered on the way out", function()
+			local ran: { string } = {}
+			local owner = Compose.createOwner()
+			owner.own(function()
+				table.insert(ran, "bottom")
+			end)
+			owner.own(function()
+				owner.own(function()
+					table.insert(ran, "late")
+				end)
+				error "top blew up"
+			end)
+
+			local ok, err: any = pcall(owner.dispose)
+			expect(ok):toBe(false)
+			expect(tostring(err)):toContain "top blew up"
+			expect(ran):toEqual { "late", "bottom" }
+			expect(owner.size()):toBe(0)
+		end)
+
+		it("keeps disposing a parent whose child cleanup raised, and reports both levels", function()
+			local ran: { string } = {}
+			local parent = Compose.createOwner()
+			parent.own(function()
+				table.insert(ran, "parent bottom")
+			end)
+			local child = parent.createChild()
+			child.own(function()
+				table.insert(ran, "child bottom")
+			end)
+			child.own(function()
+				error "child blew up"
+			end)
+			parent.own(function()
+				error "parent top blew up"
+			end)
+
+			local ok, err: any = pcall(parent.dispose)
+			expect(ok):toBe(false)
+			expect(ran):toEqual { "child bottom", "parent bottom" }
+			expect(tostring(err)):toContain "child blew up"
+			expect(tostring(err)):toContain "parent top blew up"
+			expect(child.isDisposed()):toBe(true)
+			expect(parent.size()):toBe(0)
+		end)
+
 		it("disposes a child when its parent goes", function()
 			local owner = Compose.createOwner()
 			local child = owner.createChild()

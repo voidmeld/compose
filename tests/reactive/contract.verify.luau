@@ -281,6 +281,28 @@ describe("watches", function()
 end)
 
 describe("batching", function()
+	it("counts a write made after a watch registered inside the same batch as a change", function()
+		local reactor, owner = domain()
+		local source = Compose.cell "before"
+		local seen: { string } = {}
+		reactor:batch(function()
+			local delivered = false
+			owner.watch(function(use)
+				local current = use(source)
+				if not delivered then
+					delivered = true
+					return
+				end
+				table.insert(seen, current)
+			end)
+			expect(seen):toEqual {}
+			source:set "after"
+			expect(seen):toEqual {}
+		end)
+		expect(seen):toEqual { "after" }
+		owner.dispose()
+	end)
+
 	it("runs a watch once for many writes", function()
 		local reactor, owner = domain()
 		local first = Compose.cell(0)

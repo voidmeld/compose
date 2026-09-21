@@ -212,6 +212,109 @@ describe("runtime.spring", function()
 	end)
 end)
 
+describe("reduced motion", function()
+	it("arrives at once while the policy says so, and animates again when it changes back", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local reduced = Compose.cell(true)
+		local dispose, node = world.runtime.mount(function()
+			local smooth = world.runtime.spring(function(use)
+				return use(target)
+			end, { period = 0.2, damping = 1, reducedMotion = reduced })
+			return world.create "Frame" {
+				Position = function(use)
+					return use(smooth)
+				end,
+			}
+		end, world.root)
+
+		target:set(100)
+		world.settle()
+		expect(world.host.propertyOf(node, "Position")):toBe(100)
+		expect(world.host.counts().frameListeners):toBe(0)
+
+		reduced:set(false)
+		target:set(200)
+		world.settle()
+		stepFor(world, 0.05)
+		local partway = world.host.propertyOf(node, "Position") :: number
+		expect(partway):toBeGreaterThan(100)
+		expect(partway):toBeLessThan(200)
+
+		stepFor(world, 2)
+		expect(world.host.propertyOf(node, "Position")):toBe(200)
+		dispose()
+	end)
+
+	it("lands a spring that was already in flight when the policy turned on", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local reduced = Compose.cell(false)
+		local dispose, node = world.runtime.mount(function()
+			local smooth = world.runtime.spring(function(use)
+				return use(target)
+			end, { period = 0.2, damping = 1, reducedMotion = reduced })
+			return world.create "Frame" {
+				Position = function(use)
+					return use(smooth)
+				end,
+			}
+		end, world.root)
+
+		target:set(100)
+		world.settle()
+		stepFor(world, 0.05)
+		expect(world.host.propertyOf(node, "Position")):toBeLessThan(100)
+
+		reduced:set(true)
+		world.settle()
+		expect(world.host.propertyOf(node, "Position")):toBe(100)
+		expect(world.host.counts().frameListeners):toBe(0)
+		dispose()
+	end)
+
+	it("takes the policy from a tween as well", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local dispose, node = world.runtime.mount(function()
+			local eased = world.runtime.tween(function(use)
+				return use(target)
+			end, {
+				seconds = 0.5,
+				reducedMotion = function()
+					return true
+				end,
+			})
+			return world.create "Frame" {
+				Position = function(use)
+					return use(eased)
+				end,
+			}
+		end, world.root)
+
+		target:set(50)
+		world.settle()
+		expect(world.host.propertyOf(node, "Position")):toBe(50)
+		dispose()
+	end)
+
+	it("refuses a policy it cannot read", function()
+		local world = Support.world()
+		expect(function()
+			world.runtime.mount(function()
+				local smooth = world.runtime.spring(function()
+					return 0
+				end, { reducedMotion = true :: any })
+				return world.create "Frame" {
+					Position = function(use)
+						return use(smooth)
+					end,
+				}
+			end, world.root)
+		end):toThrow "animation/bad%-reduced%-motion"
+	end)
+end)
+
 describe("runtime.tween", function()
 	it("follows its curve and lands exactly on the target", function()
 		local world = Support.world()

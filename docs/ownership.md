@@ -92,6 +92,9 @@ The owner removes each entry before calling it.
 A subscription registered after its node is released before that node. This prevents events from reaching a destroyed node.
 
 Disposal continues after an error. If a disposer raises, the owner runs the remaining disposers and reports all errors together.
+If a disposer registers another disposer during that teardown, the owner runs the new disposer immediately. The owner
+skips no disposer. If exactly one disposer fails, the owner raises that failure again with its original value and no
+added position. If several disposers fail, the owner raises one summary that names each failure.
 
 ### Registering after disposal
 

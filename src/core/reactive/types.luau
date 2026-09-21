@@ -23,6 +23,8 @@ export type Body<T> = (use: Use) -> T
 
 export type Source<T> = Readable<T> | Body<T>
 
+export type Given<T> = T | Cell<T> | Formula<T> | Source<T>
+
 export type Equals<T> = (current: T, incoming: T) -> boolean
 
 export type Initial<T> = (() -> T) | T

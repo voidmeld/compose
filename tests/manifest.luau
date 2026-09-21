@@ -188,6 +188,13 @@ local manifest: Verify.Manifest = {
 			requires = {},
 		},
 		{
+			id = "lifecycle/shared-frames",
+			source = "tests/lifecycle/shared-frames.verify.luau",
+			group = "lifecycle",
+			tags = { "neutral" },
+			requires = {},
+		},
+		{
 			id = "lifecycle/unwind",
 			source = "tests/lifecycle/unwind.verify.luau",
 			group = "lifecycle",

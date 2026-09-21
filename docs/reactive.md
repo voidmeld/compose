@@ -108,6 +108,38 @@ runtime:pending()                  -- how many watches are waiting
 Several reactors can read the same cell. A write outside a batch settles every affected reactor, even if one raises.
 Compose reports the collected failures afterwards.
 
+A **cell belongs to no reactor and no runtime**. A cell is a value with subscribers. A write to a cell settles every
+reader of that cell. A shared model is the set of cells that an application reads from several trees. Give that model an
+owner created outside all of those trees, with `Compose.createRootOwner`, and dispose the owner after the trees. If you
+dispose the model first, the trees keep reading cells that nothing writes again.
+
+Batching is not process-wide. Each reactor tracks its own batch state, so `runtime:batch` defers the watches of that
+runtime only. To batch several runtimes together, call the `batch` of each one. If you do not, a write settles each
+affected reactor in turn.
+
+### One clock for several runtimes
+
+A frame clock is a host capability, not a runtime argument. A host can carry `frames = { onFrame, now }`. Everything
+that moves reads the clock from the host it was built on:
+
+- springs,
+- tweens,
+- timelines,
+- collection admission.
+
+Several runtimes therefore share one clock when they **share one host**. To share a host, pass the same host value to
+each `Compose.createRuntime`. On Roblox, call `ComposeRoblox.createRuntime()` with no engine. Each such call reuses one
+memoised ambient host, which holds one Heartbeat connection.
+
+The host owns the signal. Each consumer that needs frames takes its own listener on the host. The consumer releases
+that listener when its owner is disposed, so the host holds no listener after the last consumer goes. The host calls the
+listeners in the order they were taken. That order fixes the tick order of the runtimes that share the clock: the
+runtime that subscribed first moves first, on every frame. `tests/lifecycle/shared-frames.verify.luau` pins all three
+behaviours.
+
+`ComposeRoblox.createRuntime(engine)` with an explicit engine builds a fresh host, and therefore a second Heartbeat
+connection. Pass an explicit engine only when the two trees must stay independent.
+
 The contract, in the order it matters:
 
 1. Watches observe coherent state. Inside a batch, nothing runs until the body returns.
