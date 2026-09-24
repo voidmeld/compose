@@ -5,6 +5,43 @@ local fs = require "@std/fs"
 local json = require "@std/json"
 local process = require "@lute/process"
 
+type Budget = { name: string, seconds: number }
+
+type Measurement = {
+	implementation: string,
+	error: unknown,
+	coldSeconds: { number },
+	steadySeconds: { number },
+	steadyChunkSeconds: { number },
+	burstSeconds: { number },
+	teardownSeconds: { number },
+	liveInstancesAfterBuild: number,
+	leakedInstances: number,
+	leakedConnections: number,
+	counters: { [string]: number },
+	reactive: unknown,
+}
+
+type Result = {
+	scenario: string,
+	title: string,
+	lane: string,
+	what: string,
+	steadyBudgetSeconds: number,
+	frameBudgets: { Budget }?,
+	scale: string,
+	size: number,
+	parity: string,
+	parityDetail: unknown,
+	measurements: { Measurement },
+}
+
+type Samples = {
+	environment: { runtime: string, host: string },
+	implementations: { { name: string, version: string, what: string } },
+	results: { Result },
+}
+
 local FRAME_60 = 1 / 60
 local FRAME_120 = 1 / 120
 
@@ -35,7 +72,7 @@ local function main(): number
 		print(("scenarios-report: no samples at %s"):format(path))
 		return 1
 	end
-	local samples = json.deserialize(fs.readFileToString(path)) :: any
+	local samples = json.deserialize(fs.readFileToString(path)) :: Samples
 
 	local out: { string } = {}
 	local function line(text: string?)
@@ -140,7 +177,7 @@ local function main(): number
 		end
 		line()
 
-		local budgets: { { name: string, seconds: number } } = result.frameBudgets or {}
+		local budgets: { Budget } = result.frameBudgets or {}
 		if #budgets == 0 then
 			budgets = { { name = "16.67 ms", seconds = FRAME_60 }, { name = "8.33 ms", seconds = FRAME_120 } }
 		end
@@ -196,7 +233,9 @@ local function main(): number
 				end
 				local counters = measurement.counters
 
-				local reactive = if type(measurement.reactive) == "table" then measurement.reactive else nil
+				local reactive = if type(measurement.reactive) == "table"
+					then measurement.reactive :: { [string]: number }
+					else nil
 				line(
 					("| %s | %s | %d | %d | %d | %d | %s | %s |"):format(
 						entry.scale,

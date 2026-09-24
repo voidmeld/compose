@@ -41,7 +41,7 @@ local function mountList(world: Support.World, initial: { Item }, failing: { [st
 	local dispose, root = world.runtime.mount(function()
 		return world.create "Frame" {
 			Compose.keyed {
-				from = function(use)
+				from = function(use: Compose.Use)
 					return use(list)
 				end,
 				render = function(value, index, key)

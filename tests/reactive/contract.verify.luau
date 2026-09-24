@@ -77,7 +77,7 @@ describe("cells", function()
 		local lazy = Compose.cell(function(): number
 			ran += 1
 			return 10
-		end)
+		end) :: Compose.Cell<number>
 		lazy:update(function(previous: number): number
 			return previous + 5
 		end)

@@ -320,7 +320,7 @@ describe("runtime.tween", function()
 		local world = Support.world()
 		local target = Compose.cell(0)
 		local dispose, node = world.runtime.mount(function()
-			local eased = world.runtime.tween(function(use)
+			local eased = world.runtime.tween(function(use: Compose.Use)
 				return use(target)
 			end, { seconds = 1, ease = Compose.easing.linear })
 			return world.create "Frame" {

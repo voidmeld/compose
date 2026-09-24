@@ -15,7 +15,7 @@ local TIERS: { Compose.SpatialCollectionTier } = {
 }
 
 local function line(count: number, spacing: number): { Unit }
-	local units: { Unit } = table.create(count)
+	local units = table.create(count) :: { Unit }
 	for index = 1, count do
 		units[index] = { id = "u" .. index, x = (index - 1) * spacing, y = 0, z = 0 }
 	end

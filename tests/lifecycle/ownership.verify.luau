@@ -386,7 +386,7 @@ describe("ownership", function()
 			local world = Support.world()
 			world.host.declareEvent("Frame", "Activated")
 
-			local pokes = { first = 0, second = 0 }
+			local pokes: { [string]: number } = { first = 0, second = 0 }
 			local disposes: { [string]: () -> () } = {}
 			local nodes: { [string]: Compose.Node } = {}
 

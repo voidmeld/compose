@@ -297,6 +297,66 @@ describe("falsifiers", function()
 		end)
 	end)
 
+	describe("a raising formula bound to a host property", function()
+		it("writes the recovered value after a rejected input", function()
+			local world = Support.world()
+			local label = Compose.cell "New"
+			local text = Compose.formula(function(use)
+				local value = use(label)
+				if value == "" then
+					error "empty label"
+				end
+				return value
+			end)
+			local dispose, node = world.runtime.mount(function()
+				return world.create "Frame" { Text = text }
+			end, world.root)
+			expect(world.host.propertyOf(node, "Text")):toBe "New"
+
+			pcall(function()
+				label:set ""
+				world.settle()
+			end)
+			label:set "Ready"
+			world.settle()
+			expect(world.host.propertyOf(node, "Text")):toBe "Ready"
+			dispose()
+		end)
+
+		it("writes the recovered value through a derived formula binding", function()
+			local world = Support.world()
+			local label = Compose.cell "New"
+			local checked = Compose.formula(function(use)
+				local value = use(label)
+				if value == "" then
+					error "empty label"
+				end
+				return value
+			end)
+			local shown = Compose.formula(function(use)
+				return "[" .. use(checked) .. "]"
+			end)
+			local dispose, node = world.runtime.mount(function()
+				return world.create "Frame" {
+					Text = shown,
+					Title = function(use)
+						return use(checked)
+					end,
+				}
+			end, world.root)
+
+			pcall(function()
+				label:set ""
+				world.settle()
+			end)
+			label:set "Ready"
+			world.settle()
+			expect(world.host.propertyOf(node, "Text")):toBe "[Ready]"
+			expect(world.host.propertyOf(node, "Title")):toBe "Ready"
+			dispose()
+		end)
+	end)
+
 	describe("dynamic dependency churn", function()
 		it("forgets a source a rerun no longer reads", function()
 			local reactor, owner = domain()

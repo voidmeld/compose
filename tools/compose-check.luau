@@ -148,11 +148,10 @@ local function main(): number
 	local findings: { Finding } = {}
 	local scanned = 0
 
-	for _, file in
-		walk.filesSkipping(options.root, READABLE, function(relative: string, kind: string): boolean
-			return skipped(relative .. if kind == "dir" then "/" else "")
-		end)
-	do
+	local files = walk.filesSkipping(options.root, READABLE, function(relative: string, kind: string): boolean
+		return skipped(relative .. if kind == "dir" then "/" else "")
+	end)
+	for _, file in files do
 		local relative = below(options.root, file.path)
 		scanned += 1
 		local source = consumerRules.mask(file.contents)

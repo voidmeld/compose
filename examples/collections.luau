@@ -13,7 +13,7 @@ local function chat(): (number, number)
 	local cell = Compose.cell
 
 	local ROW = 20
-	local messages: { Message } = table.create(10000)
+	local messages = table.create(10000) :: { Message }
 	for index = 1, 10000 do
 		messages[index] = { id = index, body = "message " .. index }
 	end
@@ -31,7 +31,7 @@ local function chat(): (number, number)
 
 				mode = "windowed",
 				viewport = viewport,
-				layout = { itemSize = ROW },
+				layout = { itemSize = ROW } :: Compose.OrderedCollectionLayout,
 				follow = "end",
 				status = status,
 
@@ -81,7 +81,7 @@ local function battlefield(): (number, number)
 	local Host = runtime.constructors
 	local cell = Compose.cell
 
-	local units: { Combatant } = table.create(4000)
+	local units = table.create(4000) :: { Combatant }
 	for index = 1, 4000 do
 		units[index] = { id = index, x = (index - 1) * 10, y = 0, z = 0 }
 	end

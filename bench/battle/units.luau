@@ -16,7 +16,7 @@ export type Unit = {
 }
 
 local function sparse(roster: { Trace.Combatant }, cell: (any) -> any): { Unit }
-	local units = table.create(#roster)
+	local units = table.create(#roster) :: { Unit }
 	for index, combatant in roster do
 		units[index] = {
 			id = combatant.id,
@@ -35,7 +35,7 @@ local function sparse(roster: { Trace.Combatant }, cell: (any) -> any): { Unit }
 end
 
 local function copy(roster: { Trace.Combatant }): { Trace.Combatant }
-	local out = table.create(#roster)
+	local out = table.create(#roster) :: { Trace.Combatant }
 	for index, combatant in roster do
 		out[index] = {
 			id = combatant.id,

@@ -244,7 +244,7 @@ describe("roblox adapter", function()
 			local dispose, frame = w.runtime.mount(function()
 				return w.create "Frame" {
 					Compose.keyed {
-						from = function(use)
+						from = function(use: Compose.Use)
 							return use(rows)
 						end,
 						render = function(value, index)

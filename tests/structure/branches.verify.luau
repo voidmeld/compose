@@ -20,7 +20,7 @@ describe("show", function()
 		local open = Compose.cell(false)
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.show(function(use)
+				Compose.show(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return world.create "Panel" {}
@@ -43,7 +43,7 @@ describe("show", function()
 		local open = Compose.cell(true)
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.show(function(use)
+				Compose.show(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return world.create "Panel" {}
@@ -90,7 +90,7 @@ describe("show", function()
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
 				world.create "Header" {},
-				Compose.show(function(use)
+				Compose.show(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return world.create "Panel" {}
@@ -140,7 +140,7 @@ describe("show", function()
 		local open = Compose.cell(true)
 		local dispose = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.show(function(use)
+				Compose.show(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return world.create "Panel" {
@@ -165,7 +165,7 @@ describe("switch", function()
 		local screen = Compose.cell "menu"
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.switch(function(use)
+				Compose.switch(function(use: Compose.Use)
 					return use(screen)
 				end, {
 					menu = function()
@@ -190,7 +190,7 @@ describe("switch", function()
 		local screen = Compose.cell "menu"
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.switch(function(use)
+				Compose.switch(function(use: Compose.Use)
 					return use(screen)
 				end, {
 					menu = function()
@@ -213,7 +213,7 @@ describe("switch", function()
 		local screen = Compose.cell "menu"
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.switch(function(use)
+				Compose.switch(function(use: Compose.Use)
 					return use(screen)
 				end, {
 					menu = function()
@@ -279,7 +279,7 @@ describe("indexes", function()
 		local lines = Compose.cell { "one", "two" }
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.indexes(function(use)
+				Compose.indexes(function(use: Compose.Use)
 					return use(lines)
 				end, function(value, index)
 					return world.create "Line" {
@@ -310,7 +310,7 @@ describe("indexes", function()
 		local lines = Compose.cell { "a" }
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
-				Compose.indexes(function(use)
+				Compose.indexes(function(use: Compose.Use)
 					return use(lines)
 				end, function()
 					return world.create "Line" {}

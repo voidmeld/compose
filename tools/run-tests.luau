@@ -124,17 +124,17 @@ local function main(): number
 	local selection: Verify.Selection? = nil
 	if filter ~= nil then
 		local needle = filter :: string
-		selection = {
-
+		local matching: Verify.Selection = {
 			predicate = function(subject: Verify.SelectionSubject): boolean
 				local source = subject.source
 				local haystack = if source ~= nil then source .. " > " .. subject.id else subject.id
 				return string.find(haystack, needle, 1, true) ~= nil
 			end,
 		}
+		selection = matching
 	end
 
-	local plan = Verify.planFromManifest(Manifest, { caseIdStyle = "bare" })
+	local plan = Verify.planFromManifest(Manifest, { caseIdStyle = "bare" }) :: Verify.PlanDraft
 	local execution = Verify.execute(plan, Test.host { selection = selection })
 
 	for _, fact in execution.facts do

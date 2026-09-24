@@ -81,7 +81,20 @@ type Class = {
 	super: string?,
 	properties: { [string]: any },
 	events: { [string]: true },
-	methods: { [string]: any },
+	methods: { [string]: (self: any, ...any) -> ...any },
+}
+
+type State = {
+	className: string,
+	class: Class,
+	properties: { [string]: any },
+	children: { any },
+	parent: any,
+	attributes: { [string]: any },
+	events: { [string]: any },
+	changed: { [string]: any },
+	attributeChanged: { [string]: any },
+	destroyed: boolean,
 }
 
 local ATTRIBUTE_TYPES: { [string]: true } = {
@@ -197,7 +210,7 @@ local function createEmulator(): Emulator
 
 		local properties: { [string]: any } = {}
 		local events: { [string]: true } = {}
-		local methods: { [string]: any } = {}
+		local methods: { [string]: (self: any, ...any) -> ...any } = {}
 
 		local superName = spec.super
 		if superName ~= nil then
@@ -250,8 +263,8 @@ local function createEmulator(): Emulator
 
 	local instanceMetatable: any
 
-	local function stateOf(object: any): any
-		return rawget(object, "__state")
+	local function stateOf(object: any): State
+		return rawget(object, "__state") :: State
 	end
 
 	local function classNameOf(object: any): string
@@ -265,16 +278,16 @@ local function createEmulator(): Emulator
 			error(("RobloxEmulator: Unable to create an Instance of type %q"):format(tostring(className)), 0)
 		end
 
-		local state = {
+		local state: State = {
 			className = className,
 			class = class,
 			properties = table.clone(class.properties),
-			children = {} :: { any },
-			parent = nil :: any,
-			attributes = {} :: { [string]: any },
-			events = {} :: { [string]: any },
-			changed = {} :: { [string]: any },
-			attributeChanged = {} :: { [string]: any },
+			children = {},
+			parent = nil,
+			attributes = {},
+			events = {},
+			changed = {},
+			attributeChanged = {},
 			destroyed = false,
 		}
 
@@ -293,7 +306,7 @@ local function createEmulator(): Emulator
 		return construct(className)
 	end
 
-	local function eventOf(state: any, key: string): any?
+	local function eventOf(state: State, key: string): any
 		local existing = state.events[key]
 		if existing ~= nil then
 			return existing
@@ -348,7 +361,7 @@ local function createEmulator(): Emulator
 		end
 	end
 
-	local function fireChanged(state: any, key: string)
+	local function fireChanged(state: State, key: string)
 		local signal = state.changed[key]
 		if signal ~= nil then
 			signal:Fire()
@@ -844,7 +857,7 @@ local function createEmulator(): Emulator
 		createInstance = createInstance,
 		defineClass = defineClass,
 		newSignal = function(): Signal
-			return makeSignal() :: Signal
+			return makeSignal()
 		end,
 
 		step = function(delta: number)

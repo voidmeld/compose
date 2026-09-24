@@ -31,7 +31,7 @@ local function population(count: number): { Entity }
 		return held
 	end
 	local next = Support.sequence(20260215)
-	local made = table.create(count)
+	local made = table.create(count) :: { Entity }
 	for index = 1, count do
 		made[index] = {
 			id = index,
@@ -122,7 +122,7 @@ local composeCase: Types.Case = {
 		end
 
 		local visible = Compose.cell(visibleAt(all, cameraAt(0)))
-		local projectiles = table.create(PROJECTILES)
+		local projectiles = table.create(PROJECTILES) :: { { position: any, alive: any } }
 		for index = 1, PROJECTILES do
 			projectiles[index] = { position = Compose.cell(0), alive = Compose.cell(false) }
 		end

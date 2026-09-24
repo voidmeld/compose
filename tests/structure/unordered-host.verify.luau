@@ -10,7 +10,7 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 type Row = { id: number, label: string }
 
 local function rows(ids: { number }): { Row }
-	local made = table.create(#ids)
+	local made = table.create(#ids) :: { Row }
 	for index, id in ids do
 		made[index] = { id = id, label = ("row-%d"):format(id) }
 	end
@@ -24,10 +24,10 @@ local function mountRows(options: TestScene.Options, initial: { number })
 	local dispose = world.runtime.mount(function()
 		return world.create "Frame" {
 			Compose.keyed {
-				from = function(use)
+				from = function(use: Compose.Use)
 					return use(list)
 				end,
-				render = function(value, index, key: number)
+				render = function(value: Compose.Readable<Row>, index: Compose.Readable<number>, key: number)
 					return world.create "Row" {
 						Label = function()
 							return Compose.sample(value).label

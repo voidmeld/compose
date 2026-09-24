@@ -79,9 +79,15 @@ export type Measurement = {
 	liveInstancesAfterBuild: number,
 	leakedInstances: number,
 	leakedConnections: number,
-	reactive: any,
+	reactive: { [string]: number }?,
 	probe: { [string]: number }?,
 	error: string?,
+}
+
+type WorkCounters = {
+	setWorkCounters: (enabled: boolean) -> (),
+	resetWorkCounters: () -> (),
+	readWorkCounters: () -> { [string]: number },
 }
 
 local function emptySamples(): PhaseSamples
@@ -169,14 +175,15 @@ local function measure(scenario: Types.Scenario, framework: Frameworks.Framework
 		attach(context, scale, case)
 		local baselineInstances = environment.liveInstances()
 		local baselineConnections = environment.liveConnections()
-		local reactive = if type(context.library) == "table" and context.library.setWorkCounters ~= nil
+		local reactive: WorkCounters? = if type(context.library) == "table"
+				and context.library.setWorkCounters ~= nil
 			then context.library
 			else nil
 		if reactive ~= nil then
 			reactive.setWorkCounters(true)
 			reactive.resetWorkCounters()
 		end
-		local ok, err: any = pcall(function()
+		local ok, err: unknown = pcall(function()
 			local state = case.build(context, scale)
 			result.liveInstancesAfterBuild = environment.liveInstances()
 			for tick = 1, scenario.steadyFrames do
@@ -192,7 +199,7 @@ local function measure(scenario: Types.Scenario, framework: Frameworks.Framework
 			case.teardown(state, context)
 			environment.drain()
 		end)
-		local reactiveCounters: any = nil
+		local reactiveCounters: { [string]: number }? = nil
 		if reactive ~= nil then
 			reactiveCounters = reactive.readWorkCounters()
 			reactive.setWorkCounters(false)
@@ -217,7 +224,7 @@ local function measure(scenario: Types.Scenario, framework: Frameworks.Framework
 		environment.drain()
 		local cold = time.since(started)
 
-		local steady = table.create(scenario.steadyFrames)
+		local steady = table.create(scenario.steadyFrames) :: { number }
 		local blockStarted = time.now()
 		for tick = 1, scenario.steadyFrames do
 			local at = time.now()
@@ -226,7 +233,7 @@ local function measure(scenario: Types.Scenario, framework: Frameworks.Framework
 		end
 		local perFrame = time.since(blockStarted) / scenario.steadyFrames
 
-		local burst = table.create(scenario.burstRounds)
+		local burst = table.create(scenario.burstRounds) :: { number }
 		for round = 1, scenario.burstRounds do
 			local at = time.now()
 			case.burst(state, context, round)

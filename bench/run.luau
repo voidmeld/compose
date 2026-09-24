@@ -362,7 +362,7 @@ local function main(): number
 			end
 		end
 
-		table.sort(measurements, function(left, right)
+		table.sort(measurements, function(left: Measurement, right: Measurement): boolean
 			return left.framework < right.framework
 		end)
 

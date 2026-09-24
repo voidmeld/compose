@@ -13,7 +13,7 @@ local function idOf(item: Item): string
 end
 
 local function itemList(count: number): { Item }
-	local list: { Item } = table.create(count)
+	local list = table.create(count) :: { Item }
 	for index = 1, count do
 		list[index] = { id = "k" .. index }
 	end
@@ -46,7 +46,7 @@ local function order(world: Support.World, parent: Compose.Node): { string }
 end
 
 local function idsOf(list: { Item }): { string }
-	local names: { string } = table.create(#list)
+	local names = table.create(#list) :: { string }
 	for index, item in list do
 		names[index] = item.id
 	end
@@ -66,7 +66,7 @@ local function mountList(world: Support.World, initial: { Item })
 	local dispose, root = world.runtime.mount(function()
 		return world.create "Frame" {
 			Compose.keyed {
-				from = function(use)
+				from = function(use: Compose.Use)
 					return use(list)
 				end,
 				render = function(value)
@@ -225,7 +225,7 @@ describe("keyed reordering under permutations", function()
 			world.host.resetCounts()
 
 			local reversed = itemList(16)
-			local flipped: { Item } = table.create(16)
+			local flipped = table.create(16) :: { Item }
 			for index = 16, 1, -1 do
 				table.insert(flipped, reversed[index])
 			end

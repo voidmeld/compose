@@ -26,7 +26,7 @@ local function field(count: number): { Widget }
 		return held
 	end
 	local next = Support.sequence(19940812)
-	local made = table.create(count)
+	local made = table.create(count) :: { Widget }
 	for index = 1, count do
 		made[index] = {
 			id = index,
@@ -289,7 +289,7 @@ local bareCase: Types.Case = {
 		local root = new("Frame", context.container, { Name = "Spatial" })
 
 		local headParent = new("Frame", root, { Name = "HeadRelative" })
-		local panels = table.create(PANELS)
+		local panels = table.create(PANELS) :: { any }
 		for index = 1, PANELS do
 			panels[index] = new("Frame", headParent, {
 				Name = ("Panel%d"):format(index),

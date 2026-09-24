@@ -340,7 +340,7 @@ describe("nested shared resources", function()
 			end
 		end)
 		local outer = Compose.createSharedResource(function()
-			return inner(), function()
+			return inner(), function(): ()
 				error "outer cleanup failed"
 			end
 		end)
@@ -414,7 +414,7 @@ describe("nested shared resources", function()
 				table.insert(log, "tear B")
 			end
 		end)
-		local outer = Compose.createSharedResource(function()
+		local outer = Compose.createSharedResource(function(): (string, (() -> ())?)
 			inner()
 			table.insert(log, "reached")
 			error "the outer factory failed"

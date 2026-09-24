@@ -90,7 +90,7 @@ local LAST = {
 
 local function roster(count: number): { Combatant }
 	local next = sequence(20260901)
-	local made = table.create(count)
+	local made = table.create(count) :: { Combatant }
 	for index = 1, count do
 		local first = FIRST[math.floor(next() * #FIRST) + 1]
 		local last = LAST[math.floor(next() * #LAST) + 1]
@@ -127,7 +127,7 @@ export type Options = {
 local function generate(options: Options): { Tick }
 	local next = sequence(19831107)
 	local count = options.count
-	local ticks = table.create(options.frames)
+	local ticks = table.create(options.frames) :: { Tick }
 	local framesPerSnapshot = math.max(1, math.floor(options.renderHz / options.snapshotHz))
 	local snapshot = 0
 

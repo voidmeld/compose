@@ -26,7 +26,7 @@ local NOUNS = { "Blade", "Cuirass", "Draught", "Ledger", "Ingot", "Sigil", "Cloa
 
 local function items(count: number): { Item }
 	local next = sequence(20260828)
-	local made = table.create(count)
+	local made = table.create(count) :: { Item }
 	for index = 1, count do
 		local prefix = PREFIXES[math.floor(next() * #PREFIXES) + 1]
 		local noun = NOUNS[math.floor(next() * #NOUNS) + 1]
@@ -53,7 +53,7 @@ export type Combatant = {
 
 local function combatants(count: number, prefix: string): { Combatant }
 	local next = sequence(19770401)
-	local made = table.create(count)
+	local made = table.create(count) :: { Combatant }
 	for index = 1, count do
 		made[index] = {
 			id = index,

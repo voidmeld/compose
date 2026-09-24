@@ -111,7 +111,7 @@ export type Options = {
 }
 
 local function create(options: Options?): TestScene
-	local records: { [any]: Record } = {}
+	local records: { [Node]: Record } = {}
 	local sequence = 0
 	local counts = zeroCounts()
 	local failures: { [string]: number } = {}
@@ -218,7 +218,7 @@ local function create(options: Options?): TestScene
 			return false, ("TestScene: attributes hold string, number, boolean or nil, not %s"):format(kind)
 		end
 		recordOf(node, "setAttribute").attributes[name] = value
-		return true
+		return true, nil
 	end
 
 	local function clearProperty(node: Node, key: string)
@@ -471,7 +471,7 @@ local function create(options: Options?): TestScene
 		for _, record in records do
 			table.insert(live, record)
 		end
-		table.sort(live, function(left, right)
+		table.sort(live, function(left: Record, right: Record): boolean
 			return left.sequence < right.sequence
 		end)
 		local described: { string } = {}

@@ -44,7 +44,7 @@ local function traceFor(count: number, every: number): { Trace.Tick }
 end
 
 local function saturate(tick: Trace.Tick, count: number): Trace.Tick
-	local visibility = table.create(count)
+	local visibility = table.create(count) :: { Trace.Visibility }
 	for index = 1, count do
 		visibility[index] = { index = index, visible = true, distance = (index * 7) % 79 }
 	end
@@ -236,7 +236,7 @@ local function bareCase(every: number, saturated: boolean): Types.Case
 
 		burst = function(state: any, _context: Context, round: number)
 			local visible = round % 2 == 1
-			local visibility = table.create(#state.units)
+			local visibility = table.create(#state.units) :: { Trace.Visibility }
 			for index = 1, #state.units do
 				visibility[index] = { index = index, visible = visible, distance = (index * 11) % 400 }
 			end

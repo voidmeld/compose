@@ -16,7 +16,7 @@ for index = 1, HUD_ROWS + 1 do
 end
 
 local function buffPrefix(count: number): { { id: number } }
-	local list = table.create(count)
+	local list = table.create(count) :: { { id: number } }
 	table.move(BUFF_POOL, 1, count, 1, list)
 	return list
 end
@@ -72,7 +72,7 @@ local events: Workload = {
 				local Instance = BareSupport.instances(context)
 				local frame = Instance.new "Frame"
 				local made = table.create(HANDLERS + 1)
-				local connections = table.create(HANDLERS)
+				local connections = table.create(HANDLERS) :: { any }
 				made[1] = frame
 				for index = 1, HANDLERS do
 					local button = Instance.new "TextButton"
@@ -382,7 +382,7 @@ local mountCycles: Workload = {
 				for _ = 1, CYCLES do
 					local frame = Instance.new "Frame"
 					local made = table.create(61)
-					local connections = table.create(60)
+					local connections = table.create(60) :: { any }
 					made[1] = frame
 					for index = 1, 60 do
 						local button = Instance.new "TextButton"

@@ -23,7 +23,7 @@ local function run(): string
 				merged[event.ability] = event.at
 				return merged
 			end,
-			initial = {},
+			initial = {} :: { [string]: number },
 		}
 
 		return Host.Panel {

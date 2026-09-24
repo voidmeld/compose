@@ -9,7 +9,7 @@ local describe, it, expect, beforeEach = Test.describe, Test.it, Test.expect, Te
 type Row = { id: string, label: string }
 
 local function rows(count: number): { Row }
-	local list: { Row } = table.create(count)
+	local list = table.create(count) :: { Row }
 	for index = 1, count do
 		list[index] = { id = "r" .. index, label = "row " .. index }
 	end
@@ -45,7 +45,7 @@ local function mount(options: {
 				key = idOf,
 				mode = options.mode,
 				viewport = options.viewport,
-				layout = options.layout or { itemSize = 10 },
+				layout = options.layout or { itemSize = 10 } :: Compose.OrderedCollectionLayout,
 				overscan = options.overscan,
 				follow = options.follow,
 				measured = options.measured,
@@ -183,7 +183,7 @@ describe("OrderedCollection", function()
 				count = 40,
 				mode = "windowed",
 				viewport = viewport,
-				layout = { kind = "grid", columns = 4, itemSize = 10, crossSize = 10 },
+				layout = { kind = "grid", columns = 4, itemSize = 10, crossSize = 10 } :: Compose.OrderedCollectionLayout,
 			}
 			expect(#idsOf(root)):toBe(8)
 			dispose()
@@ -754,7 +754,7 @@ describe("OrderedCollection", function()
 						key = idOf,
 						mode = "windowed",
 						viewport = viewport,
-						layout = { itemSize = 10 },
+						layout = { itemSize = 10 } :: Compose.OrderedCollectionLayout,
 						render = function(value)
 							return world.create "Row" {
 								Id = function(use)

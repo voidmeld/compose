@@ -27,18 +27,18 @@ Outside a body, use `:peek()` for an explicit untracked read.
 
 ### A value, or a source of one
 
-`Compose.Given<T>` is the type of an argument that accepts one of four things:
+`Compose.Value<T>` is the type of an argument that accepts one of four things:
 
 - a plain `T`,
 - a cell that reads as `T`,
 - a formula that reads as `T`,
 - a body that returns `T`.
 
-An option field uses `Given` when the field does not care which of the four the caller has.
+An option field uses `Value` when the field does not care which of the four the caller has.
 
 ```luau
 type Options = {
-    seconds: Compose.Given<number>?,
+    seconds: Compose.Value<number>?,
 }
 
 runtime.tween(opacity, { seconds = 0.25 })
@@ -46,7 +46,33 @@ runtime.tween(opacity, { seconds = configuredSeconds })
 ```
 
 `Source<T>` is the narrower union. It accepts a cell, a formula or a body, but not a plain value.
-If a constant is a mistake for the field, use `Source`. If a constant is correct, use `Given`.
+If a constant is a mistake for the field, use `Source`. If a constant is correct, use `Value`.
+
+### Type checking
+
+Compose type-checks strictly under both the old and the new Luau type solver. Three habits keep
+consumer code checking under both:
+
+- Annotate `use` in a body passed where a `Source` or `Value` is expected. The new solver does not
+  infer a function parameter from a union that also holds a readable.
+- Assert the type of a cell whose initial value is a function. A function argument also matches a
+  function-valued `T`.
+- Annotate a table literal whose type the call cannot infer, such as an empty `initial` or a
+  `layout` passed to a union-typed option.
+
+```luau
+Compose.show(function(use: Compose.Use)
+    return use(health) > 0
+end, Hud)
+
+local settings = Compose.cell(loadSettings) :: Compose.Cell<Settings>
+
+Compose.OrderedCollection {
+    from = rows,
+    layout = { itemSize = 24 } :: Compose.OrderedCollectionLayout,
+    render = Row,
+}
+```
 
 ### `Compose.cell`
 
@@ -170,7 +196,7 @@ local timings = Compose.accumulator {
     reduce = function(previous, event)      -- merge one event into the running state
         return withCast(previous, event)
     end,
-    initial = {},                           -- the state before any event
+    initial = {} :: Timings,                -- the state before any event
 }
 ```
 
@@ -1268,7 +1294,7 @@ for a shipped frame loop.
 `profile.label(node, name) -> ()`
 `profile.active() -> boolean`
 `profile.format(report, limit?) -> string`
-`profile.data(report) -> table`
+`profile.data(report) -> ProfileData`
 
 Records the work caused by each reactive write: cell changes, formula recomputations,
 watch runs and host property writes. The report uses the graph labels you provide.
@@ -1328,7 +1354,7 @@ The report lists total work and the busiest nodes. Arrows identify downstream wo
 `inspect.owned(owner) -> InspectOwnedCounts?`
 `inspect.node(node) -> InspectNode`
 `inspect.format(report) -> string`
-`inspect.data(report) -> table`
+`inspect.data(report) -> InspectData`
 
 Reports node custody, owners and their retained resources to explain why a resource remains alive.
 

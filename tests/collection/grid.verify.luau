@@ -11,7 +11,7 @@ local function positionOf(point: Point): (number, number, number)
 	return point.x, point.y, point.z
 end
 
-local function entries(map: { [number]: unknown }): number
+local function entries<V>(map: { [number]: V }): number
 	local count = 0
 	for _ in map do
 		count += 1

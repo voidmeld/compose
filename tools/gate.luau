@@ -22,6 +22,15 @@ local SOURCE_TREES = {
 	"verification",
 }
 
+local TYPED_TREES = {
+	"src",
+	"authoring",
+	"tests",
+	"tools",
+	"bench",
+	"examples",
+}
+
 local ANALYZE = {
 	"luau-lsp",
 	"analyze",
@@ -30,6 +39,9 @@ local ANALYZE = {
 	"--ignore=**/.lute/**",
 	"--ignore=**/build/**",
 }
+
+local ANALYZE_SOLVER_V2 = table.clone(ANALYZE)
+table.insert(ANALYZE_SOLVER_V2, 3, "--flag:LuauSolverV2=true")
 
 local STEPS: { Step } = {
 	{
@@ -62,24 +74,17 @@ local STEPS: { Step } = {
 		slow = false,
 	},
 	{
-		name = "types:core",
-		why = "compose-core, the test host, and the Roblox adapter type-check strictly on their own",
+		name = "types",
+		why = "every package, test, tool, benchmark, and example type-checks strictly under the old type solver",
 		command = ANALYZE,
-		targets = { "src" },
+		targets = TYPED_TREES,
 		slow = false,
 	},
 	{
-		name = "types:support",
-		why = "the authoring package, tests, tools, benchmarks, and examples type-check strictly",
-		command = ANALYZE,
-		targets = { "authoring", "tests", "tools", "bench", "examples" },
-		slow = false,
-	},
-	{
-		name = "types:readable",
-		why = "cells satisfy Readable under the new type solver",
-		command = { "luau-lsp", "analyze", "--flag:LuauSolverV2=true", "--platform=standard", "--base-luaurc=.luaurc" },
-		targets = { "tests/types/readable.luau" },
+		name = "types:solver-v2",
+		why = "the same trees type-check strictly under the new type solver, including the tests/types contracts",
+		command = ANALYZE_SOLVER_V2,
+		targets = TYPED_TREES,
 		slow = false,
 	},
 	{

@@ -69,7 +69,8 @@ local function write(destination: string, frameworks: { any }, results: { any })
 		table.insert(lines, ('      "steadyBudgetSeconds": %.9g,'):format(scenario.steadyBudgetSeconds))
 		do
 			local parts: { string } = {}
-			for _, budget in scenario.frameBudgets or {} do
+			local budgets: { { name: string, seconds: number } } = scenario.frameBudgets or {}
+			for _, budget in budgets do
 				table.insert(parts, ('{ "name": %s, "seconds": %.9g }'):format(quoted(budget.name), budget.seconds))
 			end
 			table.insert(lines, ('      "frameBudgets": [%s],'):format(table.concat(parts, ", ")))

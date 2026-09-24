@@ -11,7 +11,7 @@ describe("lifetime handles", function()
 		local world = Support.world()
 		world.host.declareEvent("Frame", "Activated")
 
-		local stopWatch, disconnect
+		local stopWatch: () -> (), disconnect: () -> ()
 		local dispose = world.runtime.mount(function()
 			local frame = world.create "Frame" {}
 			stopWatch = world.runtime:watch(function() end)
@@ -40,7 +40,7 @@ describe("lifetime handles", function()
 		world.host.declareEvent("Frame", "Activated")
 		local torn = 0
 
-		local disconnect, stopWatch
+		local disconnect: () -> (), stopWatch: () -> ()
 		local dispose = world.runtime.mount(function()
 			Compose.cleanup(function()
 				torn += 1
@@ -74,7 +74,7 @@ describe("lifetime handles", function()
 		world.host.declareEvent("Frame", "Activated")
 		local fired = 0
 
-		local disconnect
+		local disconnect: () -> ()
 		local dispose = world.runtime.mount(function()
 			local frame = world.create "Frame" {}
 			disconnect = world.runtime.connect(frame, "Activated", function()

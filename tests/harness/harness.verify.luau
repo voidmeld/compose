@@ -208,7 +208,7 @@ describe("run manifest", function()
 	end)
 
 	it("reads a manifest in the order it is written, and holds it to Verify's schema", function()
-		local manifest = {
+		local manifest: Test.Manifest = {
 			schemaVersion = 1,
 			entries = {
 				{ id = "second", source = "tests/b.verify.luau", group = "b" },

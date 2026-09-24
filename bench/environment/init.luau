@@ -793,10 +793,11 @@ local function create(): Environment
 		end,
 	}
 
-	local renderBindings: { { id: string, priority: number, fn: Handler } } = {}
+	type RenderBinding = { id: string, priority: number, fn: Handler }
+	local renderBindings: { RenderBinding } = {}
 	function runService.BindToRenderStep(_self: any, id: string, priority: number, fn: Handler)
 		table.insert(renderBindings, { id = id, priority = priority, fn = fn })
-		table.sort(renderBindings, function(left, right)
+		table.sort(renderBindings, function(left: RenderBinding, right: RenderBinding): boolean
 			if left.priority ~= right.priority then
 				return left.priority < right.priority
 			end
@@ -880,7 +881,7 @@ local function create(): Environment
 			return existing
 		end,
 	}
-	setmetatable(dataModel, {
+	setmetatable(dataModel :: {}, {
 		__index = function(_: any, key: string): any
 			return services[key]
 		end,
@@ -899,7 +900,7 @@ local function create(): Environment
 			if type(fn) == "thread" then
 				coroutine.resume(fn, ...)
 			else
-				fn(...)
+				(fn :: Handler)(...)
 			end
 		end,
 		cancel = function(_thread: thread) end,
@@ -937,7 +938,7 @@ local function create(): Environment
 			end
 		end
 		delayed = remaining
-		table.sort(due, function(left, right)
+		table.sort(due, function(left: Delayed, right: Delayed): boolean
 			return left.at < right.at
 		end)
 		for _, entry in due do
@@ -1076,7 +1077,7 @@ local function create(): Environment
 				table.insert(parts, ("%s=%s"):format(key, renderValue(field, depth + 1)))
 			end
 		end
-		return ("%s(%s)"):format(datatype, table.concat(parts, ","))
+		return ("%s(%s)"):format(tostring(datatype), table.concat(parts, ","))
 	end
 
 	local function snapshot(object: any, keys: { string }?, sortBy: string?): string

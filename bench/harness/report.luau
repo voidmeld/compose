@@ -15,6 +15,17 @@ export type Environment = {
 	host: string,
 }
 
+type Measurement = {
+	framework: string,
+	samples: { number },
+	counters: { [string]: number },
+	leakedInstances: number,
+	leakedConnections: number,
+	diagnostics: number?,
+	firstDiagnostic: string?,
+	error: string?,
+}
+
 local function escape(text: string): string
 	return (
 		string.gsub(text, '[%c"\\]', function(character: string): string
@@ -111,7 +122,7 @@ local function write(destination: string, environment: Environment, frameworks: 
 			)
 		)
 		table.insert(lines, '      "measurements": [')
-		for index, measurement in result.measurements do
+		for index, measurement: Measurement in result.measurements do
 			local suffix = if index == #result.measurements then "" else ","
 			local summary = Stats.summarise(measurement.samples)
 

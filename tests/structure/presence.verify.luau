@@ -27,7 +27,7 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}
@@ -49,7 +49,7 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}
@@ -74,6 +74,34 @@ describe("presence", function()
 		expect(world.host.liveNodes()):toBe(1)
 	end)
 
+	it("releases the exit watch when the exit is already complete", function()
+		local world = Support.world()
+		local Frame = world.create "Frame"
+		local open = Compose.cell(true)
+		local completed = Compose.cell(true)
+
+		local dispose, root = world.runtime.mount(function()
+			return Frame {
+				Compose.presence(function(use: Compose.Use)
+					return use(open)
+				end, function()
+					return Frame {}
+				end, {
+					exit = function()
+						local readable: Compose.Readable<boolean> = completed
+						return { completed = readable }
+					end,
+				}),
+			}
+		end, world.root)
+
+		open:set(false)
+		world.settle()
+		expect(childCount(world, root)):toBe(0)
+		expect((completed :: any).subscribers):toBe(nil)
+		dispose()
+	end)
+
 	it("reclaims a leaving subtree on re-entry, without rebuilding it", function()
 		local world = Support.world()
 		local Frame = world.create "Frame"
@@ -82,7 +110,7 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					builds += 1
@@ -120,7 +148,7 @@ describe("presence", function()
 
 		local dispose = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}
@@ -146,12 +174,12 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}
 				end, {
-					exit = function()
+					exit = function(): Compose.Exiting
 						error "no"
 					end,
 				}),
@@ -176,7 +204,7 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}
@@ -204,7 +232,7 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return { Label "A" {}, Label "B" {}, Label "C" {} }
@@ -233,7 +261,7 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function(phase)
 					return Frame {
@@ -274,7 +302,7 @@ describe("presence", function()
 
 		local dispose = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use)
+				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}

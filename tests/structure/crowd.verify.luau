@@ -138,7 +138,7 @@ describe("crowd tier under churn", function()
 									return use(value).id
 								end,
 								Compose.keyed {
-									from = function(use)
+									from = function(use: Compose.Use)
 										return use(parts)
 									end,
 									key = function(part: { id: string })
@@ -267,7 +267,7 @@ describe("crowd tier under churn", function()
 						end,
 						mode = "windowed",
 						viewport = viewport,
-						layout = { itemSize = 10 },
+						layout = { itemSize = 10 } :: Compose.OrderedCollectionLayout,
 						render = function(value)
 							return world.create "Row" {
 								Id = function(use)
@@ -281,7 +281,7 @@ describe("crowd tier under churn", function()
 			expect(idsOf(root)):toEqual { "r1", "r2", "r3" }
 
 			world.batch(function()
-				local reversed: { Row } = table.create(40)
+				local reversed = table.create(40) :: { Row }
 				for index = 40, 1, -1 do
 					table.insert(reversed, items[index])
 				end
@@ -299,7 +299,7 @@ describe("crowd tier under churn", function()
 		it("comes back to baseline after a churn-and-scroll marathon", function()
 			local population = 0
 			local function fresh(count: number): { Row }
-				local rows: { Row } = table.create(count)
+				local rows = table.create(count) :: { Row }
 				for index = 1, count do
 					population += 1
 					rows[index] = { id = "gen" .. population }
@@ -317,7 +317,7 @@ describe("crowd tier under churn", function()
 						end,
 						mode = "windowed",
 						viewport = viewport,
-						layout = { itemSize = 10 },
+						layout = { itemSize = 10 } :: Compose.OrderedCollectionLayout,
 						render = function()
 							return world.create "Row" {}
 						end,

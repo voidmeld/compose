@@ -31,7 +31,7 @@ local session = Verify.createSession {
 	environment = ENVIRONMENT,
 	capabilities = CAPABILITIES,
 	now = os.clock,
-	surface = Bdd.create,
+	surface = Bdd.create :: any,
 	prefixCaseIds = false,
 }
 
@@ -51,10 +51,10 @@ local function route(path: string): Host?
 	end
 	local hosts: { Host } = {}
 	if endsWith(name, LUTE_SUFFIX) then
-		table.insert(hosts, "lute")
+		table.insert(hosts, "lute" :: Host)
 	end
 	if endsWith(name, NEUTRAL_SUFFIX) and not endsWith(name, LUTE_SUFFIX) then
-		table.insert(hosts, "neutral")
+		table.insert(hosts, "neutral" :: Host)
 	end
 	if #hosts == 0 then
 		return nil

@@ -220,7 +220,7 @@ local composeCase: Types.Case = {
 					Compose.keyed {
 						from = function(use: any): { Units.Unit }
 							local all = use(order)
-							local shown = table.create(RAID_FRAMES)
+							local shown = table.create(RAID_FRAMES) :: { Units.Unit }
 							for index = 1, math.min(RAID_FRAMES, #all) do
 								shown[index] = all[index]
 							end

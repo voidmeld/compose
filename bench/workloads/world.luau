@@ -155,7 +155,7 @@ local unwind: Workload = {
 				local made: { any } = {}
 
 				local ok = pcall(function()
-					local parts = table.create(TREE_WIDTH)
+					local parts = table.create(TREE_WIDTH) :: { any }
 					for index = 1, TREE_WIDTH do
 						if index == FAIL_AT then
 							error("construction failed at " .. tostring(index))

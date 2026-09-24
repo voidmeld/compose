@@ -347,7 +347,7 @@ local function apply(state: any, tick: Trace.Tick, frame: number)
 
 	if #tick.changes > 0 then
 		local lines = state.lines
-		table.insert(lines, shared.logLine(#lines + 1, frame, tick.target, #tick.changes))
+		table.insert(lines, (shared.logLine(#lines + 1, frame, tick.target, #tick.changes)))
 		slideLog(state)
 		for index = 1, shared.OBJECTIVES do
 			state.objectiveNodes[index].Size = ((frame + index) % 100) / 100
@@ -369,7 +369,7 @@ local function burst(state: any, tick: Trace.Tick, round: number, lineCount: num
 	end
 	local lines = state.lines
 	for index = 1, lineCount do
-		table.insert(lines, shared.logLine(#lines + 1, round, index, #tick.changes))
+		table.insert(lines, (shared.logLine(#lines + 1, round, index, #tick.changes)))
 	end
 	slideLog(state)
 	state.scoreNode.Value = #lines

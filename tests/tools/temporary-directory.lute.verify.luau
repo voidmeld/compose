@@ -34,7 +34,7 @@ describe("temporary directory ownership", function()
 		local failedPath = ""
 		TemporaryDirectory.run(PARENT, "compose-clean-clone", function(outer)
 			local ok, failure = pcall(function()
-				TemporaryDirectory.run(PARENT, "compose-clean-clone", function(inner)
+				TemporaryDirectory.run(PARENT, "compose-clean-clone", function(inner: string): nil
 					failedPath = inner
 					error("candidate failed", 0)
 				end)

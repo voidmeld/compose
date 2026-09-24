@@ -12,7 +12,7 @@ type Row = { id: number }
 
 local function rows(count: number, offset: number?): { Row }
 	local start = if offset ~= nil then offset else 0
-	local list = table.create(count)
+	local list = table.create(count) :: { Row }
 	for index = 1, count do
 		list[index] = { id = start + index }
 	end

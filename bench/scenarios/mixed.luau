@@ -451,9 +451,9 @@ local inspector: Scenario = {
 				local made: { any } = {}
 				local root = Instance.new "Frame"
 				table.insert(made, root)
-				local objects = table.create(scale.objects)
+				local objects = table.create(scale.objects) :: { { number } }
 				for object = 1, scale.objects do
-					local fields = table.create(scale.size)
+					local fields = table.create(scale.size) :: { number }
 					for field = 1, scale.size do
 						fields[field] = (object * 1000) + field
 					end

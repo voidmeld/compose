@@ -7,6 +7,15 @@ type Context = Types.Context
 type Scale = Types.Scale
 type Scenario = Types.Scenario
 
+type Plate = {
+	id: number,
+	name: string,
+	health: number,
+	maximum: number,
+	status: string,
+	visible: boolean,
+}
+
 local combatHud: Scenario = {
 	id = "combat-hud",
 	title = "Combat HUD under routine and burst load",
@@ -48,13 +57,11 @@ local combatHud: Scenario = {
 				local dispose = runtime.mount(function()
 					local bars = {}
 					for _, pair in { { "Health", healthPercent }, { "Mana", mana }, { "Stamina", stamina } } do
-						table.insert(
-							bars,
-							Host.Frame {
-								Name = pair[1],
-								Size = pair[2],
-							}
-						)
+						local bar = Host.Frame {
+							Name = pair[1],
+							Size = pair[2],
+						}
+						table.insert(bars, bar)
 					end
 					local slots = table.create(scale.cooldowns)
 					for index = 1, scale.cooldowns do
@@ -380,7 +387,7 @@ local raidNameplates: Scenario = {
 						next[at] = unit
 					end
 					state.plates:set(next)
-					local party = table.clone(state.raid:peek())
+					local party = table.clone((state.raid:peek()))
 					local partyAt = (tick % #party) + 1
 					local member = table.clone(party[partyAt])
 					member.health = (tick % 100) + 1
@@ -492,7 +499,7 @@ local raidNameplates: Scenario = {
 				state.generation += 1
 				local roster = state.plates
 				local leaving = math.max(1, math.floor(#roster / 10))
-				local next = table.create(#roster)
+				local next = table.create(#roster) :: { Plate }
 				for index = leaving + 1, #roster do
 					table.insert(next, roster[index])
 				end
@@ -767,7 +774,7 @@ local raidNameplatesSparse: Scenario = {
 				state.generation += 1
 				local roster = state.plates
 				local leaving = math.max(1, math.floor(#roster / 10))
-				local next = table.create(#roster)
+				local next = table.create(#roster) :: { Plate }
 				for index = leaving + 1, #roster do
 					table.insert(next, roster[index])
 				end

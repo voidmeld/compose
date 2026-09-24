@@ -14,15 +14,15 @@ export type Cell<T> = Readable<T> & {
 }
 
 export type Formula<T> = {
+	peek: (self: Formula<T> | any) -> T,
 	dispose: (self: Formula<T>) -> (),
-	peek: (self: Formula<T>) -> T,
 }
 
 export type Body<T> = (use: Use) -> T
 
 export type Source<T> = Readable<T> | Body<T>
 
-export type Given<T> = T | Cell<T> | Formula<T> | Source<T>
+export type Value<T> = T | Cell<T> | Formula<T> | Source<T>
 
 export type Equals<T> = (current: T, incoming: T) -> boolean
 

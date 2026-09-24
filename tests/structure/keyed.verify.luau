@@ -33,7 +33,7 @@ local function mountList(world: Support.World, initial: { Item })
 	local dispose, root = world.runtime.mount(function()
 		return world.create "Frame" {
 			Compose.keyed {
-				from = function(use)
+				from = function(use: Compose.Use)
 					return use(list)
 				end,
 				render = function(value, index)
@@ -214,7 +214,7 @@ describe("keyed", function()
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Frame" {
 				Compose.keyed {
-					from = function(use)
+					from = function(use: Compose.Use)
 						return use(list)
 					end,
 					render = function(value)
@@ -224,7 +224,7 @@ describe("keyed", function()
 							end,
 						}
 					end,
-					key = function(item)
+					key = function(item: { id: string, label: string }): string
 						return item.id
 					end,
 				},
@@ -293,7 +293,7 @@ describe("keyed", function()
 			return world.create "Frame" {
 				world.create "Header" { Id = "header" },
 				Compose.keyed {
-					from = function(use)
+					from = function(use: Compose.Use)
 						return use(list)
 					end,
 					render = function(value)

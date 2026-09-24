@@ -29,7 +29,7 @@ local TAGS = { "common", "rare", "epic" }
 local ZONE_COUNT = 24
 
 local function zoneEntries(): { Author.Entry }
-	local entries: { Author.Entry } = table.create(ZONE_COUNT)
+	local entries = table.create(ZONE_COUNT) :: { Author.Entry }
 	for index = 1, ZONE_COUNT do
 		entries[index] = { id = ("zone.%04d"):format(index), name = ("Zone %d"):format(index) }
 	end
@@ -38,7 +38,7 @@ end
 
 local function propEntries(count: number, collideIds: boolean?): { Author.Entry }
 	local next = sequence(SEED)
-	local entries: { Author.Entry } = table.create(count)
+	local entries = table.create(count) :: { Author.Entry }
 	for index = 1, count do
 		local role = ROLES[(index % #ROLES) + 1]
 		local zoneIndex = ((index - 1) % ZONE_COUNT) + 1
@@ -147,7 +147,7 @@ describe("authoring bake-time cost", function()
 	end)
 
 	it(("Author.coverage stays proportionate to a calibrated baseline at %d entries"):format(N), function()
-		local keys = table.create(N)
+		local keys = table.create(N) :: { string }
 		for _, entry in rawEntries do
 			keys[#keys + 1] = propsSet:idOf(entry)
 		end

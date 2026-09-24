@@ -171,7 +171,7 @@ local function composeCase(fraction: number): Types.Case
 					return
 				end
 
-				local current = table.clone(state.order:peek())
+				local current = table.clone((state.order:peek()))
 				local structural = false
 				for _, edit in tick.identity do
 					local count = #current
@@ -228,7 +228,7 @@ local function composeCase(fraction: number): Types.Case
 		burst = function(state: any, _context: Context, round: number)
 			local runtime = state.runtime
 			runtime:batch(function()
-				local current = table.clone(state.order:peek())
+				local current = table.clone((state.order:peek()))
 				local removing = #current // 2
 				for _ = 1, removing do
 					if #current > 8 then
