@@ -242,6 +242,34 @@ describe("mounting", function()
 		expect(world.host.isAlive(inner)):toBe(false)
 	end)
 
+	it("disposes the top-level owner when a cleanup raises during stop", function()
+		for _, useFragment in { false, true } do
+			local world = Support.world()
+			Compose.inspect.start()
+			local stop = if useFragment
+				then world.runtime.mountFragment(function()
+					Compose.cleanup(function()
+						error "cleanup failed"
+					end)
+					return { world.create "Frame" {} }
+				end, world.root)
+				else world.runtime.mount(function()
+					Compose.cleanup(function()
+						error "cleanup failed"
+					end)
+					return world.create "Frame" {}
+				end, world.root)
+			local ok, err: any = pcall(stop)
+			local report = Compose.inspect.snapshot()
+			Compose.inspect.stop()
+			expect(ok):toBe(false)
+			expect(tostring(err)):toContain "cleanup failed"
+			expect(#report.mounts):toBe(1)
+			expect(report.mounts[1].disposed):toBe(true)
+			expect(Compose.outstandingMounts()):toBe(0)
+		end
+	end)
+
 	describe("rejections", function()
 		it("refuses a props table that is not a table", function()
 			local world = Support.world()
@@ -280,6 +308,26 @@ describe("mounting", function()
 			end)
 			expect(ok):toBe(false)
 			expect(tostring(err)):toContain "while applying: Frame.Colour"
+		end)
+
+		it("refuses mount and mountFragment after the runtime is disposed", function()
+			local world = Support.world()
+			world.runtime:dispose()
+			local ran = false
+			expect(function()
+				world.runtime.mount(function()
+					ran = true
+					return world.create "Frame" {}
+				end, world.root)
+			end):toThrow "runtime/disposed"
+			expect(function()
+				world.runtime.mountFragment(function()
+					ran = true
+					return {}
+				end, world.root)
+			end):toThrow "runtime/disposed"
+			expect(ran):toBe(false)
+			expect(Compose.outstandingMounts()):toBe(0)
 		end)
 
 		it("refuses create outside a mount", function()

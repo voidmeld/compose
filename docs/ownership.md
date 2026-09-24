@@ -189,8 +189,11 @@ An active owner supplies additional cleanup if the body raises, but the operatio
 
 **`Runtime:watch` falls back.** The runtime supplies its root owner when no owner is active.
 `runtime:dispose()` releases that owner and its watches. This supports subscriptions created before the first mount.
+After `runtime:dispose()`, `mount` and `mountFragment` raise `runtime/disposed` and start no work.
 
 **`mount` and `mountFragment` create an owner.** A top-level mount creates and activates its own owner.
+Its disposer releases the mounted block and then that owner, even when a cleanup raises; the first
+failure is raised after both are released.
 The process root retains it, and the returned disposer releases it. `Compose.outstandingMounts()` counts these mounts.
 A mount inside an active owner belongs to that owner and is released with it.
 
