@@ -164,6 +164,32 @@ local function settleTouched()
 	error(table.concat(parts, "\n"), 0)
 end
 
+local function recordThenRefresh(consumer: Consumer, producer: Producer)
+	if consumer.released then
+		local refresh = producer.refresh
+		if refresh then
+			(refresh :: (Producer) -> ())(producer)
+		end
+		return
+	end
+
+	local at = consumer.reads + 1
+	consumer.reads = at
+	local dependencies = consumer.dependencies
+	local edge = dependencies[at]
+	if edge == nil or edge[PRODUCER] ~= producer then
+		trim(consumer, at)
+		edge = attach(producer, consumer)
+		dependencies[at] = edge
+	end
+
+	local refresh = producer.refresh
+	if refresh then
+		(refresh :: (Producer) -> ())(producer)
+	end
+	edge[OBSERVED] = producer.version
+end
+
 local function observe(producer: Producer)
 	local consumer = evaluating
 	if consumer == nil then
@@ -175,26 +201,7 @@ local function observe(producer: Producer)
 		return
 	end
 
-	local refresh = producer.refresh
-	if refresh then
-		(refresh :: (Producer) -> ())(producer)
-	end
-
-	if consumer.released then
-		return
-	end
-
-	local at = consumer.reads + 1
-	consumer.reads = at
-	local dependencies = consumer.dependencies
-	local existing = dependencies[at]
-	if existing ~= nil and existing[PRODUCER] == producer then
-		existing[OBSERVED] = producer.version
-		return
-	end
-
-	trim(consumer, at)
-	dependencies[at] = attach(producer, consumer)
+	recordThenRefresh(consumer :: Consumer, producer)
 end
 
 local function dependenciesMoved(consumer: Consumer): boolean
@@ -227,6 +234,10 @@ local function evaluate<A, T>(consumer: Consumer, body: (A) -> T, argument: A): 
 
 	evaluating = previous
 	if not ok then
+		if (consumer :: any).derived then
+			consumer.state = DIRTY
+			consumer.retry = true
+		end
 		error(result, 0)
 	end
 
@@ -329,26 +340,7 @@ local function use<T>(producer: any): T
 		return producer.value
 	end
 
-	local refresh = producer.refresh
-	if refresh then
-		(refresh :: (Producer) -> ())(producer)
-	end
-
-	if consumer.released then
-		return producer.value
-	end
-
-	local at = consumer.reads + 1
-	consumer.reads = at
-	local dependencies = consumer.dependencies
-	local existing = dependencies[at]
-	if existing ~= nil and existing[PRODUCER] == producer then
-		existing[OBSERVED] = producer.version
-		return producer.value
-	end
-
-	trim(consumer, at)
-	dependencies[at] = attach(producer, consumer)
+	recordThenRefresh(consumer, producer)
 	return producer.value
 end
 

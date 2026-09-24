@@ -147,6 +147,7 @@ The contract, in the order it matters:
 3. Batches nest. Only the outermost drains.
 4. A user error does not block future work. Compose clears the queue and releases the batch flag before reporting the error.
 5. A watch can write. The watches it wakes run in the same drain. A cascade that exceeds the run limit raises an error.
+6. A formula whose body raises raises again on every read until a dependency changes, then recomputes. Formulas and watches that read it keep that dependency, so they recover with it.
 
 ### A batch is not a transaction
 

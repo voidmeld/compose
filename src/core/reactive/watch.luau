@@ -62,9 +62,14 @@ local function run(self: any)
 	if self.released then
 		return
 	end
-	if self.state == Graph.CHECK and not Graph.dependenciesMoved(self) then
-		self.state = Graph.CLEAN
-		return
+	if self.state == Graph.CHECK then
+		self.retry = true
+		local moved = Graph.dependenciesMoved(self)
+		self.retry = false
+		if not moved then
+			self.state = Graph.CLEAN
+			return
+		end
 	end
 	evaluateQueued(self)
 end

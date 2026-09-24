@@ -48,11 +48,14 @@ function FORMULA.refresh(self: any)
 	end
 
 	if state == Graph.CHECK then
-		if not Graph.dependenciesMoved(self) then
+		self.state = Graph.DIRTY
+		self.retry = true
+		local moved = Graph.dependenciesMoved(self)
+		self.retry = false
+		if not moved then
 			self.state = Graph.CLEAN
 			return
 		end
-		self.state = Graph.DIRTY
 	end
 
 	self.state = Graph.CLEAN

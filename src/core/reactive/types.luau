@@ -8,8 +8,7 @@ export type Readable<T> = {
 	peek: (self: Readable<T>) -> T,
 }
 
-export type Cell<T> = {
-	peek: (self: Readable<T>) -> T,
+export type Cell<T> = Readable<T> & {
 	set: (self: Cell<T>, value: T) -> (),
 	update: (self: Cell<T>, change: (previous: T) -> T) -> (),
 }

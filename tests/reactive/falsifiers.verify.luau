@@ -242,6 +242,61 @@ describe("falsifiers", function()
 			owner.dispose()
 		end)
 	end)
+	describe("formulas that raise", function()
+		local function checked(source: Compose.Cell<number>)
+			return Compose.formula(function(use)
+				local value = use(source)
+				if value < 0 then
+					error "negative input"
+				end
+				return value
+			end)
+		end
+
+		it("raises again on the next read and recovers after a valid write", function()
+			local source = Compose.cell(1)
+			local derived = checked(source)
+			expect(derived:peek()):toBe(1)
+			source:set(-1)
+			expect(function()
+				derived:peek()
+			end):toThrow "negative input"
+			expect(function()
+				derived:peek()
+			end):toThrow "negative input"
+			source:set(4)
+			expect(derived:peek()):toBe(4)
+		end)
+
+		it("recovers a dependent formula and watch after the inner formula raised", function()
+			local reactor, owner = domain()
+			local source = Compose.cell(1)
+			local inner = checked(source)
+			local outer = Compose.formula(function(use)
+				return use(inner) * 2
+			end)
+			local seen: { number } = {}
+			owner.watch(function(use)
+				local ok, value = pcall(use, outer)
+				if ok then
+					table.insert(seen, value)
+				end
+			end)
+			reactor:settle()
+			pcall(function()
+				source:set(-1)
+				reactor:settle()
+			end)
+			expect(function()
+				outer:peek()
+			end):toThrow "negative input"
+			source:set(3)
+			reactor:settle()
+			expect(outer:peek()):toBe(6)
+			expect(seen[#seen]):toBe(6)
+		end)
+	end)
+
 	describe("dynamic dependency churn", function()
 		it("forgets a source a rerun no longer reads", function()
 			local reactor, owner = domain()
