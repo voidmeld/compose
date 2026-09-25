@@ -389,8 +389,8 @@ inside and outside a tree. To carry that owner into a callback that runs later, 
 
 Registers teardown with the active owner. Accepts a function, or a table with a `destroy`
 or `dispose` method. Raises when there is no active owner.
-Inside a `Compose.watch` body, the active owner is that run: its cleanups and resources are
-released before the next run and when the watch ends.
+Inside a watch body, from `Compose.watch`, `owner.watch` or `runtime:watch`, the active owner is
+that run: its cleanups and resources are released before the next run and when the watch ends.
 
 ```luau
 runtime.mount(function()

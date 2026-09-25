@@ -640,6 +640,33 @@ describe("OrderedCollection", function()
 			dispose()
 		end)
 
+		it("answers no index for any key before the first layout", function()
+			local controls: Compose.OrderedCollectionControls<string> = {}
+			local items = Compose.cell(rows(3))
+			local before: { number? } = {}
+			local dispose = world.runtime.mount(function()
+				local collection = Compose.OrderedCollection {
+					from = items,
+					key = idOf,
+					mode = "all",
+					layout = { itemSize = 10 } :: Compose.OrderedCollectionLayout,
+					controls = controls,
+					render = function()
+						return world.create "Row" {}
+					end,
+				}
+				local indexOfKey = controls.indexOfKey
+				if indexOfKey ~= nil then
+					table.insert(before, indexOfKey "r1")
+				end
+				return world.create "Frame" { collection }
+			end, world.root)
+			expect(before[1]):toBeNil()
+			local indexOfKey = controls.indexOfKey :: (string) -> number?
+			expect(indexOfKey "r1"):toBe(1)
+			dispose()
+		end)
+
 		it("computes the offset that brings an item to each alignment", function()
 			local viewport = Compose.cell({ offset = 0, size = 30 } :: Compose.OrderedCollectionViewport)
 			local controls: Compose.OrderedCollectionControls<string> = {}

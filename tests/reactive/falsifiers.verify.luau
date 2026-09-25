@@ -357,6 +357,25 @@ describe("falsifiers", function()
 		end)
 	end)
 
+	describe("cleanup inside an owner watch", function()
+		it("releases each run's cleanup before the next run and on disposal", function()
+			local _, owner = domain()
+			local source = Compose.cell(0)
+			local released: { number } = {}
+			owner.watch(function(use)
+				local value = use(source)
+				Compose.cleanup(function()
+					table.insert(released, value)
+				end)
+			end)
+			source:set(1)
+			source:set(2)
+			expect(released):toEqual { 0, 1 }
+			owner.dispose()
+			expect(released):toEqual { 0, 1, 2 }
+		end)
+	end)
+
 	describe("cleanup inside a watch", function()
 		it("releases each run's cleanup before the next run and on disposal", function()
 			local _, owner = domain()
