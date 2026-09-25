@@ -162,7 +162,29 @@ local function watch(body: (use: Types.Use) -> (), label: string?): Types.Dispos
 			fix = "call it inside a component, or use owner.watch(...) with an explicit owner",
 		})
 	end
-	return (owner :: OwnerModule.Owner).watch(body, label)
+	local holder = owner :: OwnerModule.Owner
+	local run: OwnerModule.Owner? = nil
+	local scope = setmetatable({}, {
+		__index = function(_: unknown, key: string): unknown
+			local current = run
+			if current == nil then
+				current = holder.createChild()
+				run = current
+			end
+			return ((current :: any) :: { [string]: unknown })[key]
+		end,
+	}) :: any
+	local function release()
+		local current = run
+		if current ~= nil then
+			run = nil
+			current.dispose()
+		end
+	end
+	return holder.watch(function(use: Types.Use)
+		release()
+		Active.runWith(scope :: OwnerModule.Owner, body, use)
+	end, label, release)
 end
 
 local function cleanup(value: unknown): Types.Dispose

@@ -389,6 +389,8 @@ inside and outside a tree. To carry that owner into a callback that runs later, 
 
 Registers teardown with the active owner. Accepts a function, or a table with a `destroy`
 or `dispose` method. Raises when there is no active owner.
+Inside a `Compose.watch` body, the active owner is that run: its cleanups and resources are
+released before the next run and when the watch ends.
 
 ```luau
 runtime.mount(function()
@@ -1078,7 +1080,8 @@ the component that wrote the portal removes exactly what the portal added, and l
 `boundary(builder, fallback) -> directive`
 
 A subtree that can fail without taking the screen with it. `fallback(failure, retry)`
-renders the failure.
+renders the failure. A failure is anything the subtree raises while it builds, while its watches run, or
+while its bound properties read a formula.
 
 ```luau
 Compose.boundary(Inventory, function(failure, retry)

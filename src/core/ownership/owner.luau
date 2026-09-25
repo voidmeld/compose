@@ -244,12 +244,14 @@ local function createOwner(inherited: Reactor.Reactor?): Owner
 		if boundary == nil then
 			return startWatch(watchModule.watchStatic, producer, body, afterDispose)
 		end
-		return startWatch(watchModule.watchStatic, producer, function(value: T)
-			local ok, err: unknown = pcall(body, value)
+		return startWatch(watchModule.watchGuarded, function(use: Types.Use)
+			local ok, err: unknown = pcall(function()
+				body(use(producer))
+			end)
 			if not ok then
 				boundary.report(err)
 			end
-		end, afterDispose)
+		end, nil, afterDispose)
 	end
 
 	local function ownedWatchTerminal(body: (use: Types.Use) -> (), afterDispose: Dispose?): Dispose
@@ -276,7 +278,7 @@ local function createOwner(inherited: Reactor.Reactor?): Owner
 		if boundary == nil then
 			return startWatch(watchModule.watch, body, label, afterDispose)
 		end
-		return startWatch(watchModule.watch, function(use: Types.Use)
+		return startWatch(watchModule.watchGuarded, function(use: Types.Use)
 			local ok, err: unknown = pcall(body, use)
 			if not ok then
 				boundary.report(err)

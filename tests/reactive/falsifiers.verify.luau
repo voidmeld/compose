@@ -357,6 +357,60 @@ describe("falsifiers", function()
 		end)
 	end)
 
+	describe("cleanup inside a watch", function()
+		it("releases each run's cleanup before the next run and on disposal", function()
+			local _, owner = domain()
+			local source = Compose.cell(0)
+			local released: { number } = {}
+			Compose.withOwner(owner, function()
+				Compose.watch(function(use)
+					local value = use(source)
+					Compose.cleanup(function()
+						table.insert(released, value)
+					end)
+				end)
+			end)
+			source:set(1)
+			source:set(2)
+			expect(released):toEqual { 0, 1 }
+			owner.dispose()
+			expect(released):toEqual { 0, 1, 2 }
+		end)
+	end)
+
+	describe("a boundary around a raising property formula", function()
+		it("renders the fallback when a bound formula raises after mount", function()
+			local world = Support.world()
+			local label = Compose.cell "New"
+			local text = Compose.formula(function(use)
+				local value = use(label)
+				if value == "" then
+					error "empty label"
+				end
+				return value
+			end)
+			local reported: unknown = nil
+			local dispose, root = world.runtime.mount(function()
+				return world.create "Frame" {
+					Compose.boundary(function()
+						return world.create "TextLabel" { Text = text }
+					end, function(failure)
+						reported = failure
+						return world.create "Frame" { Name = "Fallback" }
+					end),
+				}
+			end, world.root)
+
+			label:set ""
+			world.settle()
+			expect(tostring(reported)):toContain "empty label"
+			local children = world.host.childrenOf(root)
+			expect(#children):toBe(1)
+			expect(world.host.kindOf(children[1])):toBe "Frame"
+			dispose()
+		end)
+	end)
+
 	describe("dynamic dependency churn", function()
 		it("forgets a source a rerun no longer reads", function()
 			local reactor, owner = domain()
