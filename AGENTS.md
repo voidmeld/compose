@@ -10,9 +10,8 @@ and fine-grained updates intact. Read [README.md](README.md), then [docs/index.m
   alone do not justify keeping them. Document the current public contract.
 - Keep one current contract and runnable falsifier. Do not infer speedup or consumer experience
   from a passing CPU gate.
-- Every code review checks for simpler names, control flow and boundaries without changing behavior.
-  Remove proven redundancy. Keep useful abstractions. Prefer explicit code over fewer lines, and
-  verify affected contracts before accepting a simplification.
+- Keep changed workflows legible and evidence-backed, and review every code change against its falsifier.
+  This file owns Compose authority; no other document grants additional tools, roles or permissions.
 - Maintain automation in Lute Luau. Exact dependencies live only in `dependencies.lock.luau`.
 - Do not add explanatory source comments. Use names, types and public contracts to explain intent.
   Tool directives and required license notices are allowed.
