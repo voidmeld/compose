@@ -122,6 +122,10 @@ The checkpoint avoids creating a separate child owner for each node construction
 `create`, `cleanup`, `watch` and structural primitives register with the active owner.
 A mount activates its owner, so components do not pass an owner to every call.
 
+A watch body activates a scope for that run. Read the
+[watch cleanup contract](api.md#composecleanup) before allocating resources in a reactive body;
+those resources have a shorter lifetime than the watch itself.
+
 `Compose.withOwner` explicitly activates an owner for a body.
 It ends that activation whether the body returns or raises.
 

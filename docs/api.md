@@ -156,6 +156,7 @@ end, "health readout")
 
 Call the returned disposer to stop the watch early. You do not need to retain it to keep
 the watch running. Disposing the owner stops the watch.
+Resources created inside the body follow the [per-run cleanup contract](#composecleanup).
 
 Outside a mount, use `owner.watch(body, label?)` with an explicit owner, or
 `runtime:watch(body, label?)`, which falls back to the runtime's own owner. The optional
