@@ -106,4 +106,62 @@ describe("focus scope", function()
 	end)
 end)
 
+describe("focus neighbour", function()
+	local function r(x: number, y: number, width: number, height: number): Compose.FocusRect
+		return { x = x, y = y, width = width, height = height }
+	end
+
+	it("prefers an in-beam candidate by gap over a nearer out-of-beam one", function()
+		expect(Compose.focusNeighbor(r(300, 600, 600, 44), { r(100, 520, 44, 44), r(500, 200, 300, 44) }, "up")):toBe(2)
+	end)
+
+	it("ranks in-beam candidates by leading-edge gap before centre offset", function()
+		expect(
+			Compose.focusNeighbor(
+				r(17, 700, 687, 44),
+				{ r(71, 272, 633, 44), r(164, 402, 392, 44), r(17, 480, 44, 190) },
+				"up"
+			)
+		):toBe(3)
+	end)
+
+	it("falls back to the half-plane and ignores candidates behind or overlapping", function()
+		expect(Compose.focusNeighbor(r(100, 100, 100, 44), { r(400, 400, 50, 50) }, "down")):toBe(1)
+		expect(Compose.focusNeighbor(r(100, 100, 100, 44), { r(100, 0, 100, 44) }, "down")):toBeNil()
+		expect(Compose.focusNeighbor(r(100, 100, 100, 44), { r(120, 110, 20, 20) }, "down")):toBeNil()
+	end)
+
+	it("counts a candidate as ahead when it starts past the centre and ends past the edge", function()
+		local tab = r(850.5, 59, 68.5, 44)
+		expect(Compose.focusNeighbor(tab, { r(886.5, 108, 71, 44) }, "right")):toBe(1)
+		expect(Compose.focusNeighbor(tab, { r(883, 108, 71, 44) }, "right")):toBeNil()
+		local row = r(16, 809, 741, 44)
+		expect(Compose.focusNeighbor(row, { r(511.67, 605, 242.33, 44) }, "right")):toBeNil()
+	end)
+
+	it("out of the beam, a candidate within 45 degrees ranks by cross offset, even when much farther", function()
+		expect(Compose.focusNeighbor(r(100, 500, 100, 44), { r(430, 250, 40, 44), r(1030, 200, 40, 44) }, "right")):toBe(
+			2
+		)
+		local from = r(100, 400, 100, 44)
+		expect(Compose.focusNeighbor(from, { r(520, 100, 40, 40), r(1030, 85, 40, 40) }, "right")):toBe(1)
+		expect(Compose.focusNeighbor(from, { r(460, 100, 40, 40), r(1030, 85, 40, 40) }, "right")):toBe(2)
+	end)
+
+	it("out of the beam, the nearer of two equally offset candidates wins", function()
+		expect(Compose.focusNeighbor(r(161.5, 8, 101.5, 44), { r(623, 56, 296, 50), r(629, 59, 68, 44) }, "right")):toBe(
+			2
+		)
+	end)
+
+	it("works on every axis", function()
+		local from = r(100, 100, 100, 100)
+		local candidates = { r(300, 120, 50, 50), r(-100, 120, 50, 50), r(120, 300, 50, 50), r(120, -100, 50, 50) }
+		expect(Compose.focusNeighbor(from, candidates, "right")):toBe(1)
+		expect(Compose.focusNeighbor(from, candidates, "left")):toBe(2)
+		expect(Compose.focusNeighbor(from, candidates, "down")):toBe(3)
+		expect(Compose.focusNeighbor(from, candidates, "up")):toBe(4)
+	end)
+end)
+
 return nil

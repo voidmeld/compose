@@ -1025,6 +1025,21 @@ exposes `current`, `focus`, `clear`, `first`, `last`, `next`, `previous`, `move`
 `isFocused`. Pass `position` for directional movement. An adapter watches `current` and
 applies native focus, so noninteractive collections pay nothing.
 
+### `Compose.focusNeighbor`
+
+`focusNeighbor(from, candidates, direction) -> number?`
+
+Returns the index of the candidate rectangle that a directional move from `from` reaches, or
+`nil` when none lies ahead. Rectangles are `FocusRect = { x, y, width, height }`; `direction`
+is a `FocusDirection`. A candidate is ahead when its near edge is past the centre of `from`
+and, unless it overlaps `from` on the cross axis, it ends past `from`'s leading edge.
+Candidates that overlap `from` on the cross axis rank first, by gap and then by centre offset.
+Next come candidates whose centre lies within 45 degrees of the move, measured from the middle
+of `from`'s leading edge: they rank by centre offset plus 0.028 times their distance along the
+move. The rest rank last, by centre offset over the distance along the move to the power 0.15.
+The order follows Roblox's measured gamepad selection. It is a pure function: an adapter that
+owns focus geometry calls it with host rectangles.
+
 ### `Compose.createPool`
 
 `createPool(options) -> Pool`

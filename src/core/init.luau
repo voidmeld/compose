@@ -9,6 +9,7 @@ local AsyncBoundary = require "@self/async/boundary"
 local AsyncShared = require "@self/async/shared"
 local Diagnostics = require "@self/diagnostics"
 local FocusScope = require "@self/focus-scope"
+local FocusNeighbor = require "@self/focus-neighbor"
 local Graph = require "@self/reactive/graph"
 local Inspect = require "@self/ownership/inspect"
 local InspectReport = require "@self/ownership/report"
@@ -83,6 +84,7 @@ export type MountPoint = RuntimeModule.MountPoint
 export type FocusScope<K> = FocusScope.FocusScope<K>
 export type FocusScopeOptions<V, K> = FocusScope.Options<V, K>
 export type FocusDirection = FocusScope.Direction
+export type FocusRect = FocusNeighbor.FocusRect
 
 export type Pool<T> = PoolModule.Pool<T>
 export type PoolLease<T> = PoolModule.Lease<T>
@@ -313,6 +315,7 @@ return {
 	portal = StructurePortal,
 
 	createFocusScope = FocusScope,
+	focusNeighbor = FocusNeighbor,
 	createPool = PoolModule,
 	createKeyedCache = KeyedCacheModule,
 
