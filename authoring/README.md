@@ -35,7 +35,7 @@ local ok, violations = Author.validate(props, {
 | `Author.bake.registryModule` | Generates a plain Luau registry module from the same mapping. |
 | `Author.bake.dataModule` | Generates a plain Luau module returning a typed table of records keyed by id, each record a nested table of strings, numbers, and booleans. |
 
-Roblox serialization emitters are in [`roblox/`](roblox/). The other emitters produce host-neutral data.
+The emitters produce host-neutral data.
 Run scripts with `lute run yourscript.luau`. Requires resolve relative to the requiring file.
 The repository gate runs the package tests in `tests/authoring/`.
 
