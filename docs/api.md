@@ -1025,6 +1025,34 @@ exposes `current`, `focus`, `clear`, `first`, `last`, `next`, `previous`, `move`
 `isFocused`. Pass `position` for directional movement. An adapter watches `current` and
 applies native focus, so noninteractive collections pay nothing.
 
+### `Compose.focusNeighbor`
+
+`focusNeighbor(from, candidates, direction) -> number?`
+
+Returns the index selected by Compose's rectangle ranking policy for a move from `from`, or
+`nil` when none lies ahead. Rectangles are `FocusRect = { x, y, width, height }`; `direction`
+is a `FocusDirection`. A candidate is ahead when its near edge is past the centre of `from`
+and, unless it overlaps `from` on the cross axis, it ends past `from`'s leading edge.
+Candidates that overlap `from` on the cross axis rank first, by gap and then by centre offset.
+Next come candidates whose centre lies within 45 degrees of the move, measured from the middle
+of `from`'s leading edge: they rank by centre offset plus 0.028 times their distance along the
+move. The rest rank last, by centre offset divided by `max(distanceAlongMove, 1)^0.15`.
+Equal scores prefer the smaller centre offset, then the first candidate in the array.
+Supply finite coordinates and positive widths and heights in the same units. Unknown directions
+raise `focus-neighbor/unknown-direction`.
+
+This is a pure function: an adapter that owns focus geometry calls it with host rectangles.
+Native focus parity requires a separate comparison on that host; this policy does not guarantee it.
+It does not change `createFocusScope`'s point-based navigation policy.
+
+```luau
+local nextIndex = Compose.focusNeighbor(
+    { x = 0, y = 0, width = 40, height = 40 },
+    { { x = 60, y = 0, width = 40, height = 40 } },
+    "right"
+) -- 1
+```
+
 ### `Compose.createPool`
 
 `createPool(options) -> Pool`
