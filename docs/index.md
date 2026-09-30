@@ -1,6 +1,7 @@
 # Compose contracts
 
-Start with [quickstart.md](quickstart.md). Then read the contract for your task:
+For a first component, use [quickstart.md](quickstart.md). Otherwise open only the contract your task
+needs:
 
 - [api.md](api.md): public exports and signatures.
 - [ownership.md](ownership.md): finite roots, custody, disposal, unwind and shared resources.
