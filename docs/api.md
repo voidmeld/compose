@@ -303,8 +303,10 @@ Runs `body` with `owner` active. It ends that activation even if `body` raises. 
 call owner-bound primitives from imperative code outside a mount.
 
 An activation belongs to the thread that opened it. A yielding body keeps its owner when
-it resumes, regardless of intervening mounts. A thread that Compose resumes inherits the
-resumer's owner. A thread with neither has no active owner. See
+it resumes, regardless of intervening mounts. A thread without its own activation inherits only
+an unambiguous resumer owner. Competing owners on distinct resumer threads raise
+`owner/no-active-owner`; bind the child with `Compose.bindOwner` or activate its owner with
+`Compose.withOwner`. A thread with neither has no active owner. See
 [`ownership.md`](ownership.md#which-owner-is-active-exactly).
 
 ### `Compose.bindOwner`

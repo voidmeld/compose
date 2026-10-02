@@ -23,6 +23,37 @@ local function depth(): number
 end
 
 local function current(): Owner.Owner?
+	local running = coroutine.running()
+	local explicit: Owner.Owner? = nil
+	local inherited: Owner.Owner? = nil
+	local seen: { [thread]: boolean } = {}
+	local ambiguous = false
+	for index = #activations, 1, -1 do
+		local activation = activations[index]
+		if activation.thread == running then
+			if explicit == nil then
+				explicit = activation.owner
+			end
+		else
+			local status = coroutine.status(activation.thread)
+			if status == "normal" and not seen[activation.thread] then
+				seen[activation.thread] = true
+				if inherited == nil then
+					inherited = activation.owner
+				elseif inherited ~= activation.owner then
+					ambiguous = true
+				end
+			elseif status == "dead" then
+				table.remove(activations, index)
+			end
+		end
+	end
+	if explicit == nil and ambiguous then
+		Diagnostics.raise("owner/no-active-owner", "resumer owners are ambiguous", {
+			contract = "a callback cannot infer the order of distinct resumer owners",
+			fix = "bind the child callback with Compose.bindOwner or activate its owner with Compose.withOwner",
+		})
+	end
 	local context = Graph.evaluationContext()
 	if context ~= nil then
 		local record = Owner.runScopeOf(context)
@@ -30,23 +61,7 @@ local function current(): Owner.Owner?
 			return record.scope
 		end
 	end
-	local running = coroutine.running()
-	local inherited: Owner.Owner? = nil
-	for index = #activations, 1, -1 do
-		local activation = activations[index]
-		if activation.thread == running then
-			return activation.owner
-		end
-		local status = coroutine.status(activation.thread)
-		if status == "normal" then
-			if inherited == nil then
-				inherited = activation.owner
-			end
-		elseif status == "dead" then
-			table.remove(activations, index)
-		end
-	end
-	return inherited
+	return explicit or inherited
 end
 
 local function push(owner: Owner.Owner): Activation

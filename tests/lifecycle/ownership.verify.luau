@@ -347,6 +347,66 @@ describe("ownership", function()
 		end)
 	end)
 	describe("across yields", function()
+		for _, binding in { "unbound", "bindOwner", "withOwner" } do
+			it("refuses ambiguous resumers unless the child explicitly selects its owner: " .. binding, function()
+				local world = Support.world()
+				world.host.declareEvent("Frame", "Activated")
+				local borrowed = world.host.makeNode "Frame"
+				local older, newer = Compose.createOwner(), Compose.createOwner()
+				local node: Compose.Node? = nil
+				local releases = 0
+				local childOk, childCause: any = nil, nil
+				local callback = coroutine.create(function()
+					Compose.withOwner(older, function()
+						local function allocate()
+							world.runtime.borrow(borrowed)
+							node = world.create "Frame" {}
+							world.runtime.connect(borrowed, "Activated", function() end)
+							Compose.cleanup(function()
+								releases += 1
+							end)
+						end
+						local child = allocate
+						if binding == "bindOwner" then
+							child = Compose.bindOwner(allocate)
+						elseif binding == "withOwner" then
+							child = function()
+								Compose.withOwner(older, allocate)
+							end
+						end
+						coroutine.yield()
+						childOk, childCause = coroutine.resume(coroutine.create(child))
+					end)
+				end)
+				local ok, failure = coroutine.resume(callback)
+				assert(ok, tostring(failure))
+				Compose.withOwner(newer, function()
+					local resumed, cause = coroutine.resume(callback)
+					assert(resumed, tostring(cause))
+				end)
+				older.dispose()
+				local afterOlder = releases
+				newer.dispose()
+				older.dispose()
+				newer.dispose()
+				if binding == "unbound" then
+					expect(childOk):toBe(false)
+					expect(tostring(childCause)):toContain "owner/no-active-owner"
+					expect(tostring(childCause)):toContain "bindOwner"
+					expect(node):toBe(nil)
+					expect(releases):toBe(0)
+				else
+					expect(childOk):toBe(true)
+					expect(afterOlder):toBe(1)
+					expect(releases):toBe(1)
+					expect(world.host.isAlive(node :: Compose.Node)):toBe(false)
+				end
+				expect(world.host.isAlive(borrowed)):toBe(true)
+				expect(world.host.liveSubscriptions()):toBe(0)
+				expect(Compose.outstandingMounts()):toBe(0)
+			end)
+		end
+
 		it("keeps an explicit suspended mount when a reactive body resumes it", function()
 			local world = Support.world()
 			world.host.declareEvent("Frame", "Activated")

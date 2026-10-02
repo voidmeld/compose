@@ -143,8 +143,8 @@ An activation belongs to the thread that opened it, so "active" is answered per 
 not per process.
 
 1. The innermost activation opened **by the running thread**, if it has one.
-2. Otherwise the innermost activation opened by a thread that is **resuming** this one: an
-   ancestor in the resume chain. This is how a task body that Compose resumed
+2. Otherwise an unambiguous owner from threads **resuming** this one. Only each thread's
+   innermost activation participates. This is how a task body that Compose resumed
    (including user functions under `Compose.setYieldChecking(true)`)
    registers with the owner that resumed it.
 3. Otherwise nothing is active, and every refusal in the table below applies.
@@ -157,7 +157,11 @@ cannot borrow a suspended run's owner or dependency tracking. An explicit owner 
 run takes precedence until that activation ends; activations on unrelated suspended threads do not
 affect that choice. Failure unwinds only the failing coroutine's evaluation context.
 
-Rule 2 applies only within a resume chain. A thread that Compose resumes inherits the resumer's owner.
+Rule 2 applies only within a resume chain. A thread inherits when the resumer owner is unambiguous.
+Luau reports resumer threads as `normal` without exposing their order. Competing owners on distinct
+resumer threads raise `owner/no-active-owner`; activation order cannot identify the nearest resumer.
+Bind the child callback with `Compose.bindOwner` inside its intended owner, or use `Compose.withOwner`
+inside the child. An explicit current-thread activation resolves this ambiguity.
 An independently started host callback has no such chain and cannot infer an owner.
 Use [`Compose.bindOwner`](api.md#composebindowner) to give that callback an explicit owner:
 
