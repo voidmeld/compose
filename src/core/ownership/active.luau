@@ -11,11 +11,22 @@ type Activation = { owner: Owner.Owner, thread: thread }
 
 local activations: { Activation } = {}
 
+local function depth(): number
+	local running = coroutine.running()
+	local count = 0
+	for _, activation in activations do
+		if activation.thread == running or coroutine.status(activation.thread) == "normal" then
+			count += 1
+		end
+	end
+	return count
+end
+
 local function current(): Owner.Owner?
 	local context = Graph.evaluationContext()
 	if context ~= nil then
 		local record = Owner.runScopeOf(context)
-		if record ~= nil and #activations <= record.base then
+		if record ~= nil and depth() <= record.base then
 			return record.scope
 		end
 	end
@@ -54,10 +65,6 @@ local function pop(activation: Activation)
 	if index ~= nil then
 		table.remove(activations, index)
 	end
-end
-
-local function depth(): number
-	return #activations
 end
 
 local function release<T...>(activation: Activation, ok: boolean, ...: T...): T...

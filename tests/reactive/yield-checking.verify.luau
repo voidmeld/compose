@@ -10,6 +10,33 @@ describe("setYieldChecking", function()
 		Compose.setYieldChecking(false)
 	end)
 
+	it("preserves the checked run scope around an explicit nested owner", function()
+		Compose.setYieldChecking(true)
+		local owner = Compose.createOwner()
+		local nested = owner.createChild()
+		local source = Compose.cell(0)
+		local runReleases, nestedReleases = 0, 0
+		owner.watch(function(use)
+			use(source)
+			Compose.withOwner(nested, function()
+				Compose.cleanup(function()
+					nestedReleases += 1
+				end)
+			end)
+			Compose.cleanup(function()
+				runReleases += 1
+			end)
+		end)
+		source:set(1)
+		local runBeforeDisposal, nestedBeforeDisposal = runReleases, nestedReleases
+		owner.dispose()
+		owner.dispose()
+		expect(runBeforeDisposal):toBe(1)
+		expect(nestedBeforeDisposal):toBe(0)
+		expect(runReleases):toBe(2)
+		expect(nestedReleases):toBe(2)
+	end)
+
 	it("reports a lazy cell initialiser that yields as an error, not a suspension", function()
 		Compose.setYieldChecking(true)
 		local lazy = Compose.cell(function(): number

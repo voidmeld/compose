@@ -16,6 +16,71 @@ local function cellAsReadable<T>(value: Compose.Cell<T>): Compose.Readable<T>
 end
 
 describe("falsifiers", function()
+	describe("coroutine evaluation isolation", function()
+		it("refuses independent reads and cleanup while another unchecked reactive body is suspended", function()
+			Support.world()
+			local _, owner = domain()
+			local source = Compose.cell(0)
+			local read: ((Compose.Readable<number>) -> number)? = nil
+			local watching = coroutine.create(function()
+				owner.watch(function(use)
+					read = use
+					use(source)
+					coroutine.yield()
+				end)
+			end)
+			local ok, failure = coroutine.resume(watching)
+			assert(ok, tostring(failure))
+			local readOk, readFailure = pcall(read :: (Compose.Readable<number>) -> number, source)
+			local cleanupOk, cleanupFailure = pcall(Compose.cleanup, function() end)
+			ok, failure = coroutine.resume(watching)
+			assert(ok, tostring(failure))
+			owner.dispose()
+			expect(readOk):toBe(false)
+			expect(tostring(readFailure)):toContain "reactive/no-evaluation"
+			expect(cleanupOk):toBe(false)
+			expect(tostring(cleanupFailure)):toContain "owner/no-active-owner"
+		end)
+
+		it("restores each suspended evaluation when another coroutine fails", function()
+			Support.world()
+			local _, first = domain()
+			local _, second = domain()
+			local source = Compose.cell(0)
+			local seen, runs = -1, 0
+			local failed = coroutine.create(function()
+				first.watch(function()
+					coroutine.yield()
+					error("independent_body_failure", 0)
+				end)
+			end)
+			local surviving = coroutine.create(function()
+				second.watch(function(use)
+					runs += 1
+					if runs == 1 then
+						coroutine.yield()
+					end
+					seen = use(source)
+				end)
+			end)
+			local ok, failure = coroutine.resume(failed)
+			assert(ok, tostring(failure))
+			ok, failure = coroutine.resume(surviving)
+			assert(ok, tostring(failure))
+			local failedOk, failedCause = coroutine.resume(failed)
+			local survived, survivorFailure = coroutine.resume(surviving)
+			source:set(7)
+			first.dispose()
+			second.dispose()
+			expect(failedOk):toBe(false)
+			expect(tostring(failedCause)):toContain "independent_body_failure"
+			expect(survived):toBe(true)
+			expect(survivorFailure):toBe(nil)
+			expect(seen):toBe(7)
+			expect(runs):toBe(2)
+		end)
+	end)
+
 	it("accepts cells through the generic readable contract", function()
 		local source: Compose.Cell<number> = Compose.cell(2)
 		local readable = cellAsReadable(source)

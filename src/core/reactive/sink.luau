@@ -119,7 +119,7 @@ local function run(scheduled: Scheduled)
 	local members = self.members
 	local failures: { string }? = nil
 
-	local context = Graph.evaluationContext()
+	local context = Graph.captureEvaluationContext()
 
 	self.running = true
 	self.at = 0

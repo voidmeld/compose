@@ -152,6 +152,11 @@ not per process.
 A suspended component keeps its owner when it resumes. Another mount can run during the suspension without changing that ownership.
 Each thread has its own activation. Disposing one mount does not dispose another mount's nodes or connections.
 
+Reactive evaluation context also belongs to its coroutine and resume chain. An independent callback
+cannot borrow a suspended run's owner or dependency tracking. An explicit owner activated inside a
+run takes precedence until that activation ends; activations on unrelated suspended threads do not
+affect that choice. Failure unwinds only the failing coroutine's evaluation context.
+
 Rule 2 applies only within a resume chain. A thread that Compose resumes inherits the resumer's owner.
 An independently started host callback has no such chain and cannot infer an owner.
 Use [`Compose.bindOwner`](api.md#composebindowner) to give that callback an explicit owner:
