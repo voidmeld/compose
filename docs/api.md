@@ -1000,69 +1000,6 @@ already decides what is replicated and how distant models are drawn; what it can
 which entities deserve a nameplate, audio or a party marker, and how much construction one
 frame may do. Ordinary geometry should still be streamed geometry.
 
-### `Compose.TileCollection`
-
-`TileCollection { viewport, tileSize, read, render, overscan? } -> directive`
-
-Owns the nonempty tiles intersecting a rectangular camera view. Coordinates are zero-based
-integers, including negative coordinates. Each `(column, row)` is a stable identity within
-one collection. Use one collection per map layer.
-
-```luau
-Compose.TileCollection {
-    viewport = camera,
-    tileSize = { width = 32, height = 32 },
-    overscan = 1,
-    read = function(use: Compose.Use, column: number, row: number): string?
-        local rowCells = map[row]
-        local tile = if rowCells ~= nil then rowCells[column] else nil
-        return if tile ~= nil then use(tile) else nil
-    end,
-    render = function(tile: Compose.Readable<string>, placement: Compose.TileCollectionPlacement)
-        return Host.Tile {
-            Image = tile,
-            X = placement.x,
-            Y = placement.y,
-        }
-    end,
-}
-```
-
-`viewport` is a cell, formula or body returning `TileCollectionViewport = { x, y, width, height }`
-in the same units as `tileSize`. The grid origin is `(0, 0)`. Dimensions must be finite;
-tile dimensions must be positive and viewport dimensions non-negative. A zero-area viewport
-retains nothing, including overscan. The right and bottom edges are exclusive. A partially
-intersecting tile is included. Optional `overscan` is a non-negative integer number of extra
-rows and columns on every side, default zero. `tileSize` and `overscan` are construction-time
-options. Apply camera translation and zoom through the host and publish the corresponding
-rectangle in grid-world units. Derived coordinate bounds must be safely representable integers.
-
-`read(use, column, row)` supplies application data for each covered coordinate. Return `nil`
-for an empty or out-of-map coordinate; `false` is valid tile data. Read reactive inputs through
-`use`, including a cell currently holding `nil` when an empty coordinate may become occupied.
-If the application replaces map structure, read a reactive map or revision before looking up
-its cells. Plain table mutation alone does not publish a change. `read` should only read data;
-create owned resources in `render`.
-
-`render(value, placement)` builds one host node. `value` is readable and changes in place.
-`placement` is a frozen `TileCollectionPlacement` containing `column`, `row`, `x`, `y`, `width`
-and `height`; it stays fixed for that coordinate's mounted lifetime. Bind host properties to
-the readable value. Publish replacement values for changed records; default equality is `==`.
-Returning `nil` from `read` or leaving the retained rectangle disposes the tile. Returning later
-builds it again; persistent game state belongs in the application's map.
-
-A camera or observed data change reads the covered rectangle, including empty coordinates,
-then reconciles its occupied tiles. Cost depends on that rectangle, not the full map. A single
-visible edit still re-reads that rectangle; only changed bindings write to the host. Per-coordinate
-reactive inputs outside the rectangle have no collection subscription. Use chunk coordinates and
-a chunk renderer when one node per tile would be too expensive for the host.
-
-The collection delegates creation, placement and destruction to its host. Storage, loading,
-atlas interpretation, terrain matching and collision remain application or adapter concerns.
-Build failures use `keyed`'s cleanup and partial-success contract. The runnable
-[`tile-map` example](../examples/tile-map.luau) checks bounded reads, edits, camera churn and
-teardown with the test host; it does not establish native rendering performance.
-
 ### `Compose.LayerStack`
 
 `LayerStack(options) -> directive`

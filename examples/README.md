@@ -17,7 +17,6 @@ lute run tools/run-examples.luau
 | [`accumulator.luau`](accumulator.luau) | A `sharedCell` declares shared module state. An `accumulator` reduces source events into state without manual read/write feedback. |
 | [`arena.luau`](arena.luau) | A root with owned external state, local component state, a keyed collection and one mount. See [`../docs/api.md`](../docs/api.md). |
 | [`collections.luau`](collections.luau) | A windowed chat and a relevance-retained battlefield. Both do work proportional to what is visible. |
-| [`tile-map.luau`](tile-map.luau) | A rectangular camera window over a million-coordinate map, tile edits, edge admission and rectangle focus. |
 | [`composition-primitives.luau`](composition-primitives.luau) | Layers, bounded admission, logical focus, and explicit resource reuse, all in one owned scene. |
 | [`mount-target.luau`](mount-target.luau) | Mounting a second producer into a node the tree already owns, plus an adopted clone under it, without demoting the target to borrowed. |
 | [`attributes.luau`](attributes.luau) | Static and reactive `Attributes`, duplicate-write suppression, clearing with `nil`, and explicit host value rejection. |
