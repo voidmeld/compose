@@ -13,7 +13,6 @@ local all: { Example } = {
 	require "@self/accumulator",
 	require "@self/arena",
 	require "@self/collections",
-	require "@self/tile-map",
 	require "@self/composition-primitives",
 	require "@self/mount-target",
 	require "@self/attributes",

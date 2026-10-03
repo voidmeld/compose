@@ -447,13 +447,6 @@ local manifest: Verify.Manifest = {
 			requires = {},
 		},
 		{
-			id = "structure/tile-collection",
-			source = "tests/structure/tile-collection.verify.luau",
-			group = "structure",
-			tags = { "neutral" },
-			requires = {},
-		},
-		{
 			id = "structure/unordered-host",
 			source = "tests/structure/unordered-host.verify.luau",
 			group = "structure",
