@@ -254,6 +254,7 @@ local b = ordered { from = rows, magic = 2, render = Row }
 		stage {
 			["screen.luau"] = [[
 Compose.OrderedCollection { from = rows, render = Row, magic = true }
+Compose.TileCollection { viewport = camera, tileSize = size, read = tileAt, render = Tile, wrap = true }
 Compose.LayerStack { from = layers, render = Layer, retain = "all" }
 Compose.MountBudget { from = work, mountsPerFrame = 2, render = Item, defer = true }
 Compose.createFocusScope { from = actions, select = keyOf }
@@ -264,6 +265,7 @@ Compose.createPool { create = make, destroy = drop, capacity = 4 }
 		process.run { "rm", "-rf", STAGE }
 		expect(ok):toBe(false)
 		expect(output):toContain "magic"
+		expect(output):toContain "wrap"
 		expect(output):toContain "retain"
 		expect(output):toContain "defer"
 		expect(output):toContain "select"
@@ -275,6 +277,7 @@ Compose.createPool { create = make, destroy = drop, capacity = 4 }
 			["screen.luau"] = [[
 local OrderedCollection = Compose.OrderedCollection
 OrderedCollection { from = rows, key = keyOf, render = Row }
+Compose.TileCollection { viewport = camera, tileSize = size, read = tileAt, render = Tile, overscan = 1 }
 Compose.LayerStack { from = layers, key = keyOf, retention = "all", render = Layer }
 Compose.MountBudget { from = work, key = keyOf, priority = priorityOf, mountsPerFrame = 2, render = Item }
 Compose.createFocusScope { from = actions, key = keyOf, disabled = disabled, position = positionOf, wrap = true }

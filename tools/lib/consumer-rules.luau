@@ -13,6 +13,7 @@ export type Finding = {
 
 local STRUCTURAL_FIELDS: { [string]: { [string]: true } } = {
 	keyed = { from = true, key = true, render = true },
+	TileCollection = { viewport = true, tileSize = true, overscan = true, read = true, render = true },
 	OrderedCollection = {
 		from = true,
 		key = true,
@@ -66,6 +67,7 @@ local STRUCTURAL_FIELDS: { [string]: { [string]: true } } = {
 
 local REQUIRED_FIELDS: { [string]: { string } } = {
 	keyed = { "from", "render" },
+	TileCollection = { "viewport", "tileSize", "read", "render" },
 	OrderedCollection = { "from", "render" },
 	SpatialCollection = { "from", "position", "origin", "tiers", "render" },
 	LayerStack = { "from", "render" },
@@ -86,6 +88,7 @@ local DIRECTIVES = {
 	"boundary",
 	"OrderedCollection",
 	"SpatialCollection",
+	"TileCollection",
 	"LayerStack",
 	"MountBudget",
 }
