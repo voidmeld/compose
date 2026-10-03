@@ -176,19 +176,11 @@ describe("Author.bake.dataModule", function()
 		return Author.bake.dataModule(placements())
 	end
 
-	it("names its generator and a records digest in the header", function()
-		local source = bake()
-		expect((string.find(source, "GENERATED FILE", 1, true))):toBeOk()
-		expect((string.find(source, "Author.bake.dataModule", 1, true))):toBeOk()
-		expect((string.find(source, "records digest:", 1, true))):toBeOk()
-		expect((string.find(source, "body digest:", 1, true))):toBeOk()
-	end)
-
 	it("produces byte-identical output across two runs", function()
 		expect(bake()):toBe(bake())
 	end)
 
-	it("changes the header digest when any value changes", function()
+	it("updates the emitted data when an authored value changes", function()
 		local before = bake()
 		local spec = placements()
 		local firstEntry = spec.entries[1] :: any
@@ -196,11 +188,8 @@ describe("Author.bake.dataModule", function()
 		local after = Author.bake.dataModule(spec)
 
 		expect(before == after):toBe(false)
-		local beforeDigest = string.match(before, "records digest:%s*(%x+)")
-		local afterDigest = string.match(after, "records digest:%s*(%x+)")
-		expect(beforeDigest):toBeOk()
-		expect(afterDigest):toBeOk()
-		expect(beforeDigest == afterDigest):toBe(false)
+		local records = luau.load(luau.compile(after), "Placements")()
+		expect(records["keep-01"].position.x):toBe(999)
 	end)
 
 	it("round-trips a nested record through require", function()

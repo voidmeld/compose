@@ -240,7 +240,6 @@ local function dataModule(spec: DataSpec, outPath: string?): string
 	local bodyLines: { string } = {
 		"export type DataValue = string | number | boolean | { DataValue } | { [string]: DataValue }",
 		"",
-		"--- One authored record; the id itself lives in the surrounding table's key.",
 		"export type Record = { [string]: DataValue }",
 		"",
 		"local RECORDS: { [string]: Record } = {",
@@ -255,23 +254,7 @@ local function dataModule(spec: DataSpec, outPath: string?): string
 	table.insert(bodyLines, "return RECORDS")
 
 	local body = table.concat(bodyLines, "\n")
-	local bodyDigest = Digest.digestText(body)
-	local recordsDigest = Digest.digestText(Digest.canonical(byId))
-
-	local headerLines: { string } = {
-		"--!strict",
-		"--[[",
-		"\tGENERATED FILE -- do not edit; regenerate instead.",
-		"",
-		"\tgenerator: Author.bake.dataModule (authoring/bake.luau)",
-		("\tname: %s"):format(spec.name),
-		("\trecords digest: %s"):format(recordsDigest),
-		("\tbody digest: %s"):format(bodyDigest),
-		"]]",
-		"",
-	}
-
-	local source = table.concat(headerLines, "\n") .. "\n" .. body .. "\n"
+	local source = "--!strict\n\n" .. body .. "\n"
 
 	if outPath ~= nil then
 		fs.writeStringToFile(outPath, source)

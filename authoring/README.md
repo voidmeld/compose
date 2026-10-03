@@ -119,8 +119,8 @@ The module returns records keyed by id. Records and their fields use sorted key 
 A field can contain a string, finite number, boolean or nested table of those values.
 This preserves structured data without flattening it into scalar attribute rows.
 
-The header identifies the generator and includes digests of the records and emitted body.
-These detect manual edits and stale generated output, as with `registryModule`.
+The output contains the strict directive, types and data, without commentary or digest headers.
+Applications detect stale output by comparing it with a fresh bake.
 A non-serialisable field value, a duplicate id, or an entry missing its id field refuses the bake
 before anything is written.
 
