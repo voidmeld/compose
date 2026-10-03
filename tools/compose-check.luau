@@ -155,11 +155,15 @@ local function main(): number
 		local relative = below(options.root, file.path)
 		scanned += 1
 		local source = consumerRules.mask(file.contents)
+		local localFunctionCalls = consumerRules.boundLocalFunctionCalls(source)
 		for _, rule in readableRules.rules do
 			if options.code ~= nil and rule.code ~= options.code then
 				continue
 			end
 			for _, occurrence in readableRules.occurrences(source, rule) do
+				if rule.bodyNames and localFunctionCalls[occurrence.offset] then
+					continue
+				end
 				table.insert(findings, {
 					code = rule.code,
 					confidence = confidenceOf(rule),

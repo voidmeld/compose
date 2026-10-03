@@ -104,6 +104,76 @@ return json.serialize(scope), refused
 		expect(output):toContain "nothing found"
 	end)
 
+	it("recognizes unique immutable local function calls without body naming conventions", function()
+		stage {
+			["screen.luau"] = [[
+return function()
+    local function measure(use: Reader): number
+        return use(size)
+    end
+    local function extent(use)
+        return measure(use) + 8
+    end
+    local props = { Height = extent, Width = measure }
+    return function(use) return extent(use), measure(use), props end
+end
+]],
+		}
+		local ok, output = run { "--code", "CMP011" }
+		process.run { "rm", "-rf", STAGE }
+		expect(ok):toBe(true)
+		expect(output):toContain "nothing found"
+	end)
+
+	it("keeps cell formula unknown shadowed and reassigned calls diagnostic", function()
+		for _, source in
+			{
+				"local measure = Compose.cell(0)\nreturn measure(use)",
+				"local measure = Compose.formula(function(use) return use(size) end)\nreturn measure(use)",
+				"return measure(use)",
+				"local function measure(use) return use(size) end\nmeasure = other\nreturn measure(use)",
+				"local function measure(use) return use(size) end\nfunction measure(use) return use(size) end\nreturn measure(use)",
+				"local function measure(use) return use(size) end\nreturn function(measure, use) return measure(use) end",
+				"local function measure(use) return use(size) end\ndo local measure = other return measure(use) end",
+				"local function measure(use) return use(size) end\nfor measure in values do measure(use) end",
+				"local function measure(use) return use(size) end\nlocal function measure(use) return 0 end\nreturn measure(use)",
+				"return function() local function measure(use) return use(size) end end\nreturn measure(use)",
+				"if ready then local function measure(use) return use(size) end else measure(use) end",
+				"do local function measure(use) return use(size) end end\nreturn measure(use)",
+				"repeat local function measure(use) return use(size) end until done\nreturn measure(use)",
+				"for i = 1, 2 do local function measure(use) return use(size) end end\nreturn measure(use)",
+				"local function measure(use) return use(size) end\nreturn object.measure(use)",
+				"local function measure(use) return use(size) end\nreturn object:measure(use)",
+				"local function measure(use) return use(size) end\nreturn function(measure: (Reader) -> number, use) return measure(use) end",
+			}
+		do
+			local lastCall = 0
+			for at in string.gmatch(source, "()%f[%w_]measure%(use%)") do
+				lastCall = tonumber(at) :: number
+			end
+			expect(lastCall > 0):toBe(true)
+			expect(consumerRules.boundLocalFunctionCalls(consumerRules.mask(source))[lastCall]):toBe(nil)
+			stage { ["screen.luau"] = source }
+			local ok, output = run { "--code", "CMP011" }
+			process.run { "rm", "-rf", STAGE }
+			expect(ok):toBe(true)
+			expect(output):toContain "CMP011"
+		end
+	end)
+
+	it("does not bind masked declarations from comments and strings", function()
+		stage {
+			["screen.luau"] = [=[
+local text = "local function measure(use) return 0 end"
+-- local function measure(use) return 0 end
+return measure(use)
+]=],
+		}
+		local _, output = run { "--code", "CMP011" }
+		process.run { "rm", "-rf", STAGE }
+		expect(output):toContain "CMP011"
+	end)
+
 	it("reports every occurrence, not just the first", function()
 		stage {
 			["screen.luau"] = "local a, setA = Compose.cell(0)\nlocal b, setB = Compose.cell(0)\n",

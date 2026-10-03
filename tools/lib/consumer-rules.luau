@@ -482,6 +482,78 @@ local function innermostFunction(ranges: { Range }, offset: number): number?
 	return innermost
 end
 
+local function boundLocalFunctionCalls(source: string): { [number]: true }
+	local blocks: { Range } = {}
+	local open: { Range } = {}
+	local stack: { OpenBlock } = {}
+	local pendingDo = 0
+	for at, word in string.gmatch(source, "()([%a_][%w_]*)") do
+		local offset = tonumber(at) :: number
+		local delta
+		delta, pendingDo = scanKeyword(word :: string, source, offset, stack, pendingDo)
+		if delta > 0 then
+			local range = { start = offset, finish = #source }
+			table.insert(open, range)
+			if word ~= "function" then
+				table.insert(blocks, range)
+			end
+		elseif delta < 0 and #open > 0 then
+			(table.remove(open) :: Range).finish = offset
+		end
+	end
+	local functions = functionRanges(source)
+	local accepted: { [number]: true } = {}
+	for at, nameAt, name in string.gmatch(source, "()%f[%w_]local%s+function%s+()([%a_][%w_]*)%s*%(") do
+		local declarationAt = tonumber(at) :: number
+		local declarationNameAt = tonumber(nameAt) :: number
+		local scopeAt = innermostFunction(functions, declarationAt)
+		local scopeEnd = #source
+		if scopeAt ~= nil then
+			for _, range in functions do
+				if range.start == scopeAt then
+					scopeEnd = range.finish
+				end
+			end
+		end
+		local safe = true
+		for _, range in blocks do
+			if range.start < declarationAt and declarationAt < range.finish then
+				safe = false
+			end
+		end
+		local calls: { number } = {}
+		for occurrenceAt, finishAt in string.gmatch(source, "()%f[%w_]" .. (name :: string) .. "%f[^%w_]()%s*") do
+			local occurrence = tonumber(occurrenceAt) :: number
+			local finish = tonumber(finishAt) :: number
+			if occurrence == declarationNameAt then
+				continue
+			end
+			local before = string.sub(source, 1, occurrence - 1)
+			local after = string.sub(source, finish)
+			local directCall = string.match(after, "^%s*%(") ~= nil
+			local value = string.match(before, "=%s*$") ~= nil and string.match(after, "^%s*[,}]") ~= nil
+			if
+				occurrence <= declarationAt
+				or occurrence >= scopeEnd
+				or string.match(before, "[%.:]%s*$") ~= nil
+				or string.match(before, "%f[%w_]function%s+$") ~= nil
+				or (not directCall and not value)
+			then
+				safe = false
+			elseif directCall then
+				table.insert(calls, occurrence)
+			end
+		end
+		if safe then
+			accepted[declarationNameAt] = true
+			for _, offset in calls do
+				accepted[offset] = true
+			end
+		end
+	end
+	return accepted
+end
+
 local function callForms(
 	masked: string,
 	modules: { [string]: true },
@@ -1025,5 +1097,6 @@ end
 
 return {
 	mask = mask,
+	boundLocalFunctionCalls = boundLocalFunctionCalls,
 	scan = scan,
 }
