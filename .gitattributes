@@ -1,0 +1,44 @@
+# Line endings and diffs.
+#
+# Everything this repository authors is source. Normalise it, and make sure the
+# formats a reviewer actually reads diff as text.
+* text=auto eol=lf
+
+
+
+*.luau   text diff=lua
+*.lua    text diff=lua
+*.md     text diff=markdown
+*.json   text
+*.toml   text
+*.yml    text
+*.yaml   text
+LICENSE  text
+
+# Benchmark raw samples are deliberately NOT LFS.
+#
+# docs/benchmarks.md promises that every reported number is reproducible from
+# the raw samples committed next to it. That promise needs the samples to be
+# reviewable in a diff and fetchable by anyone who clones the repository,
+# without an LFS pull and without consuming LFS quota. They are JSON, they
+# compress well, and they are small.
+bench/results/**/*.json text
+
+# Large binary artefacts go to LFS if they ever appear.
+#
+# None exist today, and nothing here creates one: the Roblox verification
+# fixtures are Rojo project files and Luau source, which are text. These rules
+# are here so that a place file, a model, or a captured frame added later
+# cannot be committed into the object database by accident. No LFS object is
+# created until a matching file is actually added.
+*.rbxl   filter=lfs diff=lfs merge=lfs -text
+*.rbxlx  filter=lfs diff=lfs merge=lfs -text
+*.rbxm   filter=lfs diff=lfs merge=lfs -text
+*.rbxmx  filter=lfs diff=lfs merge=lfs -text
+*.png    filter=lfs diff=lfs merge=lfs -text
+*.jpg    filter=lfs diff=lfs merge=lfs -text
+*.gif    filter=lfs diff=lfs merge=lfs -text
+*.mp4    filter=lfs diff=lfs merge=lfs -text
+*.ogg    filter=lfs diff=lfs merge=lfs -text
+*.fbx    filter=lfs diff=lfs merge=lfs -text
+*.zip    filter=lfs diff=lfs merge=lfs -text

@@ -1,0 +1,27 @@
+--!strict
+
+export type Example = {
+	name: string,
+	what: string,
+	expected: string,
+	run: () -> string,
+}
+
+local all: { Example } = {
+	require "@self/quickstart",
+	require "@self/profiling",
+	require "@self/lifetime",
+	require "@self/accumulator",
+	require "@self/store-scene",
+	require "@self/collections",
+	require "@self/tile-map",
+	require "@self/composition-primitives",
+	require "@self/mount-target",
+	require "@self/attributes",
+	require "@self/root-scope",
+	require "@self/roblox-emulator",
+}
+
+return {
+	all = all,
+}
