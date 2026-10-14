@@ -37,7 +37,7 @@ local function main(): number
 		return 1
 	end
 
-	local outcome = TemporaryDirectory.run(process.env["TMPDIR"] or "/tmp", "compose-clean-clone", function(temporary)
+	local outcome = TemporaryDirectory.run(TemporaryDirectory.root(), "compose-clean-clone", function(temporary)
 		local cloned = process.run { "git", "clone", "--quiet", "--no-local", source, temporary }
 		if not cloned.ok then
 			print("check-clean-clone: clone failed:\n" .. cloned.stderr)

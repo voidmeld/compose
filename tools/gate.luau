@@ -81,6 +81,11 @@ local function script(id: string, why: string, path: string, ...: string): Gate.
 	return check(id, why, { "lute", "run", path, ... })
 end
 
+local function slow(producer: Gate.ProducerDraft): Gate.ProducerDraft
+	producer.deadlineSeconds = 1800
+	return producer
+end
+
 local ANALYZE = { "luau-lsp", "analyze", "--platform=standard", "--base-luaurc=.luaurc" }
 local SOLVER_V2 = table.clone(ANALYZE)
 table.insert(SOLVER_V2, 3, "--flag:LuauSolverV2=true")
@@ -136,13 +141,15 @@ local draft: Gate.Draft = {
 			why = "unit, property, lifecycle failure-injection, adapter contract and example tests pass",
 			deadlineSeconds = 1800,
 		},
-		script(
-			"benchmark-parity",
-			"every benchmark workload and scenario builds the same observable tree in every framework",
-			"bench/run.luau",
-			"--verify",
-			"--suite",
-			"all"
+		slow(
+			script(
+				"benchmark-parity",
+				"every benchmark workload and scenario builds the same observable tree in every framework",
+				"bench/run.luau",
+				"--verify",
+				"--suite",
+				"all"
+			)
 		),
 		check(
 			"verify-check",

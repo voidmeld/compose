@@ -1,12 +1,11 @@
 --!strict
 
 local fs = require "@std/fs"
-local process = require "@lute/process"
 local Test = require "../harness"
 local TemporaryDirectory = require "../../tools/lib/temporary-directory"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
-local PARENT = string.gsub(process.env["TMPDIR"] or "/tmp", "/+$", "")
+local PARENT = TemporaryDirectory.root()
 
 describe("temporary directory ownership", function()
 	it("isolates overlapping invocations with the same name and retains the live owner", function()

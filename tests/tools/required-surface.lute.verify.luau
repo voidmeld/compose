@@ -8,7 +8,7 @@ local TemporaryDirectory = require "../../tools/lib/temporary-directory"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 local function fixture(body: (string) -> number): number
-	return TemporaryDirectory.run(process.env["TMPDIR"] or "/tmp", "compose-required-surface", function(root)
+	return TemporaryDirectory.run(TemporaryDirectory.root(), "compose-required-surface", function(root)
 		fs.writeStringToFile(root .. "/rokit.toml", fs.readFileToString "rokit.toml")
 		for _, directory in { "tools", "docs", "src/core", "src/test-scene", "src/roblox", "authoring" } do
 			fs.createDirectory(root .. "/" .. directory, { makeParents = true })
