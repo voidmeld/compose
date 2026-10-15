@@ -55,17 +55,22 @@ local function raiseAll(failures: { unknown })
 end
 
 local function releaseEntry(entry: Entry, failures: { unknown })
+	local dispose = entry[DISPOSE] :: Dispose?
+	entry[DISPOSE] = nil
 	local afterDispose = entry[AFTER_DISPOSE] :: Dispose?
 	if afterDispose == nil then
-		(entry[DISPOSE] :: Dispose)()
+		(dispose :: Dispose)()
+		dispose = nil
 		return
 	end
 	entry[AFTER_DISPOSE] = nil
-	local ok, failure: unknown = pcall(entry[DISPOSE] :: Dispose)
+	local ok, failure: unknown = pcall(dispose :: Dispose)
+	dispose = nil
 	if not ok then
 		table.insert(failures, failure)
 	end
 	local settled, later: unknown = pcall(afterDispose)
+	afterDispose = nil
 	if not settled then
 		table.insert(failures, later)
 	end
@@ -133,7 +138,10 @@ local function createOwner(inherited: Reactor.Reactor?): Owner
 			end
 			unlink(entry)
 			if entry[AFTER_DISPOSE] == nil then
-				(entry[DISPOSE] :: Dispose)()
+				local cleanup = entry[DISPOSE] :: Dispose?
+				entry[DISPOSE] = nil
+				(cleanup :: Dispose)()
+				cleanup = nil
 				return
 			end
 			local failures: { unknown } = {}

@@ -14,6 +14,49 @@ end
 
 describe("ownership", function()
 	describe("owners", function()
+		it("releases cleanup captures even while a used disposer is retained", function()
+			for _, method in { "release", "dispose", "rollback" } do
+				for _, after in { false, true } do
+					local root = Compose.createOwner()
+					local checkpoint = root.checkpoint()
+					local weak = (setmetatable({}, { __mode = "v" }) :: unknown) :: { { number } }
+					local released = 0
+					local function register(): () -> ()
+						local payload = { 1 }
+						weak[1] = payload
+						return root.own(
+							function()
+								released += payload[1]
+							end,
+							if after
+								then function()
+									released += 1
+								end
+								else nil
+						)
+					end
+					local release = register()
+					if method == "release" then
+						release()
+					elseif method == "dispose" then
+						root.dispose()
+					else
+						root.rollbackTo(checkpoint)
+					end
+					for _ = 1, 200 do
+						local garbage = table.create(4000)
+						for index = 1, 4000 do
+							garbage[index] = { index, index + 1 }
+						end
+					end
+					expect(weak[1]):toBe(nil)
+					release()
+					root.dispose()
+					expect(released):toBe(if after then 2 else 1)
+				end
+			end
+		end)
+
 		it("disposes newest first", function()
 			local order: { string } = {}
 			local owner = Compose.createOwner()
