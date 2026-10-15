@@ -31,9 +31,8 @@ local function current(): Owner.Owner?
 	for index = #activations, 1, -1 do
 		local activation = activations[index]
 		if activation.thread == running then
-			if explicit == nil then
-				explicit = activation.owner
-			end
+			explicit = activation.owner
+			break
 		else
 			local status = coroutine.status(activation.thread)
 			if status == "normal" and not seen[activation.thread] then
