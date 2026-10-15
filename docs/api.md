@@ -1143,7 +1143,7 @@ When the cache is full, it evicts the least-recently-used entry.
 - `keys()` returns the retained keys, least-recently-used first.
 - Optional `touch(key, value)` observes every hit or miss without affecting retention.
 
-Owner disposal destroys each retained value exactly once, newest-recency-first.
+Owner disposal destroys each retained value exactly once, least-recently-used first.
 Cache values are not leases. A consumer holds references only while the cache retains them.
 If you add a newer key, the cache can evict a value that a consumer still references.
 

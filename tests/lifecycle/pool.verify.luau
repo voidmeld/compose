@@ -6,6 +6,49 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("resource pool", function()
+	it("drains pools and keyed caches after every destroy callback fails", function()
+		for _, kind in { "pool", "keyed-cache" } do
+			local owner = Compose.createOwner()
+			local destroyed = 0
+			local function destroy(_value: unknown): ()
+				destroyed += 1
+				error "destroy refused"
+			end
+			local empty = Compose.withOwner(owner, function()
+				if kind == "pool" then
+					local pool = Compose.createPool {
+						create = function()
+							return {}
+						end,
+						destroy = destroy,
+						maxRetained = 2,
+					}
+					pool.acquire().release()
+					pool.acquire()
+					pool.acquire()
+					return function()
+						return pool.idle() + pool.active()
+					end
+				end
+				local cache = Compose.createKeyedCache {
+					build = function(key: number)
+						return key
+					end,
+					destroy = destroy,
+					maxRetained = 2,
+				}
+				cache.get(1)
+				cache.get(2)
+				return cache.size
+			end)
+			expect(owner.dispose):toThrow("2 " .. kind .. " resource destroy failures")
+			expect(destroyed):toBe(2)
+			expect(empty()):toBe(0)
+			owner.dispose()
+			expect(destroyed):toBe(2)
+		end
+	end)
+
 	it("reuses reset resources and releases everything exactly once", function()
 		local owner = Compose.createOwner()
 		local created = 0
