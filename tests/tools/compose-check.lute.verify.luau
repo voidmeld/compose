@@ -6,6 +6,7 @@ local process = require "@lute/process"
 local readableRules = require "../../tools/lib/readable-rules"
 local consumerRules = require "../../tools/lib/consumer-rules"
 local Author = require "../../authoring"
+local Walk = require "../../tools/lib/walk"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
@@ -38,11 +39,6 @@ local function run(extra: { string }?): (boolean, string)
 	end
 	local result = process.run(argv)
 	return result.ok, result.stdout .. result.stderr
-end
-
-local function fingerprint(root: string): string
-	local result = process.run { "sh", "-c", ("find %s -type f | sort | xargs shasum"):format(root) }
-	return result.stdout
 end
 
 local function generatedRegistrySource(): string
@@ -951,13 +947,13 @@ return prose
 			["screen.luau"] = "Compose.cell(0)\nlocal x = name(scope)\n",
 			["nested/other.luau"] = "local value, setter = Compose.cell(0)\n",
 		}
-		local before = fingerprint(STAGE)
+		local before = Walk.files(STAGE, { "" })
 		run()
 		run { "--code", "CMP016" }
-		local after = fingerprint(STAGE)
+		local after = Walk.files(STAGE, { "" })
 		process.run { "rm", "-rf", STAGE }
 		expect(#before > 0):toBe(true)
-		expect(after):toBe(before)
+		expect(after):toEqual(before)
 	end)
 
 	it("says so rather than raising when the root does not exist", function()
