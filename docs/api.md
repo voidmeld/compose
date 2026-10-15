@@ -852,7 +852,7 @@ OrderedCollection {
 `mode` is explicit and has no threshold. `"all"` mounts everything. `"windowed"` mounts the visible rows plus `overscan`.
 Population changes do not switch the retention policy.
 
-`viewport` is a readable `{ offset, size }` in the unit that your host measures. `"windowed"` requires it.
+`viewport` is a readable `{ offset: number, size: number, offsetRevision: number? }` in the unit that your host measures. `"windowed"` requires it.
 `render` receives the `placement` of the row, a readable that carries its `index`, `row`, `column`, `offset`, `size`, `crossOffset` and `crossSize`.
 
 `layout` accepts a static options table, a cell or formula that holds that table, or a body that takes `use` and returns it.
@@ -894,8 +894,9 @@ Reflow works as follows:
 - End-following takes precedence. An explicit viewport offset change takes precedence over key anchoring.
 - If the anchor key disappears, Compose preserves the current offset, within those bounds.
 - The mounted window immediately covers the requested offset.
-- The request remains pending while the reported offset is unchanged, so repeated reflows accumulate without losing the anchor.
+- The request remains pending while the reported offset and optional `offsetRevision` are unchanged, so repeated reflows accumulate without losing the anchor.
 - If the adapter reports the requested offset, it acknowledges the request. If it reports a different offset, Compose treats that as an explicit scroll.
+- An adapter can change `offsetRevision` for each explicit offset decision, even when `offset` stays the same. A revision change counts as an explicit scroll: Compose drops the pending request, computes the window at the reported offset and anchors from that window. End-following still takes precedence. Keep the revision unchanged on passive viewport reports. Adapters that omit it keep the offset-only behavior.
 - Compose performs no host scroll.
 
 `status` is a cell. The collection writes it **only when one of its fields differs**, not on every pass.

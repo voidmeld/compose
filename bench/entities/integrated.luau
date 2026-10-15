@@ -386,7 +386,7 @@ local function build1(context: Types.ComposeContext, scale: Scale)
 					end,
 					mode = "windowed",
 					layout = { itemSize = 1 } :: Types.OrderedCollectionLayout,
-					viewport = function(use: Types.Use)
+					viewport = function(use: Types.Use): Types.OrderedCollectionViewport
 						return { offset = use(logFirst) - 1, size = LOG_WINDOW }
 					end,
 					key = function(entry: LogEntry): number

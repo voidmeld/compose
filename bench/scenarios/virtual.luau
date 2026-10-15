@@ -51,7 +51,7 @@ local function make(id: string, title: string, what: string, lane: string, budge
 					from = logical,
 					mode = "windowed",
 					layout = { itemSize = 1 } :: Types.OrderedCollectionLayout,
-					viewport = function(use: Types.Use)
+					viewport = function(use: Types.Use): Types.OrderedCollectionViewport
 						return { offset = (use(first) :: number) - 1, size = scale.visible }
 					end,
 					key = function(item: Item)

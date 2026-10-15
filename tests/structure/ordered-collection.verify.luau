@@ -191,6 +191,68 @@ describe("OrderedCollection", function()
 	end)
 
 	describe("reactive layout", function()
+		for _, explicit in { false, true } do
+			it(
+				if explicit
+					then "rejects a pending permutation offset with an unchanged explicit report"
+					else "keeps a pending permutation offset without an explicit report",
+				function()
+					local viewport = Compose.cell({ offset = 0, size = 20 } :: Compose.OrderedCollectionViewport)
+					local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+					local dispose, root, items =
+						mount { count = 10, mode = "windowed", viewport = viewport, status = status }
+					local reordered = rows(10)
+					local first = assert(table.remove(reordered, 1))
+					table.insert(reordered, 6, first)
+					items:set(reordered)
+					world.settle()
+					expect(status:peek().desiredOffset):toBe(50)
+					expect(idsOf(root)):toEqual { "r1", "r7" }
+					viewport:set { offset = 0, size = 20, offsetRevision = if explicit then 1 else nil }
+					world.settle()
+					expect(viewport:peek().offset):toBe(0)
+					if explicit then
+						expect(status:peek().desiredOffset):toBeNil()
+						expect(idsOf(root)):toEqual { "r2", "r3" }
+					else
+						expect(status:peek().desiredOffset):toBe(50)
+						expect(idsOf(root)):toEqual { "r1", "r7" }
+					end
+					viewport:set { offset = 0, size = 30, offsetRevision = if explicit then 1 else nil }
+					world.settle()
+					if explicit then
+						expect(status:peek().desiredOffset):toBeNil()
+						expect(idsOf(root)):toEqual { "r2", "r3", "r4" }
+						items:set(rows(10))
+						world.settle()
+						expect(status:peek().desiredOffset):toBe(10)
+					else
+						expect(status:peek().desiredOffset):toBe(50)
+						expect(idsOf(root)):toEqual { "r1", "r7", "r8" }
+					end
+					dispose()
+				end
+			)
+		end
+
+		it("honors an unchanged explicit offset in the same batch as a permutation", function()
+			local viewport =
+				Compose.cell({ offset = 0, size = 20, offsetRevision = 1 } :: Compose.OrderedCollectionViewport)
+			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local dispose, root, items = mount { count = 10, mode = "windowed", viewport = viewport, status = status }
+			world.batch(function()
+				local reordered = rows(10)
+				local first = assert(table.remove(reordered, 1))
+				table.insert(reordered, 6, first)
+				items:set(reordered)
+				viewport:set { offset = 0, size = 20, offsetRevision = 2 }
+			end)
+			world.settle()
+			expect(status:peek().desiredOffset):toBeNil()
+			expect(idsOf(root)):toEqual { "r2", "r3" }
+			dispose()
+		end)
+
 		it("settles a formula-driven reflow with an adapter acknowledging the requested offset", function()
 			local columns = Compose.cell(2)
 			local viewport = Compose.cell({ offset = 22, size = 10 } :: Compose.OrderedCollectionViewport)

@@ -4,6 +4,7 @@ local Environment = require "../cost-model"
 local Compose = require "../../src/core"
 
 export type OrderedCollectionLayout = Compose.OrderedCollectionLayout
+export type OrderedCollectionViewport = Compose.OrderedCollectionViewport
 export type Placement = Compose.Placement
 export type Use = Compose.Use
 export type Props = Compose.Props
