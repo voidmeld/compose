@@ -58,7 +58,12 @@ describe("inspector attribution", function()
 		expect((Compose.inspect.owner(root) :: Compose.InspectOwner).totalHolding):toBe(22)
 		root.dispose()
 		expect(released):toBe(12)
-		allocate()
+		for _ = 1, 8 do
+			allocate()
+			if next(children) == nil then
+				break
+			end
+		end
 		local surviving = 0
 		for _ in children do
 			surviving += 1
