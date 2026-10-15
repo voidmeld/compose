@@ -29,7 +29,7 @@ local function main(): number
 			return 1
 		end
 	end
-	local digest = process.run { "shasum", "-a", "256", CACHE }
+	local digest = process.run { "sha256sum", CACHE }
 	if not digest.ok or string.match(digest.stdout, "^(%x+)") ~= lock.robloxTypes.sha256 then
 		print "check-roblox-only: downloaded Roblox declarations failed the pinned digest"
 		return 1

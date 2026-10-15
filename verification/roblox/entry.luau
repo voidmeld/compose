@@ -13,7 +13,7 @@ local function named(check: Checks.Check): Verify.NamedCase
 	return {
 		id = check.id,
 		name = check.name,
-		requires = { ENGINE },
+		requires = check.requires or { ENGINE },
 		timeoutSeconds = TIMEOUT_SECONDS,
 		run = function(context: Verify.Context)
 			local container = Instance.new "Folder"
@@ -44,6 +44,9 @@ local factory: Roblox.CaseEntryFactory = function(host)
 		environment.studio = tostring(engine.studio)
 		environment.animatableTypes = table.concat(ComposeRoblox.animatableTypes(), ", ")
 		table.insert(capabilities, ENGINE)
+		if game:GetService("RunService"):IsClient() then
+			table.insert(capabilities, "roblox-client")
+		end
 	end
 	return {
 		cases = cases,

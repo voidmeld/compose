@@ -26,6 +26,9 @@ Each case records its detail as a step. The report environment records the Studi
 Keep the evidence directory, the Studio version and the source commit outside the active source tree.
 Missing or partial output is not a pass.
 
+Runtime primitives need native client validation of `property-readables-before-render`: hidden text/layout measurement, shared per-property signals, settled sampling and the first visible frame. This case also requires `roblox-client`; a server or simulator cannot establish that result. Run client animation, timeline and scheduler checks with the new default `PreRender` frame source, and retain server `Heartbeat` coverage. Measure property-observation callback cost during animated layout in the engine profiler. No headless timing establishes that cost.
+Check mixed motion, timeline, scheduler, collection admission, clock, settled and sequence work for coherent frame publication, callback failure isolation and complete subscription release after completion or disposal on both frame sources.
+
 ## Limits
 
 A passing run verifies only the engine behavior that its cases cover.

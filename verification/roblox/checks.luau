@@ -23,6 +23,7 @@ type Layout = {
 export type Check = {
 	id: string,
 	name: string,
+	requires: { string }?,
 	run: (container: Instance) -> string,
 }
 
@@ -33,6 +34,64 @@ local function assertThat(condition: boolean, message: string)
 end
 
 local checks: { Check } = {
+	{
+		id = "property-readables-before-render",
+		name = "shares property readables and samples settled layout before showing it",
+		requires = { "roblox-engine", "roblox-client" },
+		run = function(_container: Instance): string
+			local runtime = ComposeRoblox.createRuntime()
+			local player = assert(game:GetService("Players").LocalPlayer)
+			local render = game:GetService("RunService").PreRender
+			return Compose.withRootOwner(function(): string
+				local screen = Instance.new "ScreenGui"
+				runtime.adopt(screen)
+				screen.Enabled = false
+				screen.Parent = player:WaitForChild "PlayerGui"
+				local _, node = runtime.mount(function()
+					return runtime.constructors.TextLabel {
+						Size = UDim2.fromOffset(300, 80),
+						Position = UDim2.fromOffset(24, 32),
+						Text = "Measured before presentation",
+						TextSize = 20,
+					}
+				end, screen)
+				local bounds = runtime.observe(node, "TextBounds")
+				assertThat(bounds == runtime.observe(node, "TextBounds"), "TextBounds acquisition was not shared")
+				local position = runtime.observe(node, "AbsolutePosition")
+				local size = runtime.observe(node, "AbsoluteSize")
+				local read = assert(runtime.host.observation).readProperty
+				local settled = runtime.settled {
+					sample = function(): string
+						return tostring(read(node, "TextBounds"))
+							.. tostring(read(node, "AbsoluteSize"))
+							.. tostring(read(node, "AbsolutePosition"))
+					end,
+					ready = function(): boolean
+						return (read(node, "TextBounds") :: Vector2).X > 0
+					end,
+				}
+				for _ = 1, 120 do
+					if settled:peek() then
+						break
+					end
+					render:Wait()
+				end
+				assertThat(settled:peek(), "hidden text layout did not settle within 120 render frames")
+				assertThat(bounds:peek() == read(node, "TextBounds"), "TextBounds readable lagged the settled property")
+				assertThat(
+					size:peek() == read(node, "AbsoluteSize"),
+					"AbsoluteSize readable lagged the settled property"
+				)
+				screen.Enabled = true
+				render:Wait()
+				assertThat(
+					position:peek() == read(node, "AbsolutePosition"),
+					"AbsolutePosition readable lagged the first visible frame"
+				)
+				return "hidden layout settled; shared TextBounds, AbsoluteSize and AbsolutePosition matched engine reads before presentation"
+			end, runtime.reactor)
+		end,
+	},
 	{
 		id = "instance-lifecycle",
 		name = "creates and destroys a real Instance",
@@ -589,7 +648,7 @@ local checks: { Check } = {
 						Compose.OrderedCollection {
 							from = logical,
 							mode = "windowed",
-							viewport = function(use: Use)
+							viewport = function(use: Compose.Use): Compose.OrderedCollectionViewport
 								return { offset = use(first) - 1, size = VISIBLE }
 							end,
 							layout = { itemSize = 1 } :: Layout,
