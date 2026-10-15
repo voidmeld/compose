@@ -493,6 +493,61 @@ describe("falsifiers", function()
 	end)
 
 	describe("a boundary around a raising property formula", function()
+		it("owns directive branches and fallbacks without retaining guard scopes on retry", function()
+			for _, directives in { false, true } do
+				local world = Support.world()
+				Compose.inspect.start()
+				local label = Compose.cell "New"
+				local retry: () -> () = function() end
+				local dispose, root = world.runtime.mount(function()
+					return world.create "Frame" {
+						Compose.boundary(function()
+							local function build()
+								return world.create "TextLabel" {
+									Text = function(use)
+										local text = use(label)
+										if text == "" then
+											error "empty label"
+										end
+										return text
+									end,
+								}
+							end
+							return if directives
+								then Compose.show(function()
+									return true
+								end, build)
+								else build()
+						end, function(_, again)
+							retry = again
+							if not directives then
+								return world.create "Frame" {}
+							end
+							return Compose.fragment(function()
+								return { world.create "Frame" {}, world.create "Frame" {} }
+							end)
+						end),
+					}
+				end, world.root)
+				local baseline = Compose.inspect.snapshot().mounts[1].totalHolding
+				for _ = 1, 4 do
+					label:set ""
+					world.settle()
+					expect(#world.host.childrenOf(root)):toBe(if directives then 2 else 1)
+					label:set "Restored"
+					retry()
+					world.settle()
+					local children = world.host.childrenOf(root)
+					expect(#children):toBe(1)
+					expect(world.host.kindOf(children[1])):toBe "TextLabel"
+					expect(Compose.inspect.snapshot().mounts[1].totalHolding):toBe(baseline)
+				end
+				dispose()
+				expect(world.host.leaked()):toEqual { "Root#1" }
+				Compose.inspect.stop()
+			end
+		end)
+
 		it("renders the fallback when a bound formula raises after mount", function()
 			local world = Support.world()
 			local label = Compose.cell "New"

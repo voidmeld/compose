@@ -1202,6 +1202,8 @@ Its lifetime is unchanged. If you dispose the component that wrote the portal, C
 
 A subtree that can fail without taking the screen with it.
 `fallback(failure, retry)` renders the failure.
+The builder and fallback can return a node or a structural directive.
+Use a directive to group children without a native wrapper.
 A failure is anything that the subtree raises while it builds, while its watches run, or while its bound properties read a formula.
 
 ```luau
