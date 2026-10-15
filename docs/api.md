@@ -513,9 +513,34 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `timeline(options?)` | Creates one owned clock that many properties can read. |
 | `ramp(initial, options?)` | Creates a value that moves to each new target over a duration that you choose for each retarget. See [Ramp](#ramp). |
 | `scheduler(owner?)` | Creates owner-bound delayed work with cancellation and keyed replacement. See [Owner scheduler](#owner-scheduler). |
+| `observe(node, property)` | Shares an owned readable of a host property. |
 
 The `spring` and `tween` option tables both accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
 
+#### Property readables
+
+`runtime.observe(node, property) -> Readable<unknown>` requires an active owner and `host.observation`.
+It reads the initial property synchronously. Repeated acquisitions in a runtime return the same readable for the same node and property, with one native per-property subscription.
+Each acquisition holds one reference until its owner disposes; the last release disconnects and forgets the entry. The node is borrowed.
+An unchanged value produces no reactive update. A property may contain nil. A failed construction unwinds its acquisitions.
+The readable updates synchronously when the host delivers that property's notification. No frame listener or polling is added.
+`Compose.geometry` remains the pure rectangle operations: derive their inputs from these readables rather than maintaining another observation system.
+
+```luau
+local size = runtime.observe(panel, "AbsoluteSize")
+Compose.watch(function(use)
+    print(use(size))
+end)
+```
+
+On Roblox, notification timing follows the engine's layout pass; construction-time values can precede layout.
+A notification means the property changed, not that every dependent layout property has settled.
+Client runtimes use `PreRender` for their shared frame clock; server runtimes use `Heartbeat`.
+To read before the next visible frame, sample `host.observation.readProperty` in a client frame callback or in `settled.sample`, after parenting and supplying the layout inputs.
+Reading a property can only return what the engine has calculated at that point. Compose neither forces a layout pass nor promises that asynchronous text or asset measurement finishes before the first frame.
+Keep content hidden until `settled` reports true when that guarantee is required. The engine validation must establish whether the particular layout can settle before its first visible frame.
+
+All runtime frame work (motion, timelines, scheduling, collection admission, settled sampling and clocks) shares one native subscription while active, and none when all work is idle.
 
 Bind `local Host = runtime.constructors` once and use the host-kind fields directly.
 Reading a field lazily caches its constructor. Calling it builds through the host and the ownership rules of this runtime:

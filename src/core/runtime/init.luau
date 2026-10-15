@@ -18,6 +18,7 @@ local Root = require "./ownership/root"
 local Types = require "./reactive/types"
 local Weak = require "./weak"
 local shareFrames = require "./frames"
+local observe = require "@self/observe"
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
@@ -61,6 +62,7 @@ export type Runtime = {
 	timeline: (options: TimelineModule.Options?) -> TimelineModule.Timeline,
 	ramp: <T>(initial: T, options: RampModule.Options?) -> RampModule.Ramp<T>,
 	scheduler: (owner: Owner.Owner?) -> SchedulerModule.Scheduler,
+	observe: (node: Node, property: string) -> Types.Readable<unknown>,
 
 	reactor: Reactor.Reactor,
 
@@ -571,6 +573,7 @@ local function createRuntime(host: Host.Host): Runtime
 		timeline = timelines.timeline,
 		ramp = ramp,
 		scheduler = scheduler,
+		observe = observe(host, requireOwner),
 	}
 end
 

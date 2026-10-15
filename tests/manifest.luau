@@ -54,6 +54,7 @@ return table.freeze {
 	"tests/runtime/mount-target-custody.verify.luau",
 	"tests/runtime/mount.verify.luau",
 	"tests/runtime/named.verify.luau",
+	"tests/runtime/primitives.verify.luau",
 	"tests/structure/admission.verify.luau",
 	"tests/structure/arguments.verify.luau",
 	"tests/structure/branches.verify.luau",
