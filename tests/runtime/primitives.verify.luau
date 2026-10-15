@@ -55,6 +55,35 @@ describe("runtime primitives", function()
 		owner.dispose()
 	end)
 
+	it("catches up absolute deadlines on resubscription and refuses invalid clock options", function()
+		local world = Support.world()
+		Compose.withRootOwner(function()
+			local value = world.runtime.clock { deadline = 1 }
+			local elapsed = world.runtime.clock { start = -1 }
+			world.host.step(2)
+			local reader = Compose.createOwner(world.runtime.reactor)
+			reader.watch(function(use)
+				use(value)
+				use(elapsed)
+			end)
+			expect(value:peek()):toBe(0)
+			expect(elapsed:peek()):toBe(3)
+			reader.dispose()
+			expect(world.host.counts().frameListeners):toBe(0)
+			for _, options in
+				{
+					{ duration = -1 },
+					{ interval = math.huge },
+					{ deadline = math.sqrt(-1) },
+					{ duration = 1, deadline = 1 },
+				} :: { Compose.ClockOptions }
+			do
+				expect(function()
+					world.runtime.clock(options)
+				end):toThrow()
+			end
+		end)
+	end)
 	it("shares one property signal until the last holder releases it", function()
 		local world = Support.world()
 		local node = world.host.makeNode "Frame"
@@ -160,6 +189,59 @@ describe("runtime primitives", function()
 				}
 			end):toThrow "positive integer"
 		end)
+	end)
+
+	it("pauses an unobserved clock and limits publishes without losing elapsed time", function()
+		local world = Support.world()
+		local value, owner = Support.owned(function()
+			return world.runtime.clock { interval = 1 }
+		end)
+		world.host.step(10)
+		expect(value:peek()):toBe(0)
+		expect(world.host.counts().frameListeners):toBe(0)
+		local reader = Compose.createOwner(world.runtime.reactor)
+		local reads = 0
+		reader.watch(function(use)
+			use(value)
+			reads += 1
+		end)
+		for _ = 1, 3 do
+			world.host.step(0.25)
+		end
+		expect(reads):toBe(1)
+		world.host.step(0.25)
+		expect(value:peek()):toBe(1)
+		expect(reads):toBe(2)
+		reader.dispose()
+		expect(world.host.counts().frameListeners):toBe(0)
+		world.host.step(10)
+		local resume = Compose.createOwner(world.runtime.reactor)
+		resume.watch(function(use)
+			use(value)
+		end)
+		world.host.step(1)
+		expect(value:peek()):toBe(2)
+		owner.dispose()
+		expect(world.host.counts().frameListeners):toBe(0)
+		resume.dispose()
+	end)
+
+	it("counts down durations and absolute deadlines and stops at zero", function()
+		local world = Support.world()
+		Compose.withRootOwner(function(owner)
+			local duration = world.runtime.clock { duration = 1, interval = 10 }
+			local deadline = world.runtime.clock { deadline = 2 }
+			owner.watch(function(use)
+				use(duration)
+				use(deadline)
+			end)
+			expect(world.host.counts().frameListeners):toBe(1)
+			world.host.step(1)
+			expect(duration:peek()):toBe(0)
+			world.host.step(2)
+			expect(deadline:peek()):toBe(0)
+			expect(world.host.counts().frameListeners):toBe(0)
+		end, world.runtime.reactor)
 	end)
 
 end)

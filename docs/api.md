@@ -515,6 +515,7 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `scheduler(owner?)` | Creates owner-bound delayed work with cancellation and keyed replacement. See [Owner scheduler](#owner-scheduler). |
 | `observe(node, property)` | Shares an owned readable of a host property. |
 | `settled(options)` | Reports when a sampled snapshot stays equal for consecutive frames. |
+| `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
 
 The `spring` and `tween` option tables both accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
 
@@ -557,6 +558,23 @@ local ready = runtime.settled {
     restart = contentRevision,
     frames = 2,
 }
+```
+
+#### Clocks
+
+`runtime.clock { duration?, deadline?, start?, interval? } -> Readable<number>` requires an active owner and host frames; the table is optional.
+With neither duration nor deadline it reads elapsed active seconds, initially zero. `duration` counts down active seconds from a finite nonnegative duration.
+`deadline` counts down to an absolute finite time in the units and epoch of `host.frames.now()`. `start` reads elapsed time since an absolute finite start, clamped at zero before the start. Supply at most one of duration, deadline and start.
+The result clamps countdowns at zero and releases its frame listener there.
+`interval` is the minimum publication interval in seconds (default zero, every frame); it must be finite and nonnegative. A terminal zero publishes immediately even between intervals.
+Frames accumulate fractional time without reactive writes between publications. A large frame publishes once and retains the interval remainder.
+No subscription exists until a reactive consumer reads the clock. Removing the last graph subscriber pauses it; `:peek()` does not resume it.
+Elapsed and duration clocks exclude unobserved time. Absolute start and deadline clocks catch up on the next subscription.
+Formulas retain their upstream subscriptions until disposed, as specified in Reactive state. Owner disposal freezes the last clock value and releases its listener even if another owner still reads it.
+
+```luau
+local remaining = runtime.clock { duration = 60, interval = 1 }
+Compose.watch(function(use) print(math.ceil(use(remaining))) end)
 ```
 
 All runtime frame work (motion, timelines, scheduling, collection admission, settled sampling and clocks) shares one native subscription while active, and none when all work is idle.

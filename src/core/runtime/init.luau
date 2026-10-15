@@ -20,6 +20,7 @@ local Weak = require "./weak"
 local shareFrames = require "./frames"
 local observe = require "@self/observe"
 local settled = require "@self/settled"
+local clock = require "@self/clock"
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
@@ -36,6 +37,7 @@ export type TweenOptions = Animation.TweenOptions
 export type RampOptions = RampModule.Options
 export type Ramp<T> = RampModule.Ramp<T>
 export type Scheduler = SchedulerModule.Scheduler
+export type ClockOptions = clock.Options
 export type SettledOptions<T, R = unknown> = settled.Options<T, R>
 
 export type Component = () -> Node
@@ -66,6 +68,7 @@ export type Runtime = {
 	scheduler: (owner: Owner.Owner?) -> SchedulerModule.Scheduler,
 	observe: (node: Node, property: string) -> Types.Readable<unknown>,
 	settled: <T, R>(options: settled.Options<T, R>) -> Types.Readable<boolean>,
+	clock: (options: clock.Options?) -> Types.Readable<number>,
 
 	reactor: Reactor.Reactor,
 
@@ -578,6 +581,7 @@ local function createRuntime(host: Host.Host): Runtime
 		scheduler = scheduler,
 		observe = observe(host, requireOwner),
 		settled = settled(host, requireOwner),
+		clock = clock(host, requireOwner),
 	}
 end
 

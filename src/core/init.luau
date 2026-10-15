@@ -37,6 +37,7 @@ local StructureSpatialCollection = require "@self/structure/spatial-collection"
 local StructureTileCollection = require "@self/structure/tile-collection"
 local StructureSwitch = require "@self/structure/switch"
 local Types = require "@self/reactive/types"
+local clock = require "@self/reactive/clock"
 local cellModule = require "@self/reactive/cell"
 local nodes = require "@self/ownership/nodes"
 local profileModule = require "@self/reactive/profile"
@@ -103,6 +104,7 @@ export type TweenOptions = RuntimeModule.TweenOptions
 export type RampOptions = RuntimeModule.RampOptions
 export type Ramp<T> = RuntimeModule.Ramp<T>
 export type Scheduler = RuntimeModule.Scheduler
+export type ClockOptions = RuntimeModule.ClockOptions
 export type SettledOptions<T, R = unknown> = RuntimeModule.SettledOptions<T, R>
 export type Slot = SlotModule.Slot
 
