@@ -26,7 +26,7 @@ local function current(): Owner.Owner?
 	local running = coroutine.running()
 	local explicit: Owner.Owner? = nil
 	local inherited: Owner.Owner? = nil
-	local seen: { [thread]: boolean } = {}
+	local seen: { [thread]: boolean }? = nil
 	local ambiguous = false
 	for index = #activations, 1, -1 do
 		local activation = activations[index]
@@ -35,8 +35,10 @@ local function current(): Owner.Owner?
 			break
 		else
 			local status = coroutine.status(activation.thread)
-			if status == "normal" and not seen[activation.thread] then
-				seen[activation.thread] = true
+			if status == "normal" and (seen == nil or not seen[activation.thread]) then
+				local visited = seen or {}
+				seen = visited
+				visited[activation.thread] = true
 				if inherited == nil then
 					inherited = activation.owner
 				elseif inherited ~= activation.owner then
