@@ -100,6 +100,12 @@ The run writes two files to the output directory.
 - `report.json` is the full Verify report. It holds the series of every measurement.
 
 CPU proof of core does not establish native rendering, physics, networking, device input or played quality.
+
+`lute run bench/primitives.luau` measures the runtime primitives through Verify benchmarks, with 10 warmup samples and 40 measured samples of 200 operations. Setup and disposal are outside timing.
+One Windows Lute headless run measured these p50/p95 microseconds per property notification or fake-host frame: observation with 100 holders of one property, 0.203/0.337; changing settled snapshot, 0.480/0.687; one-second clock with one subscriber, 0.447/0.605; sequence with one active tween track, 1.763/2.401.
+These are absolute microbenchmarks, including fake-host dispatch, with no native rendering or speedup claim. Re-run for the current machine and revision.
+The command stores raw Verify samples and source/environment context in `bench/results/primitives`; an optional first argument chooses another evidence directory.
+The runtime primitive Verify cases separately count subscriptions and publications: 100 observation holders use one property connection; mixed active frame work uses one native frame listener; settled, completed, cancelled and unobserved work uses none. The one-second clock test observes one publication across four quarter-second frames, with no reactive writes between intervals.
 Before you update the framework pin of a consumer, verify the affected consumers.
 An engine claim needs its own authentic execution. See [engine verification](../verification/roblox/README.md).
 Do not relabel an earlier receipt as evidence of new source.
