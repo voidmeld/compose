@@ -13,11 +13,11 @@ That check does not run the engine.
 Run the checks in a launched Studio. The command starts a disposable Studio on a generated place, so nothing is saved, published or uploaded.
 
 ```bash
-lute run .lute/dependencies/verify/tools/run.luau --entry verification/roblox/entry.luau --host studio --deadline 300
+lute run .lute/dependencies/verify/tools/run.luau --entry verification/roblox/entry.luau --host studio --context Client --deadline 300
 ```
 
 Use `--case instance-lifecycle` to run one check. The case ids are in [`checks.luau`](checks.luau).
-`lute run tools/gate.luau --native` runs the same command as the producer `roblox-engine`.
+`lute run tools/gate.luau --native` runs the same command as the producer `roblox-engine`. It also runs `spring-heartbeat` with `--context Server` as `roblox-heartbeat`, retaining coverage of the server frame source.
 Studio must be installed, authenticated and configured for its MCP tools. The Verify documentation describes native Studio execution.
 
 Exit code zero means that every selected case passed.

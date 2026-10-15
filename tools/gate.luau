@@ -205,12 +205,36 @@ local draft: Gate.Draft = {
 				"verification/roblox/entry.luau",
 				"--host",
 				"studio",
+				"--context",
+				"Client",
 				"--deadline",
 				"300",
 			},
 			requires = { "native-studio" },
 			tier = "native",
-			why = "the engine checks run in a launched Studio and report through the standard report",
+			why = "the engine checks run in a launched Studio Play client and report through the standard report",
+		},
+		{
+			id = "roblox-heartbeat",
+			kind = "native",
+			argv = {
+				"lute",
+				"run",
+				".lute/dependencies/verify/tools/run.luau",
+				"--entry",
+				"verification/roblox/entry.luau",
+				"--host",
+				"studio",
+				"--context",
+				"Server",
+				"--case",
+				"spring-heartbeat",
+				"--deadline",
+				"300",
+			},
+			requires = { "native-studio" },
+			tier = "native",
+			why = "the server frame source still settles springs on Heartbeat",
 		},
 		{
 			id = "clean-clone",
@@ -226,7 +250,10 @@ local draft: Gate.Draft = {
 		deadlineSeconds = 3600,
 		deferrals = if native
 			then nil
-			else { ["roblox-engine"] = "the portable gate does not run Studio; use --native" },
+			else {
+				["roblox-engine"] = "the portable gate does not run Studio; use --native",
+				["roblox-heartbeat"] = "the portable gate does not run Studio; use --native",
+			},
 	},
 }
 
