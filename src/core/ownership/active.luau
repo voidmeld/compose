@@ -59,7 +59,7 @@ local function current(): Owner.Owner?
 	if context ~= nil then
 		local record = Owner.runScopeOf(context)
 		if record ~= nil and depth() <= record.base then
-			return record.scope
+			return (record :: unknown) :: Owner.Owner
 		end
 	end
 	return explicit or inherited

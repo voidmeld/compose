@@ -76,7 +76,18 @@ local function releaseEntry(entry: Entry, failures: { unknown })
 	end
 end
 
-export type RunScope = { scope: Owner, base: number }
+export type RunScope = { child: Owner | false, create: () -> Owner, base: number }
+
+local RUN_SCOPE = {
+	__index = function(scope: RunScope, key: string): unknown
+		local child = scope.child
+		if child == false then
+			child = scope.create()
+			scope.child = child
+		end
+		return ((child :: unknown) :: { [string]: unknown })[key]
+	end,
+}
 
 local runScopes = (setmetatable({} :: { [unknown]: RunScope }, { __mode = "k" }) :: unknown) :: { [unknown]: RunScope }
 local activationDepth: () -> number = function(): number
@@ -297,28 +308,19 @@ local function createOwner(inherited: Reactor.Reactor?): Owner
 	end
 
 	local function scopedRuns(body: (use: Types.Use) -> (), afterDispose: Dispose?): ((use: Types.Use) -> (), Dispose)
-		local run: Owner? = nil
-		local scope = setmetatable({}, {
-			__index = function(_: unknown, key: string): unknown
-				local current = run
-				if current == nil then
-					current = createChild()
-					run = current
-				end
-				return ((current :: unknown) :: { [string]: unknown })[key]
-			end,
-		})
+		local record = (
+			setmetatable({ child = false, create = createChild, base = 0 }, RUN_SCOPE) :: unknown
+		) :: RunScope
 		local function release()
-			local current = run
-			if current ~= nil then
-				run = nil
+			local current = record.child
+			if type(current) == "table" then
+				record.child = false
 				current.dispose()
 			end
 		end
-		local record: RunScope = { scope = (scope :: unknown) :: Owner, base = 0 }
 		local registered = false
 		local function scoped(use: Types.Use)
-			if run ~= nil then
+			if record.child ~= false then
 				release()
 			end
 			if not registered then
