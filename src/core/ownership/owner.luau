@@ -221,7 +221,9 @@ local function createOwner(inherited: Reactor.Reactor?): Owner
 
 	local function createChild(): Owner
 		local child = createOwner(reactor)
-		child.__attachTo(own(child.dispose))
+		child.__attachTo(own(function()
+			child.dispose()
+		end))
 		if Inspect.isActive() then
 			Inspect.child(owner, child)
 		end

@@ -27,6 +27,47 @@ describe("inspector activation", function()
 end)
 
 describe("inspector attribution", function()
+	it("keeps live child holdings across collection and releases disposed children", function()
+		Compose.__resetForTests()
+		Compose.inspect.start()
+		local root = Compose.createOwner()
+		Compose.inspect.label(root, "root")
+		local children = (setmetatable({}, { __mode = "v" }) :: unknown) :: { Compose.Owner }
+		local released = 0
+		for index = 1, 12 do
+			local child = root.createChild()
+			child.own(function()
+				released += 1
+			end)
+			children[index] = child
+		end
+		local function allocate()
+			for _ = 1, 40 do
+				local garbage = table.create(4000)
+				for index = 1, 4000 do
+					garbage[index] = { index, index + 1 }
+				end
+			end
+		end
+		expect((Compose.inspect.owner(root) :: Compose.InspectOwner).totalHolding):toBe(24)
+		allocate()
+		expect((Compose.inspect.owner(root) :: Compose.InspectOwner).totalHolding):toBe(24)
+		expect(Compose.inspect.snapshot().detached[1].descendants):toBe(12)
+		expect(released):toBe(0)
+		children[1].dispose()
+		expect((Compose.inspect.owner(root) :: Compose.InspectOwner).totalHolding):toBe(22)
+		root.dispose()
+		expect(released):toBe(12)
+		allocate()
+		local surviving = 0
+		for _ in children do
+			surviving += 1
+		end
+		expect(surviving):toBe(0)
+		expect((Compose.inspect.owner(root) :: Compose.InspectOwner).totalHolding):toBe(0)
+		Compose.inspect.stop()
+	end)
+
 	it("reports a mount, its nodes, its watches and its child owners", function()
 		local world = Support.world()
 		Compose.inspect.start()
