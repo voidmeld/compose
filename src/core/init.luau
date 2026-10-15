@@ -103,6 +103,7 @@ export type TweenOptions = RuntimeModule.TweenOptions
 export type RampOptions = RuntimeModule.RampOptions
 export type Ramp<T> = RuntimeModule.Ramp<T>
 export type Scheduler = RuntimeModule.Scheduler
+export type SettledOptions<T, R = unknown> = RuntimeModule.SettledOptions<T, R>
 export type Slot = SlotModule.Slot
 
 export type GeometrySize = Geometry.Size

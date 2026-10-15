@@ -514,6 +514,7 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `ramp(initial, options?)` | Creates a value that moves to each new target over a duration that you choose for each retarget. See [Ramp](#ramp). |
 | `scheduler(owner?)` | Creates owner-bound delayed work with cancellation and keyed replacement. See [Owner scheduler](#owner-scheduler). |
 | `observe(node, property)` | Shares an owned readable of a host property. |
+| `settled(options)` | Reports when a sampled snapshot stays equal for consecutive frames. |
 
 The `spring` and `tween` option tables both accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
 
@@ -539,6 +540,24 @@ Client runtimes use `PreRender` for their shared frame clock; server runtimes us
 To read before the next visible frame, sample `host.observation.readProperty` in a client frame callback or in `settled.sample`, after parenting and supplying the layout inputs.
 Reading a property can only return what the engine has calculated at that point. Compose neither forces a layout pass nor promises that asynchronous text or asset measurement finishes before the first frame.
 Keep content hidden until `settled` reports true when that guarantee is required. The engine validation must establish whether the particular layout can settle before its first visible frame.
+
+#### Settled snapshots
+
+`runtime.settled { sample, frames?, equals?, restart?, ready?, timeout? } -> Readable<boolean>` requires an active owner and host frames.
+It starts false and samples once per frame until `frames` consecutive snapshots compare equal (default two, a positive integer).
+The first sample counts as one. Equality defaults to `==`; supply `equals` for newly allocated records.
+`ready()` returning false resets the consecutive count, allowing empty or incomplete layout to remain unsettled.
+An optional finite nonnegative `timeout` also permits settlement after that many ready seconds, even if snapshots keep changing. Omit it when equality is mandatory; time spent not ready resets the timeout.
+An optional reactive `restart` source resets the result and starts sampling again when its value changes (`==`). An equal result of a source body leaves the sampling run alone. Sampling itself is untracked.
+Settling and owner disposal remove the frame listener. Without `restart`, a settled result remains true.
+
+```luau
+local ready = runtime.settled {
+    sample = function() return size:peek() end,
+    restart = contentRevision,
+    frames = 2,
+}
+```
 
 All runtime frame work (motion, timelines, scheduling, collection admission, settled sampling and clocks) shares one native subscription while active, and none when all work is idle.
 
