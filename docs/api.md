@@ -516,8 +516,9 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `observe(node, property)` | Shares an owned readable of a host property. |
 | `settled(options)` | Reports when a sampled snapshot stays equal for consecutive frames. |
 | `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
+| `sequence(options)` | Owns a choreography of waits, callbacks, tweens, timelines and parallel groups. |
 
-The `spring` and `tween` option tables both accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
+The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
 
 #### Property readables
 
@@ -575,6 +576,26 @@ Formulas retain their upstream subscriptions until disposed, as specified in Rea
 ```luau
 local remaining = runtime.clock { duration = 60, interval = 1 }
 Compose.watch(function(use) print(math.ceil(use(remaining))) end)
+```
+
+#### Sequences
+
+`runtime.sequence { steps, reducedMotion?, autoplay? } -> Sequence` requires an active owner and host frames.
+It returns `running` and `completed` readables and `play()`, `cancel()` and `finish()` controls. Autoplay defaults to true; `play` restarts from the beginning.
+A step accepts `wait` seconds, `run` (a callback at its start), `onComplete`, `tween = { seconds, ease? }`, `timeline` options, `sample(progress)`, a serial `steps` list, or a `parallel` list of steps.
+Tween samples receive eased normalized progress; use it to write cells or interpolate the values your scene needs. Timeline samples use the existing timeline repeat, direction, delay and scale behavior.
+Parallel groups start together and the next step waits for their longest child. Durations must be finite; zero-length waits, tweens and callbacks run synchronously in order. A large frame delivers crossed events by due time, then declaration order. Callback failure cancels playback before reporting the failure.
+`finish` advances an active sequence to its end. `cancel` stops it and clears completion without running later steps. Owner disposal cancels it, including from inside a callback.
+Callbacks run with the sequence owner active. Resources they create end with that owner.
+Reduced motion finishes all remaining steps in order at once, including when the policy changes during playback. Completion and cancellation retain no frame listener; tracks use paused timelines and the shared runtime clock.
+
+```luau
+local cue = runtime.sequence { steps = {
+    { wait = 0.2 },
+    { tween = { seconds = 0.3, ease = Compose.easing.outQuad },
+      sample = function(progress) opacity:set(progress) end },
+    { run = function() enabled:set(true) end },
+} }
 ```
 
 All runtime frame work (motion, timelines, scheduling, collection admission, settled sampling and clocks) shares one native subscription while active, and none when all work is idle.

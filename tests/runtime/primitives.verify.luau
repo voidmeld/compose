@@ -28,6 +28,47 @@ describe("runtime primitives", function()
 		expect(value:peek()):toBe(false)
 		owner.dispose()
 	end)
+	it("unwinds failed acquisitions and starts no work without host capabilities", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Panel"
+		local observation = assert(world.host.adapter.observation)
+		local subscribe = observation.observeProperty
+		observation.observeProperty = function(): () -> ()
+			error "subscription refused"
+		end
+		Compose.withRootOwner(function(owner)
+			expect(function()
+				world.runtime.observe(node, "Size")
+			end):toThrow "subscription refused"
+			expect(owner.size()):toBe(0)
+			observation.observeProperty = subscribe
+			world.runtime.observe(node, "Size")
+		end)
+		expect(world.host.liveSubscriptions()):toBe(0)
+		world.host.adapter.frames = nil
+		Compose.withRootOwner(function(owner)
+			local attempts: { () -> () } = {
+				function()
+					world.runtime.clock()
+				end,
+				function()
+					world.runtime.settled {
+						sample = function()
+							return 0
+						end,
+					}
+				end,
+				function()
+					world.runtime.sequence { steps = {} }
+				end,
+			}
+			for _, attempt in attempts do
+				expect(attempt):toThrow()
+				expect(owner.size()):toBe(0)
+			end
+		end)
+	end)
+
 	it("uses ready time for optional settlement timeout", function()
 		local world = Support.world()
 		local ready, n = true, 0
@@ -54,6 +95,64 @@ describe("runtime primitives", function()
 		expect(world.host.counts().frameListeners):toBe(0)
 		owner.dispose()
 	end)
+
+	it(
+		"orders nested parallel events, completes zero tweens, cancels callback failure and unwinds bad builds",
+		function()
+			local world = Support.world()
+			local calls: { number } = {}
+			Compose.withRootOwner(function(owner)
+				world.runtime.sequence {
+					steps = {
+						{
+							parallel = {
+								{
+									wait = 2,
+									onComplete = function()
+										table.insert(calls, 2)
+									end,
+								},
+								{
+									steps = {
+										{ wait = 1 },
+										{
+											run = function()
+												table.insert(calls, 1)
+											end,
+										},
+									} :: { Compose.SequenceStep },
+								},
+							} :: { Compose.SequenceStep },
+						},
+						{
+							tween = { seconds = 0 },
+							sample = function(value)
+								table.insert(calls, value + 2)
+							end,
+						},
+					},
+				}
+				world.host.step(3)
+				expect(calls):toEqual { 1, 2, 3 }
+				local bad = world.runtime.sequence {
+					autoplay = false,
+					steps = { {
+						run = function()
+							error "callback failed"
+						end,
+					} },
+				}
+				expect(bad.play):toThrow "callback failed"
+				expect(bad.running:peek()):toBe(false)
+				expect(world.host.counts().frameListeners):toBe(0)
+				local before = owner.size()
+				expect(function()
+					world.runtime.sequence { steps = { { wait = -1 } } }
+				end):toThrow "finite nonnegative"
+				expect(owner.size()):toBe(before)
+			end)
+		end
+	)
 
 	it("catches up absolute deadlines on resubscription and refuses invalid clock options", function()
 		local world = Support.world()
@@ -244,6 +343,133 @@ describe("runtime primitives", function()
 		end, world.runtime.reactor)
 	end)
 
+	it("shares frames across motion, timelines, scheduler, settled and clocks", function()
+		local world = Support.world()
+		Compose.withRootOwner(function(owner)
+			local target = Compose.cell(0)
+			world.runtime.tween(function(use)
+				return use(target)
+			end)
+			target:set(1)
+			world.runtime.timeline()
+			world.runtime.scheduler().after(1, function() end)
+			world.runtime.sequence { steps = { { wait = 1 } } }
+			world.runtime.mount(function()
+				return world.create "Frame" {
+					Compose.MountBudget {
+						from = Compose.cell { 1, 2 },
+						mountsPerFrame = 1,
+						render = function()
+							return world.create "Frame" {}
+						end,
+					},
+				}
+			end, world.root)
+			world.runtime.settled {
+				sample = function()
+					return 0
+				end,
+			}
+			local clock = world.runtime.clock()
+			owner.watch(function(use)
+				use(clock)
+			end)
+			expect(world.host.counts().frameListeners):toBe(1)
+		end, world.runtime.reactor)
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
+
+	it("sequences waits, callbacks, eased samples and parallel timelines across a large frame", function()
+		local world = Support.world()
+		local calls: { string } = {}
+		local progress = 0
+		local sequence, owner = Support.owned(function()
+			return world.runtime.sequence {
+				steps = {
+					{ wait = 0.5 },
+					{
+						run = function()
+							table.insert(calls, "start")
+						end,
+					},
+					{
+						parallel = {
+							{
+								tween = { seconds = 1, ease = Compose.easing.inQuad },
+								sample = function(n)
+									progress = n
+								end,
+							},
+							{
+								timeline = { duration = 0.5, repeats = 2, direction = "alternate" },
+								sample = function() end,
+							},
+						} :: { Compose.SequenceStep },
+					},
+					{
+						run = function()
+							table.insert(calls, "end")
+						end,
+					},
+				},
+			}
+		end)
+		world.host.step(1)
+		expect(progress):toBe(0.25)
+		expect(#calls):toBe(1)
+		world.host.step(2)
+		expect(progress):toBe(1)
+		expect(calls[2]):toBe "end"
+		expect(sequence.completed:peek()):toBe(true)
+		expect(world.host.counts().frameListeners):toBe(0)
+		owner.dispose()
+	end)
+
+	it("cancels sequences reentrantly and collapses reduced motion in order", function()
+		local world = Support.world()
+		local reduced = Compose.cell(false)
+		local calls = 0
+		local sequence, owner = Support.owned(function()
+			return world.runtime.sequence {
+				reducedMotion = reduced,
+				autoplay = false,
+				steps = {
+					{ wait = 1 },
+					{
+						run = function()
+							calls += 1
+						end,
+					},
+					{ wait = 1 },
+				},
+			}
+		end)
+		expect(world.host.counts().frameListeners):toBe(0)
+		sequence.play()
+		reduced:set(true)
+		expect(calls):toBe(1)
+		expect(sequence.completed:peek()):toBe(true)
+		expect(world.host.counts().frameListeners):toBe(0)
+		sequence.play()
+		expect(calls):toBe(2)
+		owner.dispose()
+		local called = false
+		local root = Compose.createOwner(world.runtime.reactor)
+		Compose.withOwner(root, function()
+			world.runtime.sequence {
+				steps = {
+					{ run = root.dispose },
+					{
+						run = function()
+							called = true
+						end,
+					},
+				},
+			}
+		end)
+		expect(called):toBe(false)
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
 end)
 
 return nil
