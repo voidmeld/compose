@@ -422,7 +422,7 @@ For Roblox connections, threads and Instances, use [ComposeRoblox.cleanup](#comp
 `scheduler(owner?) -> Scheduler`
 
 Binds delayed work to an owner. If you omit `owner`, it uses the active owner. It raises `owner/no-active-owner` when there is none.
-The scheduler holds one paused timeline, so it holds no frame listener while nothing is pending.
+The scheduler shares the runtime frame clock and holds no frame listener while nothing is pending.
 
 | Call | Meaning |
 | --- | --- |
@@ -515,6 +515,7 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `scheduler(owner?)` | Creates owner-bound delayed work with cancellation and keyed replacement. See [Owner scheduler](#owner-scheduler). |
 
 The `spring` and `tween` option tables both accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
+
 
 Bind `local Host = runtime.constructors` once and use the host-kind fields directly.
 Reading a field lazily caches its constructor. Calling it builds through the host and the ownership rules of this runtime:

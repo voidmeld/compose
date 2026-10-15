@@ -17,6 +17,7 @@ local Props = require "@self/props"
 local Root = require "./ownership/root"
 local Types = require "./reactive/types"
 local Weak = require "./weak"
+local shareFrames = require "./frames"
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
@@ -76,6 +77,23 @@ local function createRuntime(host: Host.Host): Runtime
 	local rootOwner = Owner.createOwner(reactor)
 	local runtimeDisposed = false
 	Host.validate(host)
+	local supplied = host
+	local frameSource: Host.Frames? = nil
+	local shared: Host.Frames? = nil
+	host = (
+		setmetatable({}, {
+			__index = function(_, key: string): unknown
+				if key == "frames" then
+					if supplied.frames ~= frameSource then
+						frameSource = supplied.frames
+						shared = if frameSource then shareFrames(frameSource, reactor) else nil
+					end
+					return shared
+				end
+				return ((supplied :: unknown) :: { [string]: unknown })[key]
+			end,
+		}) :: unknown
+	) :: Host.Host
 	local render = host.render
 
 	local function requireOwner(operation: string): Owner.Owner
@@ -503,10 +521,10 @@ local function createRuntime(host: Host.Host): Runtime
 		return node
 	end
 
-	local motion = Animation.createMotion(host, requireOwner, reactor)
+	local motion = Animation.createMotion(host, requireOwner)
 	local timelines = TimelineModule.createTimelines(host, requireOwner)
 	local ramp = RampModule.createRamps(motion.tween, requireOwner)
-	local scheduler = SchedulerModule.createSchedulers(timelines.timeline, requireOwner)
+	local scheduler = SchedulerModule.createSchedulers(host, requireOwner)
 
 	local function watch(_self: Runtime, body: (use: Types.Use) -> (), label: string?): Types.Dispose
 		local active = Active.current()
@@ -524,7 +542,7 @@ local function createRuntime(host: Host.Host): Runtime
 	})
 
 	return {
-		host = host,
+		host = supplied,
 		reactor = reactor,
 		watch = watch,
 		batch = function<T...>(_self: Runtime, body: () -> T...): T...

@@ -7,6 +7,27 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("one host driving several runtimes", function()
+	it("continues frame work after a callback failure and releases the shared subscription", function()
+		local host = TestScene.create()
+		local runtime = Compose.createRuntime(host.adapter)
+		local owner = Compose.createOwner(runtime.reactor)
+		local timeline = Compose.withOwner(owner, function()
+			runtime.scheduler().after(0, function()
+				error "frame callback failed"
+			end)
+			return runtime.timeline { duration = 1 }
+		end)
+		expect(function()
+			host.step(0.5)
+		end):toThrow "frame callback failed"
+		expect(timeline.elapsed:peek()):toBe(0.5)
+		host.step(0.5)
+		expect(timeline.completed:peek()):toBe(true)
+		expect(host.counts().frameListeners):toBe(0)
+		owner.dispose()
+		runtime:dispose()
+	end)
+
 	it("gives each runtime its own listener on the one clock, in the order they took it", function()
 		Compose.__resetForTests()
 		local host = TestScene.create()
