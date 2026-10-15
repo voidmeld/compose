@@ -10,6 +10,37 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 
 local FRAME = 1 / 60
 
+describe("shared motion frames", function()
+	it("uses one subscription only while mixed animations are active", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local owner = Compose.createOwner(world.runtime.reactor)
+		Compose.withOwner(owner, function()
+			for _ = 1, 32 do
+				world.runtime.spring(function(use)
+					return use(target)
+				end, { period = 0.1 })
+				world.runtime.tween(function(use)
+					return use(target)
+				end, { seconds = 0.1 })
+			end
+		end)
+		expect(world.host.counts().frameListeners):toBe(0)
+		target:set(1)
+		world.settle()
+		expect(world.host.counts().frameListeners):toBe(1)
+		for _ = 1, 120 do
+			world.host.step(FRAME)
+		end
+		expect(world.host.counts().frameListeners):toBe(0)
+		target:set(2)
+		world.settle()
+		expect(world.host.counts().frameListeners):toBe(1)
+		owner.dispose()
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
+end)
+
 local function stepFor(world: Support.World, seconds: number)
 	local remaining = seconds
 	while remaining > 1e-9 do
