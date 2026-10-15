@@ -16,6 +16,36 @@ local function cellAsReadable<T>(value: Compose.Cell<T>): Compose.Readable<T>
 end
 
 describe("falsifiers", function()
+	it("shares consecutive reads and trims the next dependency after a branch changes", function()
+		Support.world()
+		local _, owner = domain()
+		local source, other, repeated = Compose.cell(1), Compose.cell(10), Compose.cell(true)
+		local value, runs = 0, 0
+		owner.watch(function(use)
+			local twice = use(repeated)
+			value = use(source)
+			value += if twice then use(source) else use(other)
+			runs += 1
+		end)
+		Compose.setWorkCounters(true)
+		Compose.resetWorkCounters()
+		source:set(2)
+		expect(Compose.readWorkCounters().notifications):toBe(1)
+		expect(value):toBe(4)
+		repeated:set(false)
+		other:set(20)
+		expect(value):toBe(22)
+		repeated:set(true)
+		local before = runs
+		other:set(30)
+		expect(runs):toBe(before)
+		owner.dispose()
+		Compose.resetWorkCounters()
+		source:set(3)
+		expect(Compose.readWorkCounters().notifications):toBe(0)
+		Compose.setWorkCounters(false)
+	end)
+
 	describe("coroutine evaluation isolation", function()
 		it("refuses independent reads and cleanup while another unchecked reactive body is suspended", function()
 			Support.world()
