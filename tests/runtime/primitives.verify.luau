@@ -6,6 +6,91 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("runtime primitives", function()
+	it("samples frame observations before publishing one coherent change", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Frame"
+		world.host.poke(node, "Width", 0)
+		world.host.poke(node, "Height", 0)
+		local seen: { string } = {}
+		local owner = Compose.createOwner(world.runtime.reactor)
+		local pair = Compose.withOwner(owner, function()
+			local width = world.runtime.observe(node, "Width", { frame = true })
+			local height = world.runtime.observe(node, "Height", { frame = true })
+			expect(world.runtime.observe(node, "Width", { frame = true })):toBe(width)
+			Compose.watch(function(use)
+				table.insert(seen, `{use(width)}:{use(height)}`)
+			end)
+			return { width, height }
+		end)
+		table.clear(seen)
+		world.host.poke(node, "Width", 10)
+		world.host.poke(node, "Width", 20)
+		world.host.poke(node, "Height", 30)
+		expect(pair[1]:peek()):toBe(0)
+		expect(world.host.counts().frameListeners):toBe(1)
+		world.host.step(1 / 60)
+		expect(seen):toEqual { "20:30" }
+		expect(world.host.counts().frameListeners):toBe(0)
+		owner.dispose()
+		expect(world.host.liveSubscriptions()):toBe(0)
+	end)
+
+	it("does not enter a property reader again when its read emits a notification", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Frame"
+		world.host.poke(node, "AbsolutePosition", 10)
+		local value, owner = Support.owned(function()
+			return world.runtime.observe(node, "AbsolutePosition", { frame = true })
+		end)
+		local observation = assert(world.host.adapter.observation)
+		local read = observation.readProperty
+		local reads = 0
+		observation.readProperty = function(target, property)
+			reads += 1
+			expect(reads):toBe(1)
+			local current = read(target, property)
+			world.host.poke(node, property, current)
+			return current
+		end
+		world.host.poke(node, "AbsolutePosition", 20)
+		expect(reads):toBe(0)
+		world.host.step(1 / 60)
+		expect(value:peek()):toBe(20)
+		reads = 0
+		world.host.step(1 / 60)
+		expect(value:peek()):toBe(20)
+		owner.dispose()
+		expect(world.host.counts().frameListeners):toBe(0)
+		expect(world.host.liveSubscriptions()):toBe(0)
+	end)
+
+	it("polls silent property changes once per frame until the last holder releases", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Text"
+		local displayed: unknown = 10
+		assert(world.host.adapter.observation).readProperty = function()
+			return displayed
+		end
+		local first, a = Support.owned(function()
+			return world.runtime.observe(node, "Bounds", { frame = true, poll = true })
+		end)
+		local second, b = Support.owned(function()
+			return world.runtime.observe(node, "Bounds", { frame = true, poll = true })
+		end)
+		expect(first):toBe(second)
+		expect(world.host.liveSubscriptions()):toBe(1)
+		displayed = 20
+		world.host.step(1 / 60)
+		expect(first:peek()):toBe(20)
+		a.dispose()
+		displayed = nil
+		world.host.step(1 / 60)
+		expect(second:peek()):toBe(nil)
+		b.dispose()
+		expect(world.host.counts().frameListeners):toBe(0)
+		expect(world.host.liveSubscriptions()):toBe(0)
+	end)
+
 	it("does not restart settled sampling for an equal restart key", function()
 		local world = Support.world()
 		local revision = Compose.cell(0)

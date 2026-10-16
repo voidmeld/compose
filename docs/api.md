@@ -522,15 +522,20 @@ The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [re
 
 #### Property readables
 
-`runtime.observe(node, property) -> Readable<unknown>` requires an active owner and `host.observation`.
-It reads the initial property synchronously. Repeated acquisitions in a runtime return the same readable for the same node and property, with one native per-property subscription.
+`runtime.observe(node, property, options?) -> Readable<unknown>` requires an active owner and `host.observation`.
+It reads the initial property synchronously. Repeated acquisitions in a runtime return the same readable for the same node, property and options, with one native per-property subscription.
 Each acquisition holds one reference until its owner disposes; the last release disconnects and forgets the entry. The node is borrowed.
 An unchanged value produces no reactive update. A property may contain nil. A failed construction unwinds its acquisitions.
-The readable updates synchronously when the host delivers that property's notification. No frame listener or polling is added.
+By default, the readable updates synchronously when the host delivers that property's notification. No frame listener or polling is added.
+`ObserveOptions.frame = true` defers notifications to the shared runtime frame clock and requires `host.frames`.
+Compose reads all pending properties before it publishes their values in one batch of the runtime's reactor. Notifications emitted by a read wait for a later frame.
+`ObserveOptions.poll = true` requires `frame = true` and also samples the property each frame, including when the host sends no notification.
+Frame observation samples once after acquisition. It holds no frame listener when no samples are pending and no polling readers remain.
+The last holder releases the property subscription, pending samples and polling work.
 `Compose.geometry` remains the pure rectangle operations: derive their inputs from these readables rather than maintaining another observation system.
 
 ```luau
-local size = runtime.observe(panel, "AbsoluteSize")
+local size = runtime.observe(panel, "AbsoluteSize", { frame = true, poll = true })
 Compose.watch(function(use)
     print(use(size))
 end)
