@@ -721,6 +721,37 @@ describe("falsifiers", function()
 	end)
 
 	describe("independent runtimes", function()
+		it("preserves outer readers when a nested write settles several other reactors", function()
+			local source, nested = Compose.cell(0), Compose.cell(0)
+			local owners: { Compose.Owner } = {}
+			local outerSeen, nestedSeen = { 0, 0, 0 }, { 0, 0, 0 }
+			for index = 1, 3 do
+				local _, owner = domain()
+				table.insert(owners, owner)
+				owner.watch(function(use)
+					local value = use(source)
+					outerSeen[index] = value
+					if index == 1 then
+						nested:set(value)
+					end
+				end)
+			end
+			for index = 1, 3 do
+				local _, owner = domain()
+				table.insert(owners, owner)
+				owner.watch(function(use)
+					nestedSeen[index] = use(nested)
+				end)
+			end
+			for value = 1, 2 do
+				source:set(value)
+				expect(outerSeen):toEqual { value, value, value }
+				expect(nestedSeen):toEqual { value, value, value }
+			end
+			for _, owner in owners do
+				owner.dispose()
+			end
+		end)
 		it("do not share a queue, a batch, or an error", function()
 			local first = Compose.reactor()
 			local second = Compose.reactor()
