@@ -37,6 +37,8 @@ jobs:
           rokit authenticate github --token "$GH_TOKEN" --skip-verify
           trap 'rokit authenticate github --remove' EXIT
           rokit install --no-trust-check
+          rokit authenticate github --remove
+          trap - EXIT
           lute setup
       - name: Run repository gate
         run: lute run tools/gate.luau
