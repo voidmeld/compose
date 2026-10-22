@@ -31,7 +31,11 @@ jobs:
           "$RUNNER_TEMP/rokit/rokit" self-install
           echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
       - name: Install pinned tools and SDK types
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          rokit authenticate github --token "$GH_TOKEN" --skip-verify
+          trap 'rokit authenticate github --remove' EXIT
           rokit install --no-trust-check
           lute setup
       - name: Run repository gate
