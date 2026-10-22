@@ -112,7 +112,7 @@ local draft: Gate.Draft = {
 		check(
 			"lint",
 			"no lint findings under the policy in lint.config.luau",
-			{ "lute", "lint", "-c", "lint.config.luau" },
+			{ "lute", "lint", "--verbose", "-c", "lint.config.luau" },
 			SOURCE_TREES
 		),
 		check(
