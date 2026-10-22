@@ -88,6 +88,8 @@ Terms: a component is a function that returns composition. A cell holds state. A
 
 ## Validate
 
+GitHub Actions runs the repository gate as the `Gate` check using the pinned tools and SDK types. Follow the [contribution rules](AGENTS.md).
+
 Run `lute run tools/gate.luau` on a clean committed HEAD. Every test, example, benchmark parity check and static check is a producer of that one gate.
 Narrow a run with `--tier fast`, `--only producer`, `--file spec`, `--case id`, `--name text` or `--rerun`. Use `--explain id` for the reason of a result and `--list` to list the producers.
 `--native` adds the engine checks. [AGENTS](AGENTS.md#validate) states when to run which.
