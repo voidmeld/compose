@@ -523,10 +523,11 @@ The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [re
 #### Property readables
 
 `runtime.observe(node, property, options?) -> Readable<unknown>` requires an active owner and `host.observation`.
-It reads the initial property synchronously. Repeated acquisitions in a runtime return the same readable for the same node, property and options, with one native per-property subscription.
+It reads the initial property synchronously. Repeated acquisitions in a runtime return the same readable for the same node, property and options, with one host subscription.
 Each acquisition holds one reference until its owner disposes; the last release disconnects and forgets the entry. The node is borrowed.
 An unchanged value produces no reactive update. A property may contain nil. A failed construction unwinds its acquisitions.
 By default, the readable updates synchronously when the host delivers that property's notification. No frame listener or polling is added.
+`ObserveOptions.styled = true` selects `host.observation.readStyledProperty` and `observeStyledProperty`; both are required. It reads the effective value, including raw overrides. Styled and raw observations have separate cache identities. The same frame and polling options apply to either source.
 `ObserveOptions.frame = true` defers notifications to the shared runtime frame clock and requires `host.frames`.
 Compose reads all pending properties before it publishes their values in one batch of the runtime's reactor. Notifications emitted by a read wait for a later frame.
 `ObserveOptions.poll = true` requires `frame = true` and also samples the property each frame, including when the host sends no notification.
@@ -542,6 +543,7 @@ end)
 ```
 
 On Roblox, notification timing follows the engine's layout pass; construction-time values can precede layout.
+Styled observation reads `GetStyled` after raw or style changes. The adapter shares `Changed` and `StyledPropertiesChanged` connections across observed properties on each ordinary Instance. `ValueBase.Changed` omits changes to properties such as Name, so ValueBase observations use per-property raw signals and a shared style signal. The last release disconnects the channels; nodes remain borrowed.
 A notification means the property changed, not that every dependent layout property has settled.
 Client runtimes use `PreRender` for their shared frame clock; server runtimes use `Heartbeat`.
 To read before the next visible frame, sample `host.observation.readProperty` in a client frame callback or in `settled.sample`, after parenting and supplying the layout inputs.

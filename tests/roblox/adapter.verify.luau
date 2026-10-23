@@ -15,10 +15,10 @@ type World = {
 	root: Compose.Node,
 }
 
-local function world(): World
+local function world(raiseHandlers: boolean?): World
 	Compose.__resetForTests()
 	ComposeRoblox.__resetForTests()
-	local emulator = Support.emulator()
+	local emulator = Support.emulator(if raiseHandlers then { handlerErrors = "raise" } else nil)
 	local runtime = ComposeRoblox.createRuntime(emulator.engine)
 	return {
 		emulator = emulator,
@@ -28,7 +28,213 @@ local function world(): World
 	}
 end
 
+local function styledWorld()
+	local w = world(true)
+	local env = w.emulator.environment
+	local raw: Emulator.Signal<string> = env.newSignal()
+	local styled: Emulator.Signal<()> = env.newSignal()
+	local values: { [string]: unknown } = { BackgroundTransparency = 0.4, LayoutOrder = 7 }
+	local overrides: { [string]: unknown } = {}
+	local node = {
+		Changed = raw,
+		StyledPropertiesChanged = styled,
+		IsA = function(_self: unknown, _class: string): boolean
+			return false
+		end,
+		GetStyled = function(_self: unknown, property: string): unknown
+			local override = overrides[property]
+			return if override ~= nil then override else values[property]
+		end,
+	}
+	local host = ComposeRoblox.createHost(w.emulator.engine)
+	return w, host, raw, styled, values, overrides, node
+end
+
 describe("roblox adapter", function()
+	describe("styled observation", function()
+		it("observes ValueBase Value and Name through property signals instead of Changed payloads", function()
+			for _, kind in { "StringValue", "NumberValue" } do
+				local w = world(true)
+				local env = w.emulator.environment
+				local changed: Emulator.Signal<unknown> = env.newSignal()
+				local styled: Emulator.Signal<()> = env.newSignal()
+				local valueSignal: Emulator.Signal<()> = env.newSignal()
+				local nameSignal: Emulator.Signal<()> = env.newSignal()
+				local signals: { [string]: Emulator.Signal<()> } = { Value = valueSignal, Name = nameSignal }
+				local initial: unknown = if kind == "StringValue" then "" else 0
+				local nextValue: unknown = if kind == "StringValue" then "next" else 12
+				local values: { [string]: unknown } = { Value = initial, Name = "Value" }
+				local node = {
+					Changed = changed,
+					StyledPropertiesChanged = styled,
+					IsA = function(_self: unknown, class: string): boolean
+						return class == "ValueBase"
+					end,
+					GetStyled = function(_self: unknown, property: string): unknown
+						return values[property]
+					end,
+					GetPropertyChangedSignal = function(_self: unknown, property: string): Emulator.Signal<()>
+						return signals[property]
+					end,
+				}
+				local observed, owner = Support.owned(function()
+					return {
+						w.runtime.observe(node, "Value", { styled = true }),
+						w.runtime.observe(node, "Name", { styled = true }),
+					}
+				end)
+				values.Value = nextValue
+				changed:Fire(nextValue)
+				signals.Value:Fire()
+				expect(observed[1]:peek()):toBe(nextValue)
+				values.Name = "renamed"
+				signals.Name:Fire()
+				expect(observed[2]:peek()):toBe "renamed"
+				values.Value, values.Name = initial, "Value"
+				changed:Fire(initial)
+				signals.Value:Fire()
+				signals.Name:Fire()
+				expect(observed[1]:peek()):toBe(initial)
+				expect(observed[2]:peek()):toBe "Value"
+				owner.dispose()
+				expect(env.liveConnections()):toBe(0)
+			end
+		end)
+
+		it("shares two native channels across properties and preserves effective raw overrides", function()
+			local w, host, raw, styled, values, overrides, node = styledWorld()
+			local runtime = Compose.createRuntime(host)
+			local env = w.emulator.environment
+			local before = env.liveConnections()
+			local first = Compose.createOwner(runtime.reactor)
+			local second = Compose.createOwner(runtime.reactor)
+			local alpha = Compose.withOwner(first, function()
+				return runtime.observe(node, "BackgroundTransparency", { styled = true })
+			end)
+			local order = Compose.withOwner(second, function()
+				expect(runtime.observe(node, "BackgroundTransparency", { styled = true })):toBe(alpha)
+				return runtime.observe(node, "LayoutOrder", { styled = true })
+			end)
+			expect(env.liveConnections() - before):toBe(2)
+			expect(alpha:peek()):toBe(0.4)
+			expect(order:peek()):toBe(7)
+			local notifications = 0
+			Compose.withOwner(first, function()
+				Compose.watch(function(use)
+					use(alpha)
+					notifications += 1
+				end)
+			end)
+			overrides.BackgroundTransparency = 0.8
+			raw:Fire "BackgroundTransparency"
+			expect(alpha:peek()):toBe(0.8)
+			local masked = notifications
+			values.BackgroundTransparency, values.LayoutOrder = 0.2, 9
+			styled:Fire()
+			expect(alpha:peek()):toBe(0.8)
+			expect(notifications):toBe(masked)
+			expect(order:peek()):toBe(9)
+			overrides.BackgroundTransparency = nil
+			raw:Fire "BackgroundTransparency"
+			expect(alpha:peek()):toBe(0.2)
+			first.dispose()
+			expect(env.liveConnections() - before):toBe(2)
+			second.dispose()
+			second.dispose()
+			expect(env.liveConnections()):toBe(before)
+		end)
+
+		it("delivers remaining subscribers after errors and handles reentrant removal and acquisition", function()
+			local w, host, _, styled, _, _, node = styledWorld()
+			local observe = assert(assert(host.observation).observeStyledProperty)
+			local seen = 0
+			local stopBroken = observe(node, "BackgroundTransparency", function()
+				error "observer refused"
+			end)
+			local stopGood = observe(node, "LayoutOrder", function()
+				seen += 1
+			end)
+			expect(function()
+				styled:Fire()
+			end):toThrow "observer refused"
+			expect(seen):toBe(1)
+			stopBroken()
+			stopGood()
+			local later = 0
+			local stopLater: (() -> ())? = nil
+			local stopSelf: (() -> ())? = nil
+			stopSelf = observe(node, "LayoutOrder", function()
+				assert(stopSelf)()
+				stopLater = observe(node, "LayoutOrder", function()
+					later += 1
+				end)
+			end)
+			styled:Fire()
+			expect(later):toBe(0)
+			styled:Fire()
+			expect(later):toBe(1)
+			assert(stopLater)()
+			expect(w.emulator.environment.liveConnections()):toBe(0)
+		end)
+
+		it("disconnects the first native channel when acquiring the second fails", function()
+			local w, host, _, _, _, _, node = styledWorld()
+			local env = w.emulator.environment
+			node.StyledPropertiesChanged = (
+				{
+					Connect = function(): Emulator.Connection
+						error "style channel refused"
+					end,
+				} :: unknown
+			) :: Emulator.Signal<()>
+			local runtime = Compose.createRuntime(host)
+			Compose.withRootOwner(function(owner)
+				expect(function()
+					runtime.observe(node, "BackgroundTransparency", { styled = true })
+				end):toThrow "style channel refused"
+				expect(owner.size()):toBe(0)
+			end)
+			expect(env.liveConnections()):toBe(0)
+		end)
+
+		it("skips subscribers removed during fanout and disconnects both channels after a cleanup error", function()
+			local w, host, raw, styled, _, _, node = styledWorld()
+			local observe = assert(assert(host.observation).observeStyledProperty)
+			local calls = 0
+			local first: (() -> ())? = nil
+			local second: (() -> ())? = nil
+			first = observe(node, "LayoutOrder", function()
+				calls += 1
+				assert(second)()
+			end)
+			second = observe(node, "LayoutOrder", function()
+				calls += 1
+				assert(first)()
+			end)
+			styled:Fire()
+			expect(calls):toBe(1)
+			assert(first)()
+			assert(second)()
+			node.Changed = (
+				{
+					Connect = function(_self: unknown, listener: (string) -> ())
+						local connection = raw:Connect(listener)
+						return {
+							Disconnect = function()
+								connection:Disconnect()
+								error "raw disconnect refused"
+							end,
+						}
+					end,
+				} :: unknown
+			) :: Emulator.Signal<string>
+			local stop = observe(node, "LayoutOrder", function() end)
+			expect(stop):toThrow "raw disconnect refused"
+			expect(w.emulator.environment.liveConnections()):toBe(0)
+			stop()
+		end)
+	end)
+
 	describe("the host contract", function()
 		it("satisfies the protocol Compose validates", function()
 			local emulator = Support.emulator()
