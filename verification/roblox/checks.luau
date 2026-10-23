@@ -105,7 +105,10 @@ local checks: { Check } = {
 					local node = Instance.new(class)
 					runtime.adopt(node)
 					node.Parent = container
-					local originalName, originalValue = node.Name, node:GetStyled "Value"
+					local originalName = node.Name
+					local originalValue: unknown = if class == "StringValue"
+						then (node :: StringValue).Value
+						else (node :: NumberValue).Value
 					local name = runtime.observe(node, "Name", { styled = true })
 					local value = runtime.observe(node, "Value", { styled = true })
 					node.Name = "ChangedName"
@@ -116,9 +119,16 @@ local checks: { Check } = {
 					end
 					game:GetService("RunService").Heartbeat:Wait()
 					assertThat(name:peek() == "ChangedName", class .. " Name write was missed")
-					assertThat(value:peek() == node:GetStyled "Value", class .. " Value write was missed")
+					assertThat(
+						value:peek() == (if class == "StringValue" then "changed value" else 42),
+						class .. " Value write was missed"
+					)
 					node:ResetPropertyToDefault "Name"
-					node:ResetPropertyToDefault "Value"
+					if class == "StringValue" then
+						(node :: StringValue):ResetPropertyToDefault "Value"
+					else
+						(node :: NumberValue):ResetPropertyToDefault "Value"
+					end
 					game:GetService("RunService").Heartbeat:Wait()
 					assertThat(name:peek() == originalName, class .. " Name reset was missed")
 					assertThat(value:peek() == originalValue, class .. " Value reset was missed")
@@ -322,10 +332,7 @@ local checks: { Check } = {
 		name = "GetPropertyChangedSignal fires for an engine-driven change",
 		run = function(container: Instance): string
 			local host = ComposeRoblox.createHost()
-			local observation = host.observation :: {
-				readProperty: (unknown, string) -> unknown,
-				observeProperty: (unknown, string, () -> ()) -> () -> (),
-			}
+			local observation = assert(host.observation)
 			local frame = Instance.new "Frame"
 			frame.Parent = container
 
