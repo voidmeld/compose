@@ -110,17 +110,21 @@ local function paired(options: Options): number
 	assert(not options.verify and options.baseline == nil, "paired runs select their own timing baselines")
 	local root = process.cwd()
 	local output = if options.out:sub(1, 1) == "/" then options.out else root .. "/" .. options.out
-	local revisions = { base = assert(options.paired), candidate = root }
+	local revisions: { [string]: string } = { base = assert(options.paired), candidate = root }
 	local runs: { [string]: { Benchmark.Stored } } = { base = {}, candidate = {} }
 	for round = 1, 3 do
-		local order = if round % 2 == 1 then { "base", "candidate" } else { "candidate", "base" }
+		local order: { string } = if round % 2 == 1 then { "base", "candidate" } else { "candidate", "base" }
 		for _, revision in order do
 			local directory = output .. "/" .. revision .. "/" .. tostring(round)
 			local command =
 				{ process.execPath(), "run", "bench/run.luau", "--suite", options.suite, "--out", directory }
-			for flag, value in { ["--filter"] = options.filter, ["--scale"] = options.scale } do
-				table.insert(command, flag)
-				table.insert(command, value)
+			if options.filter ~= nil then
+				table.insert(command, "--filter")
+				table.insert(command, options.filter)
+			end
+			if options.scale ~= nil then
+				table.insert(command, "--scale")
+				table.insert(command, options.scale)
 			end
 			print(("bench: paired round %d %s"):format(round, revision))
 			local result = process.run(command, { cwd = revisions[revision], timeout = 600, stdio = "inherit" })
