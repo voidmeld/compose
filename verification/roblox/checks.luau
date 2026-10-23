@@ -46,21 +46,31 @@ local checks: { Check } = {
 				end)
 				local screen = Instance.new "ScreenGui"
 				runtime.adopt(screen)
-				screen.Parent = assert(game:GetService("Players").LocalPlayer):WaitForChild "PlayerGui"
+				screen.Enabled = false
 				local sheet = Instance.new "StyleSheet"
 				sheet.Parent = screen
 				local rule = Instance.new "StyleRule"
-				rule.Selector = ".compose-styled-observation"
+				rule.Selector = "TextLabel"
 				rule:SetProperties { TextSize = 23, FontFace = Font.fromEnum(Enum.Font.SourceSans) }
 				rule.Parent = sheet
 				local link = Instance.new "StyleLink"
 				link.StyleSheet = sheet
 				link.Parent = screen
 				local label = Instance.new "TextLabel"
-				label:AddTag "compose-styled-observation"
 				label.Parent = screen
+				screen.Parent = assert(game:GetService("Players").LocalPlayer):WaitForChild "PlayerGui"
 				local render = game:GetService("RunService").PreRender
-				render:Wait()
+				local function settled(expected: number)
+					local deadline = os.clock() + 2
+					repeat
+						render:Wait()
+					until label:GetStyled "TextSize" == expected or os.clock() >= deadline
+					assertThat(
+						label:GetStyled "TextSize" == expected,
+						"native stylesheet did not settle: " .. rule.SelectorError
+					)
+				end
+				settled(23)
 				local raw = runtime.observe(label, "TextSize")
 				local size = runtime.observe(label, "TextSize", { styled = true })
 				local font = runtime.observe(label, "FontFace", { styled = true })
@@ -71,7 +81,7 @@ local checks: { Check } = {
 				)
 				assertThat(size:peek() == 23, "the initial stylesheet value was not observed")
 				rule:SetProperties { TextSize = 31, FontFace = Font.fromEnum(Enum.Font.Gotham) }
-				render:Wait()
+				settled(31)
 				assertThat(size:peek() == 31, "a stylesheet write did not update TextSize")
 				assertThat(
 					(font:peek() :: Font).Family == (label:GetStyled "FontFace" :: Font).Family,
@@ -79,13 +89,13 @@ local checks: { Check } = {
 				)
 				assertThat(raw:peek() == label.TextSize, "style changes corrupted the raw observation")
 				label.TextSize = 41
-				render:Wait()
+				settled(41)
 				assertThat(size:peek() == 41 and raw:peek() == 41, "a raw override did not update both observations")
 				rule:SetProperties { TextSize = 35, FontFace = Font.fromEnum(Enum.Font.SourceSans) }
 				render:Wait()
 				assertThat(size:peek() == 41, "a masked stylesheet write replaced the raw override")
 				label:ResetPropertyToDefault "TextSize"
-				render:Wait()
+				settled(35)
 				assertThat(size:peek() == 35, "reset did not reveal the current stylesheet value")
 				assertThat(raw:peek() == label.TextSize, "reset left the raw observation stale")
 				return "styled TextSize and FontFace followed native style changes; raw overrides masked style until reset; cache identities remained distinct"
