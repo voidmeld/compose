@@ -62,11 +62,8 @@ jobs:
         run: |
           lute setup
           lute run tools/sync-dependencies.luau
-      - name: Measure comparison base
-        working-directory: .lute/tmp/performance-base
-        run: lute run bench/run.luau --suite all --out "$GITHUB_WORKSPACE/build/performance/base"
       - name: Compare candidate performance
-        run: lute run bench/run.luau --suite all --out build/performance/candidate --baseline build/performance/base/stored.json
+        run: lute run bench/run.luau --suite all --out build/performance --paired .lute/tmp/performance-base
       - name: Retain gate evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
