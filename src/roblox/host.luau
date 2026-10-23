@@ -8,17 +8,13 @@ type Node = Compose.Node
 type DefaultCache = { [string]: unknown }
 type StyledNode = {
 	GetStyled: (self: StyledNode, property: string) -> unknown,
-	IsA: (self: StyledNode, className: string) -> boolean,
-	Changed: Engine.Signal<string>,
 	StyledPropertiesChanged: Engine.Signal<()>,
 }
-type Subscriber = { live: boolean, property: string, listener: () -> (), stopRaw: Compose.Unsubscribe? }
+type Subscriber = { live: boolean, listener: () -> (), stopRaw: Compose.Unsubscribe? }
 type StyledEntry = {
 	live: boolean,
 	subscribers: { [Subscriber]: boolean },
-	stopRaw: Compose.Unsubscribe?,
 	stopStyled: Compose.Unsubscribe?,
-	valueBase: boolean,
 }
 
 local function raiseFailures(failures: { unknown })
@@ -205,15 +201,13 @@ local function createHost(engine: Engine.Engine): Compose.Host
 		return connect(engine.propertyChanged(node, key), listener)
 	end
 
-	local function publish(entry: StyledEntry, property: string?)
+	local function publish(entry: StyledEntry)
 		if not entry.live then
 			return
 		end
 		local queued: { Subscriber } = {}
 		for subscriber in entry.subscribers do
-			if property == nil or subscriber.property == property then
-				table.insert(queued, subscriber)
-			end
+			table.insert(queued, subscriber)
 		end
 		local failures: { unknown } = {}
 		for _, subscriber in queued do
@@ -230,38 +224,22 @@ local function createHost(engine: Engine.Engine): Compose.Host
 	local function closeStyled(node: Node, entry: StyledEntry)
 		entry.live = false
 		styledEntries[node] = nil
-		local failures: { unknown } = {}
-		local stops: { Compose.Unsubscribe } = {}
-		if entry.stopRaw then
-			table.insert(stops, entry.stopRaw)
+		local stop = entry.stopStyled
+		entry.stopStyled = nil
+		if stop then
+			stop()
 		end
-		if entry.stopStyled then
-			table.insert(stops, entry.stopStyled)
-		end
-		for _, stop in stops do
-			local ok, failure = attempt(stop)
-			if not ok then
-				table.insert(failures, failure)
-			end
-		end
-		entry.stopRaw, entry.stopStyled = nil, nil
-		raiseFailures(failures)
 	end
 
 	local function observeStyledProperty(node: Node, key: string, listener: () -> ()): Compose.Unsubscribe
 		local native = node :: StyledNode
 		local entry = styledEntries[node]
 		if entry == nil then
-			local created: StyledEntry = { live = true, subscribers = {}, valueBase = native:IsA "ValueBase" }
+			local created: StyledEntry = { live = true, subscribers = {} }
 			styledEntries[node] = created
 			local ok, failure = attempt(function()
-				if not created.valueBase then
-					created.stopRaw = connect(native.Changed, function(property: string)
-						publish(created, property)
-					end)
-				end
 				created.stopStyled = connect(native.StyledPropertiesChanged, function()
-					publish(created, nil)
+					publish(created)
 				end)
 			end)
 			if not ok then
@@ -277,7 +255,7 @@ local function createHost(engine: Engine.Engine): Compose.Host
 			entry = created
 		end
 		local current = entry :: StyledEntry
-		local subscriber: Subscriber = { live = true, property = key, listener = listener }
+		local subscriber: Subscriber = { live = true, listener = listener }
 		current.subscribers[subscriber] = true
 		local function release()
 			if not subscriber.live then
@@ -303,7 +281,7 @@ local function createHost(engine: Engine.Engine): Compose.Host
 			end
 			raiseFailures(failures)
 		end
-		if current.valueBase then
+		do
 			local ok, failure = attempt(function()
 				subscriber.stopRaw = observeProperty(node, key, function()
 					if subscriber.live then

@@ -543,7 +543,7 @@ end)
 ```
 
 On Roblox, notification timing follows the engine's layout pass; construction-time values can precede layout.
-Styled observation reads `GetStyled` after raw or style changes. The adapter shares `Changed` and `StyledPropertiesChanged` connections across observed properties on each ordinary Instance. `ValueBase.Changed` omits changes to properties such as Name, so ValueBase observations use per-property raw signals and a shared style signal. The last release disconnects the channels; nodes remain borrowed.
+Styled observation reads `GetStyled` after raw or style changes. Each observation uses `GetPropertyChangedSignal(property)` for raw changes. Observers on one node share a `StyledPropertiesChanged` connection. Each release disconnects its raw subscription; the last release also disconnects the style connection. Nodes remain borrowed.
 A notification means the property changed, not that every dependent layout property has settled.
 Client runtimes use `PreRender` for their shared frame clock; server runtimes use `Heartbeat`.
 To read before the next visible frame, sample `host.observation.readProperty` in a client frame callback or in `settled.sample`, after parenting and supplying the layout inputs.

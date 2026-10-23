@@ -35,6 +35,7 @@ local function styledWorld()
 	local styled: Emulator.Signal<()> = env.newSignal()
 	local values: { [string]: unknown } = { BackgroundTransparency = 0.4, LayoutOrder = 7 }
 	local overrides: { [string]: unknown } = {}
+	local signals: { [string]: Emulator.Signal<()> } = {}
 	local node = {
 		Changed = raw,
 		StyledPropertiesChanged = styled,
@@ -44,6 +45,12 @@ local function styledWorld()
 		GetStyled = function(_self: unknown, property: string): unknown
 			local override = overrides[property]
 			return if override ~= nil then override else values[property]
+		end,
+		GetPropertyChangedSignal = function(_self: unknown, property: string): Emulator.Signal<()>
+			if signals[property] == nil then
+				signals[property] = env.newSignal()
+			end
+			return signals[property]
 		end,
 	}
 	local host = ComposeRoblox.createHost(w.emulator.engine)
@@ -101,7 +108,7 @@ describe("roblox adapter", function()
 			end
 		end)
 
-		it("shares two native channels across properties and preserves effective raw overrides", function()
+		it("shares the style channel and observes only the requested raw properties", function()
 			local w, host, raw, styled, values, overrides, node = styledWorld()
 			local runtime = Compose.createRuntime(host)
 			local env = w.emulator.environment
@@ -115,7 +122,11 @@ describe("roblox adapter", function()
 				expect(runtime.observe(node, "BackgroundTransparency", { styled = true })):toBe(alpha)
 				return runtime.observe(node, "LayoutOrder", { styled = true })
 			end)
-			expect(env.liveConnections() - before):toBe(2)
+			expect(env.liveConnections() - before):toBe(3)
+			overrides.LayoutOrder = 11
+			raw:Fire "LayoutOrder"
+			expect(order:peek()):toBe(7)
+			overrides.LayoutOrder = nil
 			expect(alpha:peek()):toBe(0.4)
 			expect(order:peek()):toBe(7)
 			local notifications = 0
@@ -126,7 +137,7 @@ describe("roblox adapter", function()
 				end)
 			end)
 			overrides.BackgroundTransparency = 0.8
-			raw:Fire "BackgroundTransparency"
+			node:GetPropertyChangedSignal("BackgroundTransparency"):Fire()
 			expect(alpha:peek()):toBe(0.8)
 			local masked = notifications
 			values.BackgroundTransparency, values.LayoutOrder = 0.2, 9
@@ -135,10 +146,10 @@ describe("roblox adapter", function()
 			expect(notifications):toBe(masked)
 			expect(order:peek()):toBe(9)
 			overrides.BackgroundTransparency = nil
-			raw:Fire "BackgroundTransparency"
+			node:GetPropertyChangedSignal("BackgroundTransparency"):Fire()
 			expect(alpha:peek()):toBe(0.2)
 			first.dispose()
-			expect(env.liveConnections() - before):toBe(2)
+			expect(env.liveConnections() - before):toBe(3)
 			second.dispose()
 			second.dispose()
 			expect(env.liveConnections()):toBe(before)
@@ -177,8 +188,8 @@ describe("roblox adapter", function()
 			expect(w.emulator.environment.liveConnections()):toBe(0)
 		end)
 
-		it("disconnects the first native channel when acquiring the second fails", function()
-			local w, host, _, _, _, _, node = styledWorld()
+		it("unwinds failed style or property channel acquisition", function()
+			local w, host, _, styled, _, _, node = styledWorld()
 			local env = w.emulator.environment
 			node.StyledPropertiesChanged = (
 				{
@@ -195,10 +206,27 @@ describe("roblox adapter", function()
 				expect(owner.size()):toBe(0)
 			end)
 			expect(env.liveConnections()):toBe(0)
+			node.StyledPropertiesChanged = styled
+			node.GetPropertyChangedSignal = function(): Emulator.Signal<()>
+				return (
+					{
+						Connect = function(): Emulator.Connection
+							error "property channel refused"
+						end,
+					} :: unknown
+				) :: Emulator.Signal<()>
+			end
+			Compose.withRootOwner(function(owner)
+				expect(function()
+					runtime.observe(node, "BackgroundTransparency", { styled = true })
+				end):toThrow "property channel refused"
+				expect(owner.size()):toBe(0)
+			end)
+			expect(env.liveConnections()):toBe(0)
 		end)
 
 		it("skips subscribers removed during fanout and disconnects both channels after a cleanup error", function()
-			local w, host, raw, styled, _, _, node = styledWorld()
+			local w, host, _, styled, _, _, node = styledWorld()
 			local observe = assert(assert(host.observation).observeStyledProperty)
 			local calls = 0
 			local first: (() -> ())? = nil
@@ -215,19 +243,22 @@ describe("roblox adapter", function()
 			expect(calls):toBe(1)
 			assert(first)()
 			assert(second)()
-			node.Changed = (
-				{
-					Connect = function(_self: unknown, listener: (string) -> ())
-						local connection = raw:Connect(listener)
-						return {
-							Disconnect = function()
-								connection:Disconnect()
-								error "raw disconnect refused"
-							end,
-						}
-					end,
-				} :: unknown
-			) :: Emulator.Signal<string>
+			local signal = node:GetPropertyChangedSignal "LayoutOrder"
+			node.GetPropertyChangedSignal = function()
+				return (
+					{
+						Connect = function(_self: unknown, listener: () -> ())
+							local connection = signal:Connect(listener)
+							return {
+								Disconnect = function()
+									connection:Disconnect()
+									error "raw disconnect refused"
+								end,
+							}
+						end,
+					} :: unknown
+				) :: Emulator.Signal<()>
+			end
 			local stop = observe(node, "LayoutOrder", function() end)
 			expect(stop):toThrow "raw disconnect refused"
 			expect(w.emulator.environment.liveConnections()):toBe(0)
