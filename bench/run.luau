@@ -127,8 +127,10 @@ local function main(): number
 		}
 		local timing: Gate.ProducerDraft = {
 			id = "timing-" .. entry.id,
-			kind = "benchmark",
-			collection = entry.collection,
+			kind = "tests",
+			worker = "bench/worker.luau",
+			locators = { "timing:" .. entry.id },
+			exclusive = true,
 			after = { "parity-" .. entry.id },
 			tier = "timing",
 			why = "measured only: no framework is judged against another",

@@ -38,7 +38,9 @@ Use `--filter` and `--scale` for focused diagnostics. Do not claim that a filter
 The command builds one Verify gate. For each workload or scenario scale it declares two producers.
 
 1. `parity-<id>` runs one case on a Verify worker. The case builds the same scene in every framework and compares the tree snapshots.
-2. `timing-<id>` runs one benchmark collection. It runs only after its parity case passes.
+2. `timing-<id>` runs one benchmark collection in a fresh Verify worker process. It runs exclusively,
+   only after its parity case passes. Allocation and collection inside that workload remain timed;
+   prior unrelated collections cannot leave their allocation debt in its process.
 
 A collection has one member for each framework. The members run in an order that rotates by one position for each workload.
 The collection measures a fixed CPU workload, the yardstick, before and after the members. A drifting yardstick marks the members unsupported.
