@@ -64,9 +64,12 @@ classifyKey(node, key)? -> "property" | "event"
 ```luau
 readProperty(node, key) -> unknown
 observeProperty(node, key, listener) -> Unsubscribe
+readStyledProperty(node, key)? -> unknown
+observeStyledProperty(node, key, listener)? -> Unsubscribe
 ```
 
 Implement `observation` to notice when something other than Compose changed a property.
+Supply both styled methods, or neither. A styled reader returns the effective value, including explicit overrides. Its subscription must notify after either raw or style changes that can affect that value. `runtime.observe(..., { styled = true })` refuses a missing styled capability rather than substituting raw reads. Subscriptions borrow their node and must release their native resources when unsubscribed.
 
 ### `frames`, optional
 

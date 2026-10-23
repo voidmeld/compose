@@ -6,6 +6,87 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("runtime primitives", function()
+	it("keeps styled readables separate and requires their explicit host capability", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Frame"
+		world.host.poke(node, "Width", 10)
+		local observation = assert(world.host.adapter.observation)
+		local listener: (() -> ())? = nil
+		local styled: unknown = 20
+		local released = 0
+		Compose.withRootOwner(function(owner)
+			expect(function()
+				world.runtime.observe(node, "Width", { styled = true })
+			end):toThrow "readStyledProperty"
+			expect(owner.size()):toBe(0)
+			observation.readStyledProperty = function()
+				return styled
+			end
+			expect(function()
+				world.runtime.observe(node, "Width", { styled = true })
+			end):toThrow "observeStyledProperty"
+			expect(owner.size()):toBe(0)
+			observation.observeStyledProperty = function(_, _, notify)
+				listener = notify
+				return function()
+					released += 1
+				end
+			end
+			local raw = world.runtime.observe(node, "Width")
+			local effective = world.runtime.observe(node, "Width", { styled = true })
+			expect(effective == raw):toBe(false)
+			expect(world.runtime.observe(node, "Width", { styled = true })):toBe(effective)
+			expect(raw:peek()):toBe(10)
+			expect(effective:peek()):toBe(20)
+			styled = nil
+			assert(listener)()
+			expect(effective:peek()):toBe(nil)
+			expect(raw:peek()):toBe(10)
+		end)
+		expect(released):toBe(1)
+		expect(world.host.liveSubscriptions()):toBe(0)
+	end)
+
+	it("samples styled frame and polling observations through their selected reader", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Frame"
+		local observation = assert(world.host.adapter.observation)
+		local current = 10
+		local listeners: { () -> () } = {}
+		local subscriptions = 0
+		observation.readStyledProperty = function()
+			return current
+		end
+		observation.observeStyledProperty = function(_, _, listener)
+			table.insert(listeners, listener)
+			subscriptions += 1
+			return function()
+				subscriptions -= 1
+			end
+		end
+		local values, owner = Support.owned(function()
+			return {
+				world.runtime.observe(node, "Width", { styled = true, frame = true }),
+				world.runtime.observe(node, "Width", { styled = true, frame = true, poll = true }),
+			}
+		end)
+		current = 20
+		for _, listener in listeners do
+			listener()
+		end
+		expect(values[1]:peek()):toBe(10)
+		world.host.step(0)
+		expect(values[1]:peek()):toBe(20)
+		expect(values[2]:peek()):toBe(20)
+		current = 30
+		world.host.step(0)
+		expect(values[1]:peek()):toBe(20)
+		expect(values[2]:peek()):toBe(30)
+		owner.dispose()
+		expect(subscriptions):toBe(0)
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
+
 	it("samples frame observations before publishing one coherent change", function()
 		local world = Support.world()
 		local node = world.host.makeNode "Frame"
@@ -55,6 +136,7 @@ describe("runtime primitives", function()
 		world.host.poke(node, "AbsolutePosition", 20)
 		expect(reads):toBe(0)
 		world.host.step(1 / 60)
+		expect(reads):toBe(1)
 		expect(value:peek()):toBe(20)
 		reads = 0
 		world.host.step(1 / 60)
