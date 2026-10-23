@@ -124,7 +124,7 @@ describe("roblox adapter", function()
 			end)
 			expect(env.liveConnections() - before):toBe(3)
 			overrides.LayoutOrder = 11
-			raw:Fire("LayoutOrder")
+			raw:Fire "LayoutOrder"
 			expect(order:peek()):toBe(7)
 			overrides.LayoutOrder = nil
 			expect(alpha:peek()):toBe(0.4)
