@@ -44,11 +44,35 @@ jobs:
         run: lute setup
       - name: Run repository gate
         run: lute run tools/gate.luau
+      - name: Check out comparison base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+          path: .lute/tmp/performance-base
+          persist-credentials: false
+      - name: Prepare comparison base
+        working-directory: .lute/tmp/performance-base
+        run: |
+          lute setup
+          lute run tools/sync-dependencies.luau
+      - name: Measure comparison base
+        working-directory: .lute/tmp/performance-base
+        run: lute run bench/run.luau --suite all --out "$GITHUB_WORKSPACE/build/performance/base"
+      - name: Compare candidate performance
+        run: lute run bench/run.luau --suite all --out build/performance/candidate --baseline build/performance/base/stored.json
       - name: Retain gate evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-evidence
           path: .lute/tmp/compose-gate/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Retain paired performance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: performance-evidence
+          path: build/performance/
           if-no-files-found: ignore
           retention-days: 7

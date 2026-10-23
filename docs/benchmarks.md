@@ -33,6 +33,14 @@ lute run bench/run.luau --spread build/performance/first/stored.json build/perfo
 
 Use `--filter` and `--scale` for focused diagnostics. Do not claim that a filtered run covers all cases.
 
+## Required CI comparison
+
+The required `Gate` job runs the repository gate, then measures `--suite all` twice in sequence on the same Ubuntu runner. The baseline is the pull request's exact base commit; a main push compares against its previous commit, and a manual run compares against its parent. Both runs use the candidate's pinned tool installation. Each checkout resolves its own pinned Verify dependency and runs its own committed benchmark workloads.
+
+The candidate uses the existing `--baseline` comparison. Every stored measurement must have the same name, unit and environment in both runs. Its median must not exceed the larger of the baseline median times 1.5 and the baseline median plus 5 microseconds. Missing or renamed measurements fail rather than silently reducing coverage. Timing runs must have a releasable verdict; failed or unsupported measurements cannot qualify the candidate. Benchmark changes that make the runs incomparable need an explicit review and a compatible comparison, not an omitted CI step.
+
+The `performance-evidence` artifact retains both raw stored runs and full reports, including failed attempts, for seven days. The job log records the comparison and each source identity. This checks the existing construction, update, identity, event, animation, unwind and teardown workloads, plus every UI, 2D, 3D, virtualization and entity scenario at its authored scales. It measures headless cost-model CPU behavior, including its dispatch overhead. It does not establish native rendering, physics, networking, input latency or played quality, and it does not detect regressions smaller than the comparison thresholds. Paired execution avoids a historical-machine baseline; it cannot eliminate hosted-runner noise.
+
 ## What a run does
 
 The command builds one Verify gate. For each workload or scenario scale it declares two producers.
