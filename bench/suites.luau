@@ -243,7 +243,7 @@ local function scenarioMember(
 		clock = clock,
 		warmup = scenario.warmup,
 		warmupScope = "sample",
-		samples = scenario.samples,
+		samples = 31,
 		percentiles = { 75, 90 },
 		tags = { scenario.lane },
 		environment = { observed = observed },

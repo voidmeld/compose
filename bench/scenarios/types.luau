@@ -47,7 +47,6 @@ export type Scenario = {
 	scales: { Scale },
 	steadyFrames: number,
 	burstRounds: number,
-	samples: number,
 	warmup: number,
 	cases: { [string]: Case<unknown, Context> },
 	unsupported: { [string]: string }?,

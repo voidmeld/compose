@@ -509,7 +509,6 @@ local scene2d: Scenario = {
 	},
 	steadyFrames = 180,
 	burstRounds = 8,
-	samples = 7,
 	warmup = 2,
 	cases = {
 		compose = (composeCase :: unknown) :: Types.Case<unknown, Types.Context>,
