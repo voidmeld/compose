@@ -1,7 +1,6 @@
 --!strict
 
 local system = require "@lute/system"
-local time = require "@lute/time"
 
 local Benchmark = require "../.lute/dependencies/verify/src/benchmark"
 local Environment = require "./cost-model"
@@ -40,11 +39,7 @@ type Sample = {
 local MICROSECONDS = 1e6
 local LARGE = "large"
 
-local origin = time.now()
-
-local function clock(): number
-	return time.since(origin)
-end
+local clock = os.clock
 
 local function identity(): string
 	local cpus = system.cpus()
