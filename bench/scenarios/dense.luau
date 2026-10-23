@@ -197,7 +197,6 @@ local dashboard: Scenario = {
 	},
 	steadyFrames = 120,
 	burstRounds = 8,
-	samples = 9,
 	warmup = 2,
 	cases = {
 		compose = (({
@@ -442,7 +441,6 @@ local entityLabels: Scenario = {
 	},
 	steadyFrames = 120,
 	burstRounds = 6,
-	samples = 7,
 	warmup = 2,
 	cases = {
 		compose = (({
@@ -732,7 +730,6 @@ local entityLabelsSparse: Scenario = {
 	},
 	steadyFrames = 120,
 	burstRounds = 6,
-	samples = 7,
 	warmup = 2,
 	cases = {
 		compose = (({

@@ -410,7 +410,6 @@ local churn: Scenario = {
 	},
 	steadyFrames = 120,
 	burstRounds = 6,
-	samples = 7,
 	warmup = 2,
 	cases = { compose = composeCase(0.25), bare = bareCase(0.25) },
 }

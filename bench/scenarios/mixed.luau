@@ -111,7 +111,6 @@ local animatedNavigation: Scenario = {
 	},
 	steadyFrames = 90,
 	burstRounds = 6,
-	samples = 7,
 	warmup = 2,
 	cases = {
 		compose = (({
@@ -255,7 +254,6 @@ local sessionCycle: Scenario = {
 	},
 	steadyFrames = 24,
 	burstRounds = 4,
-	samples = 7,
 	warmup = 2,
 	cases = {
 		compose = (
@@ -485,7 +483,6 @@ local inspector: Scenario = {
 	},
 	steadyFrames = 90,
 	burstRounds = 6,
-	samples = 7,
 	warmup = 2,
 	cases = {
 		compose = (({

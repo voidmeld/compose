@@ -308,7 +308,6 @@ local sweep: Scenario = {
 	},
 	steadyFrames = 180,
 	burstRounds = 8,
-	samples = 7,
 	warmup = 2,
 	cases = { compose = composeCase(4, false), bare = bareCase(4, false) },
 }
@@ -327,7 +326,6 @@ local saturated: Scenario = {
 	},
 	steadyFrames = 90,
 	burstRounds = 6,
-	samples = 7,
 	warmup = 2,
 	cases = { compose = composeCase(1, true), bare = bareCase(1, true) },
 }
