@@ -123,7 +123,10 @@ describe("roblox adapter", function()
 				return runtime.observe(node, "LayoutOrder", { styled = true })
 			end)
 			expect(env.liveConnections() - before):toBe(3)
-			expect(env.connectionsOf(raw)):toBe(0)
+			overrides.LayoutOrder = 11
+			raw:Fire("LayoutOrder")
+			expect(order:peek()):toBe(7)
+			overrides.LayoutOrder = nil
 			expect(alpha:peek()):toBe(0.4)
 			expect(order:peek()):toBe(7)
 			local notifications = 0
@@ -223,7 +226,7 @@ describe("roblox adapter", function()
 		end)
 
 		it("skips subscribers removed during fanout and disconnects both channels after a cleanup error", function()
-			local w, host, raw, styled, _, _, node = styledWorld()
+			local w, host, _, styled, _, _, node = styledWorld()
 			local observe = assert(assert(host.observation).observeStyledProperty)
 			local calls = 0
 			local first: (() -> ())? = nil
