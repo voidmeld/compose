@@ -130,6 +130,33 @@ describe("a node under a string key", function()
 		dispose()
 	end)
 
+	it("writes a strict opaque table value without reading wrapper markers", function()
+		local world = Support.world()
+		local emulator = Support.emulator { undeclaredReads = "raise" }
+		local external = emulator.createInstance "Frame"
+		local dispose, node = world.runtime.mount(function()
+			return world.create "Frame" { Reference = external }
+		end, world.root)
+		expect(world.host.propertyOf(node, "Reference")):toBe(external)
+		dispose()
+		expect(emulator.environment.isAlive(external)):toBe(true)
+		external:Destroy()
+	end)
+
+	it("reports a strict opaque table key through the props diagnostic", function()
+		local world = Support.world()
+		local emulator = Support.emulator { undeclaredReads = "raise" }
+		local external = emulator.createInstance "Frame"
+		expect(function()
+			world.runtime.mount(function()
+				return world.create "Frame" { [external] = "value" }
+			end, world.root)
+		end):toThrow "props/unsupported-key"
+		expect(world.host.liveNodes()):toBe(1)
+		expect(emulator.environment.isAlive(external)):toBe(true)
+		external:Destroy()
+	end)
+
 	it("still writes a node this runtime borrowed", function()
 		local world = Support.world()
 		local external = world.host.makeNode "Camera"
