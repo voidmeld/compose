@@ -16,7 +16,6 @@ return table.freeze {
 	"tests/authoring/project-tree.verify.luau",
 	"tests/authoring/set.verify.luau",
 	"tests/authoring/validate.verify.luau",
-	"tests/benchmark-comparison.verify.luau",
 	"tests/collection/grid.verify.luau",
 	"tests/collection/layout.verify.luau",
 	"tests/collection/prefix.verify.luau",

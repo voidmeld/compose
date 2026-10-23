@@ -8,10 +8,9 @@ local Gate = require "../.lute/dependencies/verify/src/gate"
 local Lute = require "../.lute/dependencies/verify/src/lute"
 local Suites = require "./suites"
 local Verify = require "../.lute/dependencies/verify/src/core"
-local Comparison = require "./comparison"
 
 local USAGE =
-	"usage: lute run bench/run.luau [--suite workloads|screens|entities|all] [--filter text] [--scale name] [--out directory] [--verify] [--baseline stored.json] [--paired base-directory] | --spread stored.json stored.json [...]"
+	"usage: lute run bench/run.luau [--suite workloads|screens|entities|all] [--filter text] [--scale name] [--out directory] [--verify] [--baseline stored.json] | --spread stored.json stored.json [...]"
 local DEFAULT_OUT = "bench/results/scratch"
 local RATIO = 1.5
 local FLOOR_MICROSECONDS = 5
@@ -23,7 +22,6 @@ type Options = {
 	out: string,
 	verify: boolean,
 	baseline: string?,
-	paired: string?,
 	spread: { string },
 }
 
@@ -58,8 +56,6 @@ local function parse(): Options
 				options.out = value
 			elseif flag == "--baseline" then
 				options.baseline = value
-			elseif flag == "--paired" then
-				options.paired = value
 			else
 				error(USAGE, 0)
 			end
@@ -71,6 +67,16 @@ end
 
 local function read(path: string): Benchmark.Stored
 	return Benchmark.decode(Lute.parse(fs.readFileToString(path)))
+end
+
+local function timed(run: Benchmark.Stored): Benchmark.Stored
+	local measurements: { Benchmark.StoredMeasurement } = {}
+	for _, measurement in run.measurements do
+		if not measurement.name:match "/counts$" then
+			table.insert(measurements, measurement)
+		end
+	end
+	return { schemaVersion = run.schemaVersion, name = run.name, measurements = measurements }
 end
 
 local function spread(paths: { string }): number
@@ -106,58 +112,10 @@ local function identity(): string
 	return if status.ok and string.match(status.stdout, "%S") ~= nil then commit .. "-dirty" else commit
 end
 
-local function paired(options: Options): number
-	assert(not options.verify and options.baseline == nil, "paired runs select their own timing baselines")
-	local root = process.cwd()
-	local output = if options.out:sub(1, 1) == "/" then options.out else root .. "/" .. options.out
-	local revisions: { [string]: string } = { base = assert(options.paired), candidate = root }
-	local runs: { [string]: { Benchmark.Stored } } = { base = {}, candidate = {} }
-	for round = 1, 3 do
-		local order: { string } = if round % 2 == 1 then { "base", "candidate" } else { "candidate", "base" }
-		for _, revision in order do
-			local directory = output .. "/" .. revision .. "/" .. tostring(round)
-			local command =
-				{ process.execPath(), "run", "bench/run.luau", "--suite", options.suite, "--out", directory }
-			if options.filter ~= nil then
-				table.insert(command, "--filter")
-				table.insert(command, options.filter)
-			end
-			if options.scale ~= nil then
-				table.insert(command, "--scale")
-				table.insert(command, options.scale)
-			end
-			print(("bench: paired round %d %s"):format(round, revision))
-			local result = process.run(command, { cwd = revisions[revision], timeout = 600, stdio = "inherit" })
-			if not result.ok then
-				return 1
-			end
-			local report = Lute.parse(fs.readFileToString(directory .. "/report.json")) :: { [string]: unknown }
-			if type(report.total) ~= "number" or report.total <= 0 or report.passed ~= report.total then
-				print("bench: paired run is not completely passed: " .. directory)
-				return 1
-			end
-			table.insert(runs[revision], read(directory .. "/stored.json"))
-		end
-	end
-	local baseline, candidate = Comparison.summarize(runs.base), Comparison.summarize(runs.candidate)
-	fs.writeStringToFile(output .. "/base/stored.json", Lute.encode(baseline) .. "\n")
-	fs.writeStringToFile(output .. "/candidate/stored.json", Lute.encode(candidate) .. "\n")
-	local comparison = Benchmark.compare(baseline, candidate, {
-		rule = { ratio = RATIO, floor = FLOOR_MICROSECONDS },
-		minimumSamples = 3,
-	})
-	fs.writeStringToFile(output .. "/comparison.json", Lute.encode(comparison) .. "\n")
-	print(Verify.format(comparison))
-	return if comparison.passed == comparison.total then 0 else 1
-end
-
 local function main(): number
 	local options = parse()
 	if #options.spread > 0 then
 		return spread(options.spread)
-	end
-	if options.paired ~= nil then
-		return paired(options)
 	end
 
 	local entries = Suites.entries { suite = options.suite, filter = options.filter, scale = options.scale }
@@ -205,7 +163,7 @@ local function main(): number
 		print(("bench: wrote %s/stored.json and %s/report.json"):format(options.out, options.out))
 		local baseline = options.baseline
 		if baseline ~= nil then
-			local comparison = Benchmark.compare(read(baseline), run, {
+			local comparison = Benchmark.compare(timed(read(baseline)), timed(run), {
 				rule = { ratio = RATIO, floor = FLOOR_MICROSECONDS },
 			})
 			print(Verify.format(comparison))
