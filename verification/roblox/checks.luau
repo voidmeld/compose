@@ -35,6 +35,119 @@ end
 
 local checks: { Check } = {
 	{
+		id = "styled-property-observation",
+		name = "observes native style changes, raw overrides and resets through shared channels",
+		requires = { "roblox-engine", "roblox-client" },
+		run = function(_container: Instance): string
+			local runtime = ComposeRoblox.createRuntime()
+			return Compose.withRootOwner(function(): string
+				Compose.cleanup(function()
+					runtime:dispose()
+				end)
+				local screen = Instance.new "ScreenGui"
+				runtime.adopt(screen)
+				screen.Enabled = false
+				local sheet = Instance.new "StyleSheet"
+				sheet.Parent = screen
+				local rule = Instance.new "StyleRule"
+				rule.Selector = "TextLabel"
+				rule:SetProperties { TextSize = 23, FontFace = Font.fromEnum(Enum.Font.SourceSans) }
+				rule.Parent = sheet
+				local link = Instance.new "StyleLink"
+				link.StyleSheet = sheet
+				link.Parent = screen
+				local label = Instance.new "TextLabel"
+				label.Parent = screen
+				screen.Parent = assert(game:GetService("Players").LocalPlayer):WaitForChild "PlayerGui"
+				local render = game:GetService("RunService").PreRender
+				local function settled(expected: number)
+					local deadline = os.clock() + 2
+					repeat
+						render:Wait()
+					until label:GetStyled "TextSize" == expected or os.clock() >= deadline
+					assertThat(
+						label:GetStyled "TextSize" == expected,
+						"native stylesheet did not settle: " .. rule.SelectorError
+					)
+				end
+				settled(23)
+				local raw = runtime.observe(label, "TextSize")
+				local size = runtime.observe(label, "TextSize", { styled = true })
+				local font = runtime.observe(label, "FontFace", { styled = true })
+				assertThat(raw ~= size, "raw and styled observations shared a cache entry")
+				assertThat(
+					size == runtime.observe(label, "TextSize", { styled = true }),
+					"styled acquisition was not shared"
+				)
+				assertThat(size:peek() == 23, "the initial stylesheet value was not observed")
+				rule:SetProperties { TextSize = 31, FontFace = Font.fromEnum(Enum.Font.Gotham) }
+				settled(31)
+				assertThat(size:peek() == 31, "a stylesheet write did not update TextSize")
+				assertThat(
+					(font:peek() :: Font).Family == (label:GetStyled "FontFace" :: Font).Family,
+					"FontFace did not update"
+				)
+				assertThat(raw:peek() == label.TextSize, "style changes corrupted the raw observation")
+				label.TextSize = 41
+				settled(41)
+				assertThat(size:peek() == 41 and raw:peek() == 41, "a raw override did not update both observations")
+				rule:SetProperties { TextSize = 35, FontFace = Font.fromEnum(Enum.Font.SourceSans) }
+				render:Wait()
+				assertThat(size:peek() == 41, "a masked stylesheet write replaced the raw override")
+				label:ResetPropertyToDefault "TextSize"
+				settled(35)
+				assertThat(size:peek() == 35, "reset did not reveal the current stylesheet value")
+				assertThat(raw:peek() == label.TextSize, "reset left the raw observation stale")
+				return "styled TextSize and FontFace followed native style changes; raw overrides masked style until reset; cache identities remained distinct"
+			end, runtime.reactor)
+		end,
+	},
+	{
+		id = "styled-valuebase-observation",
+		name = "observes ValueBase Value and Name writes and resets without depending on Changed",
+		run = function(container: Instance): string
+			local runtime = ComposeRoblox.createRuntime()
+			return Compose.withRootOwner(function(): string
+				Compose.cleanup(function()
+					runtime:dispose()
+				end)
+				for _, class in { "StringValue", "NumberValue" } do
+					local node = Instance.new(class)
+					runtime.adopt(node)
+					node.Parent = container
+					local originalName = node.Name
+					local originalValue: unknown = if class == "StringValue"
+						then (node :: StringValue).Value
+						else (node :: NumberValue).Value
+					local name = runtime.observe(node, "Name", { styled = true })
+					local value = runtime.observe(node, "Value", { styled = true })
+					node.Name = "ChangedName"
+					if class == "StringValue" then
+						(node :: StringValue).Value = "changed value"
+					else
+						(node :: NumberValue).Value = 42
+					end
+					game:GetService("RunService").Heartbeat:Wait()
+					assertThat(name:peek() == "ChangedName", class .. " Name write was missed")
+					assertThat(
+						value:peek() == (if class == "StringValue" then "changed value" else 42),
+						class .. " Value write was missed"
+					)
+					node:ResetPropertyToDefault "Name"
+					if class == "StringValue" then
+						(node :: StringValue):ResetPropertyToDefault "Value"
+					else
+						(node :: NumberValue):ResetPropertyToDefault "Value"
+					end
+					game:GetService("RunService").Heartbeat:Wait()
+					assertThat(name:peek() == originalName, class .. " Name reset was missed")
+					assertThat(value:peek() == originalValue, class .. " Value reset was missed")
+				end
+				return "StringValue and NumberValue Name and Value writes and resets matched GetStyled"
+			end, runtime.reactor)
+		end,
+	},
+	{
 		id = "property-readables-before-render",
 		name = "shares property readables and samples settled layout before showing it",
 		requires = { "roblox-engine", "roblox-client" },
@@ -229,10 +342,7 @@ local checks: { Check } = {
 		name = "GetPropertyChangedSignal fires for an engine-driven change",
 		run = function(container: Instance): string
 			local host = ComposeRoblox.createHost()
-			local observation = host.observation :: {
-				readProperty: (unknown, string) -> unknown,
-				observeProperty: (unknown, string, () -> ()) -> () -> (),
-			}
+			local observation = assert(host.observation)
 			local frame = Instance.new "Frame"
 			frame.Parent = container
 
