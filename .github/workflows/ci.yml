@@ -44,10 +44,17 @@ jobs:
         run: lute setup
       - name: Run repository gate
         run: lute run tools/gate.luau
+      - name: Resolve comparison base
+        id: comparison-base
+        env:
+          COMPARE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          base_sha=$(git rev-parse --verify "$COMPARE_BASE^{commit}")
+          echo "sha=$base_sha" >> "$GITHUB_OUTPUT"
       - name: Check out comparison base
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+          ref: ${{ steps.comparison-base.outputs.sha }}
           path: .lute/tmp/performance-base
           persist-credentials: false
       - name: Prepare comparison base
