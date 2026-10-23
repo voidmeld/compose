@@ -162,7 +162,6 @@ local function make(id: string, title: string, what: string, lane: string, budge
 		scales = scales,
 		steadyFrames = 90,
 		burstRounds = 6,
-		samples = 7,
 		warmup = 2,
 		cases = {
 			compose = (({

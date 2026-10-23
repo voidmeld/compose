@@ -163,7 +163,9 @@ local function main(): number
 		end
 	end
 	print(("bench: verdict %s"):format(outcome.acceptance.verdict))
-	return if outcome.acceptance.verdict == "failed" then 1 else 0
+	return if outcome.acceptance.verdict == "failed" or (not options.verify and not outcome.acceptance.releasable)
+		then 1
+		else 0
 end
 
 local code = main()

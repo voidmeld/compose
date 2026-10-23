@@ -42,6 +42,11 @@ The command builds one Verify gate. For each workload or scenario scale it decla
 
 A collection has one member for each framework. The members run in an order that rotates by one position for each workload.
 The collection measures a fixed CPU workload, the yardstick, before and after the members. A drifting yardstick marks the members unsupported.
+Scene and entity members use 31 complete measured samples. The shared suite owns that budget;
+individual scenarios own their inputs and warmup. This spans multiple allocation/collection cycles
+instead of allowing a seven-sample median to depend on one short allocation phase. It reduces
+sampling variability, but does not eliminate hosted-runner noise or establish native performance.
+
 Each member keeps these properties:
 
 - Warmup runs whole samples (`warmupScope = "sample"`).
