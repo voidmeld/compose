@@ -69,6 +69,16 @@ local function read(path: string): Benchmark.Stored
 	return Benchmark.decode(Lute.parse(fs.readFileToString(path)))
 end
 
+local function timed(run: Benchmark.Stored): Benchmark.Stored
+	local measurements: { Benchmark.StoredMeasurement } = {}
+	for _, measurement in run.measurements do
+		if not measurement.name:match "/counts$" then
+			table.insert(measurements, measurement)
+		end
+	end
+	return { schemaVersion = run.schemaVersion, name = run.name, measurements = measurements }
+end
+
 local function spread(paths: { string }): number
 	local runs: { Benchmark.Stored } = {}
 	for _, path in paths do
@@ -155,7 +165,7 @@ local function main(): number
 		print(("bench: wrote %s/stored.json and %s/report.json"):format(options.out, options.out))
 		local baseline = options.baseline
 		if baseline ~= nil then
-			local comparison = Benchmark.compare(read(baseline), run, {
+			local comparison = Benchmark.compare(timed(read(baseline)), timed(run), {
 				rule = { ratio = RATIO, floor = FLOOR_MICROSECONDS },
 			})
 			print(Verify.format(comparison))
