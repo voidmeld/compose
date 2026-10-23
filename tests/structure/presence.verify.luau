@@ -20,6 +20,37 @@ local function childCount(world: Support.World, node: Compose.Node): number
 end
 
 describe("presence", function()
+	it("retains a strict table-backed host node without reading an array member", function()
+		local emulator = Support.emulator { undeclaredReads = "raise" }
+		local runtime = Compose.createRuntime(emulator.adapter)
+		local Frame = runtime.create "Frame"
+		local open, completed = Compose.cell(true), Compose.cell(false)
+		local before = emulator.environment.liveObjects()
+		local dispose = runtime.mount(function()
+			return Frame {
+				Compose.presence(function(use)
+					return use(open)
+				end, function()
+					return Frame {}
+				end, {
+					exit = function()
+						return { completed = completed }
+					end,
+				}),
+			}
+		end, emulator.root)
+		local root = emulator.environment.childrenOf(emulator.root)[1]
+		expect(#emulator.environment.childrenOf(root)):toBe(1)
+		open:set(false)
+		runtime:settle()
+		expect(#emulator.environment.childrenOf(root)):toBe(1)
+		completed:set(true)
+		runtime:settle()
+		expect(#emulator.environment.childrenOf(root)):toBe(0)
+		dispose()
+		expect(emulator.environment.liveObjects()):toBe(before)
+	end)
+
 	it("is show when no exit is given", function()
 		local world = Support.world()
 		local Frame = world.create "Frame"
