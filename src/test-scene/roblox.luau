@@ -29,11 +29,18 @@ export type Connection = {
 
 export type Signal<A... = ...unknown> = {
 	Connect: (self: Signal<A...>, handler: (A...) -> ()) -> Connection,
+	Wait: (self: Signal<A...>) -> A...,
 	Fire: (self: Signal<A...>, A...) -> (),
 	DisconnectAll: (self: Signal<A...>) -> (),
 }
 
 export type Method<A... = ...unknown, R... = ...unknown> = (A...) -> R...
+export type Object = {
+	ClassName: string,
+	IsA: (Object, string) -> boolean,
+	GetPropertyChangedSignal: (Object, string) -> Signal<()>,
+	Changed: Signal<string>,
+}
 export type Instance = {
 	[string]: unknown,
 	ClassName: string,
@@ -49,21 +56,23 @@ export type Instance = {
 	GetChildren: (Instance) -> { Instance },
 	GetDescendants: (Instance) -> { Instance },
 	FindFirstChild: (Instance, string, boolean?) -> Instance?,
+	WaitForChild: (Instance, string, number?) -> Instance?,
 	FindFirstChildOfClass: (Instance, string) -> Instance?,
 	FindFirstChildWhichIsA: (Instance, string, boolean?) -> Instance?,
 	FindFirstAncestor: (Instance, string) -> Instance?,
 	FindFirstAncestorOfClass: (Instance, string) -> Instance?,
 	FindFirstAncestorWhichIsA: (Instance, string) -> Instance?,
 	GetFullName: (Instance) -> string,
-	IsA: (Instance, string) -> boolean,
+	IsA: (Object, string) -> boolean,
 	IsDescendantOf: (Instance, Instance) -> boolean,
 	IsAncestorOf: (Instance, Instance) -> boolean,
 	SetAttribute: (Instance, string, unknown) -> (),
 	GetAttribute: (Instance, string) -> unknown,
 	GetAttributes: (Instance) -> { [string]: unknown },
-	GetPropertyChangedSignal: (Instance, string) -> Signal<()>,
+	GetPropertyChangedSignal: (Object, string) -> Signal<()>,
 	GetAttributeChangedSignal: (Instance, string) -> Signal<()>,
 	ResetPropertyToDefault: (Instance, string) -> (),
+	IsPropertyModified: (Instance, string) -> boolean,
 	Changed: Signal<string>,
 	ChildAdded: Signal<Instance>,
 	ChildRemoved: Signal<Instance>,
@@ -98,9 +107,9 @@ export type Environment = {
 	poke: (object: Instance, key: string, value: unknown) -> (),
 	childrenOf: (object: Instance) -> { Instance },
 	parentOf: (object: Instance) -> Instance?,
-	propertyOf: (object: Instance, key: string) -> unknown,
+	propertyOf: (object: Object, key: string) -> unknown,
 	attributeOf: (object: Instance, name: string) -> unknown,
-	isAlive: (object: Instance) -> boolean,
+	isAlive: (object: Object) -> boolean,
 	liveObjects: () -> number,
 	liveConnections: () -> number,
 }

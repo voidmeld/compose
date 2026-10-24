@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  gate:
-    name: Gate
+  repository:
+    name: Repository suite
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     steps:
@@ -44,29 +44,6 @@ jobs:
         run: lute setup
       - name: Run repository gate
         run: lute run tools/gate.luau
-      - name: Resolve comparison base
-        id: comparison-base
-        env:
-          COMPARE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
-        run: |
-          base_sha=$(git rev-parse --verify "$COMPARE_BASE^{commit}")
-          echo "sha=$base_sha" >> "$GITHUB_OUTPUT"
-      - name: Check out comparison base
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          ref: ${{ steps.comparison-base.outputs.sha }}
-          path: .lute/tmp/performance-base
-          persist-credentials: false
-      - name: Prepare comparison base
-        working-directory: .lute/tmp/performance-base
-        run: |
-          lute setup
-          lute run tools/sync-dependencies.luau
-      - name: Measure comparison base
-        working-directory: .lute/tmp/performance-base
-        run: lute run bench/run.luau --suite all --out "$GITHUB_WORKSPACE/build/performance/base"
-      - name: Compare candidate performance
-        run: lute run bench/run.luau --suite all --out build/performance/candidate --baseline build/performance/base/stored.json
       - name: Retain gate evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -75,6 +52,61 @@ jobs:
           path: .lute/tmp/compose-gate/
           if-no-files-found: ignore
           retention-days: 7
+
+  paired-perf:
+    name: Paired performance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rokit
+        run: |
+          curl --fail --location --silent --show-error https://github.com/rojo-rbx/rokit/releases/download/v1.2.0/rokit-1.2.0-linux-x86_64.zip --output "$RUNNER_TEMP/rokit.zip"
+          echo "951a7f3ec3d2a5e021fd1867d32f69f010ee4c2927f644b759578afc59c65fc0  $RUNNER_TEMP/rokit.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/rokit.zip" -d "$RUNNER_TEMP/rokit"
+          "$RUNNER_TEMP/rokit/rokit" self-install
+          echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
+      - name: Install pinned tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rokit authenticate github --token "$GH_TOKEN" --skip-verify
+          trap 'rokit authenticate github --remove' EXIT
+          rokit install --no-trust-check
+          rokit authenticate github --remove
+          trap - EXIT
+          unset GH_TOKEN
+      - name: Prepare measurement dependencies
+        run: |
+          lute setup
+          lute run tools/sync-dependencies.luau
+      - name: Resolve comparison base
+        id: comparison-base
+        env:
+          COMPARE_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        run: |
+          base_sha=$(git rev-parse --verify "$COMPARE_BASE^{commit}")
+          echo "sha=$base_sha" >> "$GITHUB_OUTPUT"
+      - name: Prepare comparison base with common measurements
+        env:
+          BASE_SHA: ${{ steps.comparison-base.outputs.sha }}
+        run: |
+          git worktree add "$RUNNER_TEMP/performance-base" "$BASE_SHA"
+          mkdir -p build/performance
+          git archive HEAD bench tools tests dependencies.lock.luau > build/performance/measurement.tar
+          tar -xf build/performance/measurement.tar -C "$RUNNER_TEMP/performance-base"
+          git -C "$RUNNER_TEMP/performance-base" diff --exit-code HEAD -- src authoring
+          sha256sum build/performance/measurement.tar
+          (cd "$RUNNER_TEMP/performance-base" && lute setup && lute run tools/sync-dependencies.luau)
+      - name: Measure comparison base
+        run: |
+          cd "$RUNNER_TEMP/performance-base"
+          lute run bench/run.luau --suite all --out "$GITHUB_WORKSPACE/build/performance/base"
+      - name: Compare candidate performance
+        run: lute run bench/run.luau --suite all --out build/performance/candidate --baseline build/performance/base/stored.json
       - name: Retain paired performance evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -83,3 +115,17 @@ jobs:
           path: build/performance/
           if-no-files-found: ignore
           retention-days: 7
+
+  gate:
+    name: Gate
+    needs: [repository, paired-perf]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every required job passed
+        env:
+          SUITE_RESULT: ${{ needs.repository.result }}
+          PERFORMANCE_RESULT: ${{ needs.paired-perf.result }}
+        run: |
+          test "$SUITE_RESULT" = success
+          test "$PERFORMANCE_RESULT" = success
