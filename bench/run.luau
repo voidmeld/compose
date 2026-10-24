@@ -72,10 +72,21 @@ end
 local function timed(run: Benchmark.Stored): Benchmark.Stored
 	local measurements: { Benchmark.StoredMeasurement } = {}
 	for _, measurement in run.measurements do
-		if not measurement.name:match "/counts$" then
+		if not measurement.name:match "/counts$" and not measurement.name:find("/memory/", 1, true) then
 			table.insert(measurements, measurement)
 		end
 	end
+	return { schemaVersion = run.schemaVersion, name = run.name, measurements = measurements }
+end
+
+local function retained(run: Benchmark.Stored): Benchmark.Stored
+	local measurements: { Benchmark.StoredMeasurement } = {}
+	for _, measurement in run.measurements do
+		if measurement.name:find("/memory/", 1, true) then
+			table.insert(measurements, measurement)
+		end
+	end
+	assert(#measurements > 0, "paired memory evidence is missing")
 	return { schemaVersion = run.schemaVersion, name = run.name, measurements = measurements }
 end
 
@@ -147,6 +158,17 @@ local function main(): number
 		}
 		table.insert(producers, parity)
 		table.insert(producers, timing)
+		local memory: Gate.ProducerDraft = {
+			id = "memory-" .. entry.id,
+			kind = "tests",
+			worker = "bench/worker.luau",
+			locators = { "memory:" .. entry.id },
+			exclusive = true,
+			after = { "parity-" .. entry.id },
+			tier = "memory",
+			why = "retained Luau heap while mounted and after teardown, outside timing samples",
+		}
+		table.insert(producers, memory)
 	end
 
 	local parityOnly: Gate.Selection = { tiers = { "parity" } }
@@ -169,7 +191,11 @@ local function main(): number
 				rule = { ratio = RATIO, floor = FLOOR_MICROSECONDS },
 			})
 			print(Verify.format(comparison))
-			if comparison.passed ~= comparison.total then
+			local memory = Benchmark.compare(retained(read(baseline)), retained(run), {
+				rule = { ratio = 1.05, floor = 64 },
+			})
+			print(Verify.format(memory))
+			if comparison.passed ~= comparison.total or memory.passed ~= memory.total then
 				return 1
 			end
 		end

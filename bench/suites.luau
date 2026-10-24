@@ -3,6 +3,8 @@
 local system = require "@lute/system"
 
 local Benchmark = require "../.lute/dependencies/verify/src/benchmark"
+local Lute = require "../.lute/dependencies/verify/src/lute"
+local measureRetained = require "./retained"
 local Environment = require "./cost-model"
 local Entities = require "./entities"
 local Frameworks = require "./harness/frameworks"
@@ -17,6 +19,7 @@ export type Entry = {
 	id: string,
 	parity: () -> string?,
 	collection: Benchmark.Collection,
+	memory: (number?) -> Lute.MemoryResult,
 }
 
 export type Filter = {
@@ -41,6 +44,15 @@ local LARGE = "large"
 
 local clock = os.clock
 
+local function composeFramework(): Frameworks.Framework
+	for _, framework in Frameworks.available() do
+		if framework.name == "compose" then
+			return framework
+		end
+	end
+	error "the Compose benchmark adapter is missing"
+end
+
 local function identity(): string
 	local cpus = system.cpus()
 	return ("%s-%s-%s-%dthreads"):format(
@@ -59,9 +71,12 @@ local function yardstick(): Benchmark.Yardstick
 				total += index % 7
 			end
 		end,
-		samples = 5,
+		samples = 32,
+		iterations = 64,
+		warmup = 16,
 		maxSpread = 4,
-		maxDrift = 4,
+		maxDrift = 0.15,
+		driftBase = "mean",
 	}
 end
 
@@ -158,6 +173,30 @@ local function workloadEntry(workload: Workloads.Workload, position: number, obs
 			return Parity.workload(workload, order)
 		end,
 		collection = { name = workload.id, yardstick = yardstick(), benchmarks = members, clock = clock },
+		memory = function(plantedBytes: number?): Lute.MemoryResult
+			local framework = composeFramework()
+			local case = assert(workload.cases.compose)
+			return measureRetained({
+				setup = function()
+					local environment, context = makeContext(framework)
+					local state = case.prepare(context)
+					environment.drain()
+					return { environment = environment, context = context, state = state }
+				end,
+				run = function(sample)
+					for _ = 1, workload.iterations do
+						case.run(sample.state, sample.context)
+					end
+					sample.environment.drain()
+				end,
+				teardown = function(sample)
+					case.release(sample.state, sample.context)
+					sample.environment.drain()
+				end,
+				warmup = workload.warmup,
+				iterations = 1,
+			}, plantedBytes)
+		end,
 	}
 end
 
@@ -360,11 +399,50 @@ local function scenarioEntry(scenario: Types.Scenario, scale: Types.Scale, posit
 			return Parity.scenario(scenario, scale, order)
 		end,
 		collection = { name = id, yardstick = yardstick(), benchmarks = members, clock = clock },
+		memory = function(plantedBytes: number?): Lute.MemoryResult
+			local framework = composeFramework()
+			local case = assert(scenario.cases.compose)
+			return measureRetained({
+				setup = function()
+					local environment, context = makeContext(framework)
+					attach(context, scale, case)
+					local state = case.build(context, scale)
+					environment.drain()
+					return { environment = environment, context = context, state = state }
+				end,
+				run = function(sample)
+					for tick = 1, scenario.steadyFrames do
+						case.steady(sample.state, sample.context, tick)
+					end
+					for round = 1, scenario.burstRounds do
+						case.burst(sample.state, sample.context, round)
+					end
+					sample.environment.drain()
+				end,
+				teardown = function(sample)
+					case.teardown(sample.state, sample.context)
+					sample.environment.drain()
+				end,
+				iterations = 1,
+			}, plantedBytes)
+		end,
 	}
 end
 
 local function selected(id: string, filter: string?): boolean
 	return filter == nil or string.find(id, filter, 1, true) ~= nil
+end
+
+local function prime(collection: Benchmark.Collection)
+	for _, member in collection.benchmarks do
+		local once = table.clone(member)
+		once.warmup = 0
+		once.samples = 1
+		once.baseline = nil
+		once.yardstick = nil
+		local result = Benchmark.run(once)
+		assert(result.failure == nil, result.failure)
+	end
 end
 
 local function entries(settings: Filter): { Entry }
@@ -406,4 +484,5 @@ end
 return {
 	entries = entries,
 	identity = identity,
+	prime = prime,
 }

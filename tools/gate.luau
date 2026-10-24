@@ -2,6 +2,7 @@
 
 local fs = require "@std/fs"
 local process = require "@lute/process"
+local system = require "@lute/system"
 
 local DEPENDENCY_CACHE = ".lute/dependencies/verify"
 local DIRECTORY = ".lute/tmp/compose-gate"
@@ -64,10 +65,12 @@ end
 
 local Gate = require "../.lute/dependencies/verify/src/gate"
 local Lute = require "../.lute/dependencies/verify/src/lute"
+local resources = require "./lib/gate-resources"
 local Manifest = require "../tests/manifest"
 
 local specs = table.clone(Manifest)
 assert(#specs > 0, "the test manifest names no specification")
+local processLimit = math.max(1, system.threadCount())
 
 local function check(id: string, why: string, argv: { string }, targets: { string }?, tier: string?): Gate.ProducerDraft
 	local full = table.clone(argv)
@@ -83,6 +86,7 @@ end
 
 local function slow(producer: Gate.ProducerDraft): Gate.ProducerDraft
 	producer.deadlineSeconds = 1800
+	producer.exclusive = true
 	return producer
 end
 
@@ -137,6 +141,9 @@ local draft: Gate.Draft = {
 			kind = "tests",
 			worker = "tests/worker.luau",
 			locators = specs,
+			isolate = true,
+			workers = resources(processLimit, system.totalMemory(), #specs),
+			sourceDeadlineSeconds = 600,
 			tier = "fast",
 			why = "unit, property, lifecycle failure-injection, adapter contract and example tests pass",
 			deadlineSeconds = 1800,
@@ -238,6 +245,7 @@ local draft: Gate.Draft = {
 		},
 		{
 			id = "clean-clone",
+			exclusive = true,
 			kind = "command",
 			argv = { "lute", "run", "tools/check-clean-clone.luau" },
 			why = "a fresh clone of HEAD builds and tests with no working-tree state",
@@ -246,6 +254,7 @@ local draft: Gate.Draft = {
 		},
 	},
 	policy = {
+		concurrency = math.min(3, processLimit),
 		commandDeadlineSeconds = 900,
 		deadlineSeconds = 3600,
 		deferrals = if native
@@ -259,7 +268,11 @@ local draft: Gate.Draft = {
 
 local exitCode = Lute.gate.cli(draft, flags, {
 	usage = USAGE,
-	options = { directory = DIRECTORY, capabilities = if native then { "native-studio" } else {} },
+	options = {
+		directory = DIRECTORY,
+		processLimit = processLimit,
+		capabilities = if native then { "native-studio" } else {},
+	},
 })
 if exitCode ~= 0 then
 	process.exit(exitCode)

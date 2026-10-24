@@ -28,30 +28,39 @@ lute run bench/run.luau --spread build/performance/first/stored.json build/perfo
 | `--scale name` | Runs one scale of each scenario. |
 | `--out directory` | Receives the results. The default is `bench/results/scratch`. |
 | `--verify` | Runs only the parity cases. The gate runs this form as the producer `benchmark-parity`. |
-| `--baseline file` | Compares the new run with a stored run. The rule is a ratio of 1.5 and a floor of 5 microseconds on the median. |
+| `--baseline file` | Compares timing and retained heap with a stored run. Timing uses a ratio of 1.5 and a floor of 5 microseconds. Heap uses a ratio of 1.05 and a floor of 64 KiB. Both use the median. |
 | `--spread file file ...` | Prints the spread of the same benchmarks across stored runs. It runs no benchmark. |
 
 Use `--filter` and `--scale` for focused diagnostics. Do not claim that a filtered run covers all cases.
 
 ## Required CI comparison
 
-The required `Gate` job runs the repository gate, then measures one complete `--suite all` base/candidate pair sequentially on the same Ubuntu runner. There are no success-dependent retries. The baseline is the pull request's exact base commit; a main push compares against its previous commit, and a manual run compares against its parent. Both revisions use the candidate's pinned tool installation. Each checkout resolves its own pinned Verify dependency and runs its own committed benchmark workloads.
+The required `Gate` check waits for two independent jobs: `Repository suite` and `Paired performance`. They run at the same time on separate Ubuntu runners. The suite shares a CPU process budget between commands and isolated test workers. Workers fill free slots as checks finish, with a limit of eight workers and one worker per 2 GiB after a 2 GiB reserve. Timing stays serial on its own runner.
+
+The paired job measures one complete `--suite all` base/candidate pair sequentially. There are no success-dependent retries. The baseline is the pull request's exact base commit; a main push compares against its previous commit, and a manual run compares against its parent. Both revisions use the candidate's pinned tools, Verify dependency, benchmarks, test fixtures and maintainer tooling. The measurement archive and its hash are retained. Production `src` and `authoring` remain specific to each revision.
+
+Every pull request runs both jobs, including documentation-only changes.
 
 The existing Verify comparison checks the sample median for each timed measurement, requiring the same name, unit and environment. The candidate must not exceed the larger of the baseline median times 1.5 and the baseline median plus 5 microseconds. The instrumented `/counts` passes remain in the raw reports but are excluded from timing comparison, as their duration is not a performance measurement. Missing or renamed timed measurements fail rather than silently reducing coverage. Every individual run must finish completely passed; failed, skipped or unsupported producers cannot qualify the candidate. Benchmark changes that make the runs incomparable need an explicit review and a compatible comparison, not an omitted CI step.
 
+Each entry also measures Compose's retained Luau heap while mounted and after teardown in a fresh worker, outside timing. It first warms the lifecycle, then records three memory lifecycles with Verify's bounded `gc-witness-low-water/2` estimator and eight collection witness cycles per endpoint. Temporary 8 KiB buffers drive collection progress. Raw heap readings and collection progress stay in the report attachments. Growth must exceed both 5 percent and 64 KiB in the median to fail. Missing memory measurements fail. This estimates retained Luau heap; it does not measure exact reachable bytes, process RSS or Roblox engine memory. An unchanged workload and a retained 4 MiB allocation test the comparison through the real lifecycle adapter in separate workers.
+
 The `performance-evidence` artifact retains both raw stored runs and full reports, including failed attempts, for seven days. The job log records the comparison and each source identity. This checks the existing construction, update, identity, event, animation, unwind and teardown workloads, plus every UI, 2D, 3D, virtualization and entity scenario at its authored scales. It measures headless cost-model CPU behavior, including its dispatch overhead. It does not establish native rendering, physics, networking, input latency or played quality, and it does not detect regressions smaller than the comparison thresholds. Paired execution avoids a historical-machine baseline; it cannot eliminate hosted-runner noise.
+
+`lute run bench/calibration.luau` optionally captures three diagnostic collections for each of two workloads. It records raw CPU endpoint samples and invalidation reasons. These diagnostics are outside normal CI. They do not replace a check or change its verdict. The heap estimator permits at most 2.5 million pressure allocations and 10 seconds per endpoint for the large fixtures.
 
 ## What a run does
 
-The command builds one Verify gate. For each workload or scenario scale it declares two producers.
+The command builds one Verify gate. For each workload or scenario scale it declares three producers.
 
 1. `parity-<id>` runs one case on a Verify worker. The case builds the same scene in every framework and compares the tree snapshots.
 2. `timing-<id>` runs one benchmark collection in a fresh Verify worker process. It runs exclusively,
    only after its parity case passes. Allocation and collection inside that workload remain timed;
    prior unrelated collections cannot leave their allocation debt in its process.
+3. `memory-<id>` runs the Compose lifecycle in a fresh worker after parity. It records mounted and teardown heap measurements outside timing. A CPU calibration failure does not block it. It does not run in `--verify` mode.
 
 A collection has one member for each framework. The members run in an order that rotates by one position for each workload.
-The collection measures a fixed CPU workload, the yardstick, before and after the members. A drifting yardstick marks the members unsupported.
+Before calibration, the worker primes each member with one unmeasured complete sample through Verify. This prepares the fixture and its lifecycle before the first CPU reference. The collection then keeps all declared warmup and measured samples. It measures a fixed CPU workload, the yardstick, before and after the members. Each endpoint warms up for 16 batches, then records 32 samples of 64 calls each, expressed as time per call. Median drift above 15 percent marks the members unsupported.
 Scene and entity members use 31 complete measured samples. The shared suite owns that budget;
 individual scenarios own their inputs and warmup. This spans multiple allocation/collection cycles
 instead of allowing a seven-sample median to depend on one short allocation phase. It reduces
