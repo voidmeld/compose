@@ -12,6 +12,7 @@ export type Value = {
 	item: string?,
 	output: string?,
 	args: { Literal }?,
+	fields: { string }?,
 	token: string?,
 }
 

@@ -46,6 +46,7 @@ local function copyValue(value: Value): Value
 		item = value.item,
 		output = value.output,
 		args = copyArgs(value.args),
+		fields = if value.fields then table.clone(value.fields) else nil,
 		token = value.token,
 	}
 end
@@ -239,6 +240,20 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 		if args then
 			for _, argument in args do
 				assert(plain(argument, 0), `{key} output arguments must be plain data`)
+			end
+		end
+		local passed = property.fields
+		if passed then
+			local list = assert(collection, `{key} passes item fields outside a collection template`)
+			local declared = list.fields
+			if declared then
+				for _, name in passed do
+					local found = false
+					for _, entry in declared do
+						found = found or entry.id == name
+					end
+					assert(found, `{key} passes unknown item field {name}`)
+				end
 			end
 		end
 	else

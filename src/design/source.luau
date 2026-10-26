@@ -135,13 +135,21 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			return `function(use) return use(current).{item} end`
 		elseif output then
 			local args = property.args
+			local passed = property.fields
 			local packed: Record = {}
 			if args then
 				for index, argument in args do
 					packed[index] = argument
 				end
 			end
-			local list = if args then string.sub(literal(packed), 3, -3) else "..."
+			local list = if args then string.sub(literal(packed), 3, -3) else if passed then "" else "..."
+			if passed then
+				local reads: { string } = {}
+				for _, name in passed do
+					table.insert(reads, `current:peek().{name}`)
+				end
+				list = if list == "" then table.concat(reads, ", ") else `{list}, {table.concat(reads, ", ")}`
+			end
 			return `function(...) if props.{output} then props.{output}({list}) end end`
 		end
 		local call = assert(library.token, `{library.name} has no theme tokens`)
@@ -449,22 +457,39 @@ function source.parse(code: string, library: Library): Types.Document
 			take(id)
 			take "("
 			local args: { Literal }? = nil
+			local passed: { string }? = nil
 			if peek() == "..." then
 				take "..."
 			else
 				local supplied: { Literal } = {}
+				local fields: { string } = {}
 				while peek() ~= ")" do
-					table.insert(supplied, plain())
+					if peek() == "current" then
+						take "current"
+						take ":"
+						take "peek"
+						take "("
+						take ")"
+						take "."
+						table.insert(fields, name())
+					else
+						table.insert(supplied, plain())
+					end
 					if peek() == "," then
 						take ","
 					end
 				end
-				args = supplied
+				if #supplied > 0 or #fields == 0 then
+					args = supplied
+				end
+				if #fields > 0 then
+					passed = fields
+				end
 			end
 			take ")"
 			take "end"
 			take "end"
-			return { output = id, args = args }, nil
+			return { output = id, args = args, fields = passed }, nil
 		end
 		local tokenCall = library.token
 		if tokenCall and tokens[at] and tokens[at].kind == "name" then

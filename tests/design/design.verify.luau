@@ -223,6 +223,46 @@ describe("Compose Design documents", function()
 		expect(parsed.root.children[1].props.text.literal):toBe "Inside"
 	end)
 
+	it("passes item fields as output arguments from a row template", function()
+		local value = Design.document.new("Pick", library, "Stack")
+		value = Design.document.setContract(value, library, {
+			inputs = {
+				{ id = "rows", kind = "readable", type = "list", preview = rowsPreview, fields = rowFields },
+			},
+			outputs = { { id = "onPick" } },
+		})
+		local list, row
+		value, list = Design.document.insert(value, library, "n1", "List")
+		value = Design.document.bind(value, library, list, { from = "rows", key = "id" })
+		value, row = Design.document.insert(value, library, list, "Button")
+		value = Design.document.change(value, library, row, "onActivate", { output = "onPick", fields = { "id" } })
+		expect(function()
+			Design.document.change(value, library, row, "onActivate", { output = "onPick", fields = { "missing" } })
+		end):toThrow "unknown item field missing"
+		local picked: { Design.Literal } = {}
+		table.clear(built)
+		Design.render(value, library, {
+			outputs = {
+				onPick = function(args: { Design.Literal })
+					table.insert(picked, args[1])
+				end,
+			},
+		})
+		local listRecord: Built? = nil
+		for _, record in built do
+			if record.kind == "List" then
+				listRecord = record
+			end
+		end
+		local template = assert(assert(listRecord).props.render.template)
+		local button = template(Core.cell(bo)) :: Built
+		assert(button.props.onActivate.callback)()
+		expect(picked):toEqual { "b" }
+		local code = Design.emit(value, library)
+		expect(string.find(code, "props.onPick(current:peek().id)", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+	end)
+
 	it("emits a named component and reads it back", function()
 		local value = sample()
 		local code = Design.emit(value, library, { name = "Scores" })

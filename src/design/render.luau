@@ -65,6 +65,27 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 		elseif field then
 			return { readable = itemField(assert(item, "Item bindings need a template"), field) }
 		elseif output then
+			local passed = property.fields
+			if passed then
+				local row = assert(item, "Item fields need a template")
+				local fixedArgs = property.args
+				return {
+					callback = function()
+						local handler = outputs[output]
+						if handler then
+							local args: { Literal } = if fixedArgs then table.clone(fixedArgs) else {}
+							local current = row:peek()
+							for _, name in passed do
+								local fieldValue = current[name]
+								if fieldValue ~= nil then
+									table.insert(args, fieldValue)
+								end
+							end
+							handler(args)
+						end
+					end,
+				}
+			end
 			local fixed = property.args
 			return {
 				callback = function(...: Literal)
