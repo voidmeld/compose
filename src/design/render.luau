@@ -184,11 +184,20 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			end
 		elseif kind.children == "template" then
 			if bind and template then
+				local rowId = bind.row or template.id
+				local rowNode = template
+				for _, child in node.children do
+					if child.id == rowId then
+						rowNode = child
+					else
+						table.insert(children, build(child, item))
+					end
+				end
 				local rows: ReadOnlyValue<{ Row }> = Core.cell(rowsOf(inputs[bind.from]))
 				props[assert(kind.source, `{node.kind} names no list property`)] = { rows = rows, key = bind.key }
 				props[assert(kind.template, `{node.kind} names no template property`)] = {
 					template = function(row: ReadOnlyValue<Row>): unknown
-						return build(template, row)
+						return build(rowNode, row)
 					end,
 				}
 			end

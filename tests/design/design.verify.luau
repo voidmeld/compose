@@ -749,6 +749,33 @@ describe("Compose Design views as code", function()
 		expect(string.find(withState, 'local state = { detent = Toy.cell "hug" }', 1, true) ~= nil):toBe(true)
 	end)
 
+	it("keeps static children beside a template row", function()
+		local value = sample()
+		value = Design.document.bind(value, library, "n3", { from = "rows", key = "id", row = "n4" })
+		local empty
+		value, empty = Design.document.insert(value, library, "n3", "Label")
+		value = Design.document.change(value, library, empty, "text", { literal = "No rows yet" })
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'text = "No rows yet"', 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, library)
+		expect(#parsed.root.children[2].children):toBe(2)
+		expect(Design.emit(parsed, library)):toBe(code)
+		table.clear(built)
+		local tokens: Design.RenderContext = {
+			token = function(_name: string): Design.Literal
+				return 8
+			end,
+		}
+		Design.render(value, library, tokens)
+		local list: Built? = nil
+		for _, record in built do
+			if record.kind == "List" then
+				list = record
+			end
+		end
+		expect(#assert(list).children):toBe(1)
+	end)
+
 	it("refuses conditions, names and state the contract cannot back", function()
 		local value, toy = view()
 		expect(refused(function()

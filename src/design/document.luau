@@ -422,13 +422,24 @@ function document.validate(value: Document, library: Library): Document
 			assert(#node.children <= 1 and node.bind == nil, `{node.kind} holds one content node`)
 			assert(kind.slot ~= nil, `{node.kind} names no content property`)
 		elseif kind.children == "template" then
-			assert(#node.children <= 1, `{node.kind} holds one row template`)
 			local bind = node.bind
+			assert(#node.children <= 1 or (bind ~= nil and bind.row ~= nil), `{node.kind} holds one row template`)
 			if bind then
 				local list = assert(inputOf(value, bind.from), `{node.kind} binds unknown input {bind.from}`)
 				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
 				assert(#bind.key > 0, `{node.kind} needs an item key`)
-				nested = list
+				local row = bind.row
+				if row ~= nil then
+					local found = false
+					for _, child in node.children do
+						found = found or child.id == row
+					end
+					assert(found, `{node.kind} repeats unknown row {row}`)
+					rowCollection = list
+					rowId = row
+				else
+					nested = list
+				end
 			else
 				assert(#node.children == 0, `{node.kind} needs a list input for its template`)
 			end
@@ -542,7 +553,8 @@ function document.insert(
 	local container = assert(library.kinds[parent.kind])
 	assert(
 		container.children == "list"
-			or ((container.children == "template" or container.children == "slot") and #parent.children == 0),
+			or ((container.children == "template" or container.children == "slot") and #parent.children == 0)
+			or (container.children == "template" and parent.bind ~= nil and parent.bind.row ~= nil),
 		`{parent.kind} cannot take this node`
 	)
 	local kind = assert(library.kinds[kindName], `Unknown {library.name} kind {kindName}`)

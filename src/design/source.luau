@@ -514,7 +514,19 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				if keyProp then
 					table.insert(body, `{inner}{keyProp} = {literal(bind.key)},`)
 				end
-				table.insert(body, `{inner}{assert(kind.template)} = {rowFunction(template, depth + 1, bind.from)},`)
+				local rowId = bind.row or template.id
+				local rowNode = template
+				for _, child in node.children do
+					if child.id == rowId then
+						rowNode = child
+					end
+				end
+				table.insert(body, `{inner}{assert(kind.template)} = {rowFunction(rowNode, depth + 1, bind.from)},`)
+				for _, child in node.children do
+					if child ~= rowNode then
+						table.insert(body, `{inner}{emit(child, depth + 1)},`)
+					end
+				end
 			end
 		else
 			local rowId = if bind then bind.row or (if template then template.id else nil) else nil
@@ -1100,6 +1112,9 @@ function source.parse(code: string, library: Library): Types.Document
 						prop == (if kind.children == "slot" then kind.slot else kind.template),
 						`{prop} cannot hold a template`
 					)
+					if templated then
+						rowId = template.id
+					end
 					table.insert(result.children, template)
 				elseif property and templated and prop == kind.source then
 					from = assert(property.input, `{prop} must read a list input`)
