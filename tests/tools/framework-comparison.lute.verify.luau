@@ -10,6 +10,8 @@ local WorkloadTypes = require "../../bench/workloads/types"
 local Environment = require "../../bench/cost-model"
 local Lock = require "../../dependencies.lock"
 
+local describe, it, expect = Test.describe, Test.it, Test.expect
+
 local function framework(name: string): Frameworks.Framework
 	return {
 		name = name,
@@ -81,133 +83,135 @@ local function stored(): Benchmark.Stored
 	return { schemaVersion = 1, name = "fixture", measurements = measurements }
 end
 
-Test.it("comparison summary reports medians, Compose ratios, and explicit unsupported reasons", function()
-	local markdown, complete = Report.markdown(
-		stored(),
-		{ subject() },
-		{ framework "compose", framework "other", framework "absent" }
-	)
-	Test.expect(complete):toBe(true)
-	Test.expect(markdown):toContain "| other | 20.000 | 2.00x | 50.000 | 0.50x | 1.000 | 40 | 2 | 3 | 4 |"
-	Test.expect(markdown):toContain "unsupported: No primitive \\| no substitute"
-	Test.expect(Report.median { 4, 1, 3, 2 }):toBe(2.5)
-end)
+describe("framework comparison", function()
+	it("comparison summary reports medians, Compose ratios, and explicit unsupported reasons", function()
+		local markdown, complete = Report.markdown(
+			stored(),
+			{ subject() },
+			{ framework "compose", framework "other", framework "absent" }
+		)
+		expect(complete):toBe(true)
+		expect(markdown):toContain "| other | 20.000 | 2.00x | 50.000 | 0.50x | 1.000 | 40 | 2 | 3 | 4 |"
+		expect(markdown):toContain "unsupported: No primitive \\| no substitute"
+		expect(Report.median { 4, 1, 3, 2 }):toBe(2.5)
+	end)
 
-Test.it("comparison summary rejects missing supported measurements and handles zero heap baselines", function()
-	local run = stored()
-	table.remove(run.measurements)
-	local markdown, complete = Report.markdown(run, { subject() }, { framework "compose", framework "other" })
-	Test.expect(complete):toBe(false)
-	Test.expect(markdown):toContain "missing evidence"
-	local zero = stored()
-	zero.measurements[3].samples = { 0, 0 }
-	local rendered, hasEvidence = Report.markdown(zero, { subject() }, { framework "compose", framework "other" })
-	Test.expect(hasEvidence):toBe(true)
-	Test.expect(rendered):toContain "n/a (zero baseline)"
-end)
+	it("comparison summary rejects missing supported measurements and handles zero heap baselines", function()
+		local run = stored()
+		table.remove(run.measurements)
+		local markdown, complete = Report.markdown(run, { subject() }, { framework "compose", framework "other" })
+		expect(complete):toBe(false)
+		expect(markdown):toContain "missing evidence"
+		local zero = stored()
+		zero.measurements[3].samples = { 0, 0 }
+		local rendered, hasEvidence = Report.markdown(zero, { subject() }, { framework "compose", framework "other" })
+		expect(hasEvidence):toBe(true)
+		expect(rendered):toContain "n/a (zero baseline)"
+	end)
 
-Test.it("normal benchmark entries keep only the required bare and Compose lanes", function()
-	local names: { string } = {}
-	for _, candidate in Frameworks.available() do
-		table.insert(names, candidate.name)
-	end
-	Test.expect(table.concat(names, ",")):toBe "bare,compose"
-end)
-
-Test.it("optional comparison lanes classify every runtime workload and pin benchmark-only sources", function()
-	local names: { [string]: string } = {
-		roact = "roact",
-		seam = "seam",
-		signals = "signals",
-		["react-reflex"] = "reflex",
-		["fusion-charm"] = "charm",
-		["react-upstream"] = "react-upstream",
-	}
-	local seen: { [string]: boolean } = {}
-	for _, candidate in Frameworks.available(true) do
-		local dependencyName = names[candidate.name]
-		if not dependencyName then
-			continue
+	it("normal benchmark entries keep only the required bare and Compose lanes", function()
+		local names: { string } = {}
+		for _, candidate in Frameworks.available() do
+			table.insert(names, candidate.name)
 		end
-		seen[candidate.name] = true
-		local found = false
-		for _, dependency in Lock.dependencies do
-			if dependency.name == dependencyName then
-				found = true
-				Test.expect(#dependency.commit):toBe(40)
-				Test.expect(#dependency.tree):toBe(40)
-				Test.expect(dependency.rights):toBe "MIT"
-				for _, surface in dependency.surfaces do
-					Test.expect(surface.role):toBe "benchmark"
+		expect(table.concat(names, ",")):toBe "bare,compose"
+	end)
+
+	it("optional comparison lanes classify every runtime workload and pin benchmark-only sources", function()
+		local names: { [string]: string } = {
+			roact = "roact",
+			seam = "seam",
+			signals = "signals",
+			["react-reflex"] = "reflex",
+			["fusion-charm"] = "charm",
+			["react-upstream"] = "react-upstream",
+		}
+		local seen: { [string]: boolean } = {}
+		for _, candidate in Frameworks.available(true) do
+			local dependencyName = names[candidate.name]
+			if not dependencyName then
+				continue
+			end
+			seen[candidate.name] = true
+			local found = false
+			for _, dependency in Lock.dependencies do
+				if dependency.name == dependencyName then
+					found = true
+					expect(#dependency.commit):toBe(40)
+					expect(#dependency.tree):toBe(40)
+					expect(dependency.rights):toBe "MIT"
+					for _, surface in dependency.surfaces do
+						expect(surface.role):toBe "benchmark"
+					end
+				end
+			end
+			expect(found):toBe(true)
+			expect(#Workloads.all):toBe(24)
+			for _, workload in Workloads.all do
+				local implemented = workload.cases[candidate.name] ~= nil
+				local reasons: { [string]: string } = workload.unsupported or {}
+				local reason = reasons[candidate.name]
+				expect(implemented ~= (reason ~= nil)):toBe(true)
+				if reason then
+					expect(#reason > 20):toBe(true)
 				end
 			end
 		end
-		Test.expect(found):toBe(true)
-		Test.expect(#Workloads.all):toBe(24)
-		for _, workload in Workloads.all do
-			local implemented = workload.cases[candidate.name] ~= nil
-			local reasons: { [string]: string } = workload.unsupported or {}
-			local reason = reasons[candidate.name]
-			Test.expect(implemented ~= (reason ~= nil)):toBe(true)
-			if reason then
-				Test.expect(#reason > 20):toBe(true)
-			end
+		for name in names do
+			expect(seen[name]):toBe(true)
 		end
-	end
-	for name in names do
-		Test.expect(seen[name]):toBe(true)
-	end
-end)
+	end)
 
-Test.it("comparison host models native vector defaults and ancestry", function()
-	local environment = Environment.create()
-	local container = environment.container()
-	local parent = environment.globals.Instance.new "Frame"
-	local part = environment.globals.Instance.new "Part"
-	Test.expect(environment.globals.typeof(part.Position)):toBe "Vector3"
-	parent.Parent = container
-	part.Parent = parent
-	Test.expect(part:IsDescendantOf(environment.globals.game)):toBe(true)
-	local changes = 0
-	local connection = environment.signal(part, "AncestryChanged"):Connect(function()
-		changes += 1
+	it("comparison host models native vector defaults and ancestry", function()
+		local environment = Environment.create()
+		local container = environment.container()
+		local parent = environment.globals.Instance.new "Frame"
+		local part = environment.globals.Instance.new "Part"
+		expect(environment.globals.typeof(part.Position)):toBe "Vector3"
+		parent.Parent = container
+		part.Parent = parent
+		expect(part:IsDescendantOf(environment.globals.game)):toBe(true)
+		local changes = 0
+		local connection = environment.signal(part, "AncestryChanged"):Connect(function()
+			changes += 1
+		end)
+		part.Parent = parent
+		expect(changes):toBe(0)
+		part.Parent = container
+		expect(changes):toBe(1)
+		part.Parent = nil
+		expect(part:IsDescendantOf(environment.globals.game)):toBe(false)
+		connection:Disconnect()
+		parent:Destroy()
+		part:Destroy()
+		container:Destroy()
+		expect(environment.liveConnections()):toBe(0)
+		expect(environment.liveInstances()):toBe(1)
 	end)
-	part.Parent = parent
-	Test.expect(changes):toBe(0)
-	part.Parent = container
-	Test.expect(changes):toBe(1)
-	part.Parent = nil
-	Test.expect(part:IsDescendantOf(environment.globals.game)):toBe(false)
-	connection:Disconnect()
-	parent:Destroy()
-	part:Destroy()
-	container:Destroy()
-	Test.expect(environment.liveConnections()):toBe(0)
-	Test.expect(environment.liveInstances()):toBe(1)
-end)
 
-Test.it("calibration rejection keeps raw measurements but cannot supply comparison values", function()
-	local harness = Verify.createHarness { now = os.clock }
-	local function measure(context: Verify.Context, name: string)
-		context:measure("fixture", name, {
-			samples = { 1, 2 },
-			unit = "microseconds",
-			context = { environment = "fixture", signal = name, timing = "observed" },
-		}, { unit = "microseconds", minimumSamples = 2, measureOnly = true })
-	end
-	harness:case("accepted", function(context)
-		measure(context, "accepted")
+	it("calibration rejection keeps raw measurements but cannot supply comparison values", function()
+		local harness = Verify.createHarness { now = os.clock }
+		local function measure(context: Verify.Context, name: string)
+			context:measure("fixture", name, {
+				samples = { 1, 2 },
+				unit = "microseconds",
+				context = { environment = "fixture", signal = name, timing = "observed" },
+			}, { unit = "microseconds", minimumSamples = 2, measureOnly = true })
+		end
+		harness:case("accepted", function(context)
+			measure(context, "accepted")
+		end)
+		harness:case("rejected", function(context)
+			measure(context, "rejected")
+			context:unsupported "CPU reference drift"
+		end)
+		local report = harness:run { executor = "fixture" }
+		expect(report.unsupported):toBe(1)
+		expect(#Benchmark.storeReport("raw", report).measurements):toBe(2)
+		local accepted = Report.store("qualified", report)
+		expect(#accepted.measurements):toBe(1)
+		expect(accepted.measurements[1].name):toBe "accepted"
 	end)
-	harness:case("rejected", function(context)
-		measure(context, "rejected")
-		context:unsupported "CPU reference drift"
-	end)
-	local report = harness:run { executor = "fixture" }
-	Test.expect(report.unsupported):toBe(1)
-	Test.expect(#Benchmark.storeReport("raw", report).measurements):toBe(2)
-	local accepted = Report.store("qualified", report)
-	Test.expect(#accepted.measurements):toBe(1)
-	Test.expect(accepted.measurements[1].name):toBe "accepted"
 end)
 
 return nil
