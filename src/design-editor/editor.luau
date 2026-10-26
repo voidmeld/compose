@@ -367,33 +367,28 @@ return function(ui: UI.UI)
 		bind("Delete", function()
 			session.remove()
 		end, { { ui.values.enum("KeyCode", "Delete") }, { ui.values.enum("KeyCode", "Backspace") } })
+		local function command(key: string, shifted: boolean?): { { unknown } }
+			local chords: { { unknown } } = {}
+			for _, modifier in { "LeftControl", "LeftMeta", "LeftSuper" } do
+				local chord = { ui.values.enum("KeyCode", key), ui.values.enum("KeyCode", modifier) }
+				if shifted then
+					table.insert(chord, ui.values.enum("KeyCode", "LeftShift"))
+				end
+				table.insert(chords, chord)
+			end
+			return chords
+		end
 		bind("Duplicate", function()
 			session.duplicate()
-		end, {
-			{ ui.values.enum("KeyCode", "D"), ui.values.enum("KeyCode", "LeftControl") },
-			{ ui.values.enum("KeyCode", "D"), ui.values.enum("KeyCode", "LeftMeta") },
-		})
+		end, command "D")
 		bind("Undo", function()
 			session.undo()
-		end, {
-			{ ui.values.enum("KeyCode", "Z"), ui.values.enum("KeyCode", "LeftControl") },
-			{ ui.values.enum("KeyCode", "Z"), ui.values.enum("KeyCode", "LeftMeta") },
-		})
+		end, command "Z")
+		local redoKeys = command("Z", true)
+		table.insert(redoKeys, { ui.values.enum("KeyCode", "Y"), ui.values.enum("KeyCode", "LeftControl") })
 		bind("Redo", function()
 			session.redo()
-		end, {
-			{ ui.values.enum("KeyCode", "Y"), ui.values.enum("KeyCode", "LeftControl") },
-			{
-				ui.values.enum("KeyCode", "Z"),
-				ui.values.enum("KeyCode", "LeftControl"),
-				ui.values.enum("KeyCode", "LeftShift"),
-			},
-			{
-				ui.values.enum("KeyCode", "Z"),
-				ui.values.enum("KeyCode", "LeftMeta"),
-				ui.values.enum("KeyCode", "LeftShift"),
-			},
-		})
+		end, redoKeys)
 		bind("Fit", function()
 			view.fit()
 		end, { { ui.values.enum("KeyCode", "One"), ui.values.enum("KeyCode", "LeftShift") } })
@@ -402,16 +397,10 @@ return function(ui: UI.UI)
 		end, { { ui.values.enum("KeyCode", "Zero"), ui.values.enum("KeyCode", "LeftShift") } })
 		bind("ZoomIn", function()
 			view.zoomTo(view.zoom:peek() * 1.25)
-		end, {
-			{ ui.values.enum("KeyCode", "Equals"), ui.values.enum("KeyCode", "LeftControl") },
-			{ ui.values.enum("KeyCode", "Equals"), ui.values.enum("KeyCode", "LeftMeta") },
-		})
+		end, command "Equals")
 		bind("ZoomOut", function()
 			view.zoomTo(view.zoom:peek() / 1.25)
-		end, {
-			{ ui.values.enum("KeyCode", "Minus"), ui.values.enum("KeyCode", "LeftControl") },
-			{ ui.values.enum("KeyCode", "Minus"), ui.values.enum("KeyCode", "LeftMeta") },
-		})
+		end, command "Minus")
 		bind("Parent", function()
 			session.selectRelative "parent"
 		end, { { ui.values.enum("KeyCode", "Escape") } })
