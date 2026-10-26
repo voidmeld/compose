@@ -60,11 +60,21 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 		return inputs[id] == true
 	end
 	local references: { [string]: Core.Value<unknown> } = {}
+	local names: { [string]: string } = {}
 	local function collect(node: Types.Node)
+		names[node.id] = node.name
 		for _, property in node.props do
 			local target = property.node
 			if target ~= nil and references[target] == nil then
 				references[target] = Core.cell(nil :: unknown)
+			end
+			local candidates = property.nodes
+			if candidates then
+				for _, candidate in candidates do
+					if references[candidate] == nil then
+						references[candidate] = Core.cell(nil :: unknown)
+					end
+				end
 			end
 		end
 		for _, child in node.children do
@@ -111,6 +121,24 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 		local target = property.node
 		if target ~= nil then
 			return { node = references[target] }
+		end
+		local source = property.nodeFrom
+		if source ~= nil then
+			local byName: { [string]: Core.Value<unknown> } = {}
+			local candidates = property.nodes
+			if candidates then
+				for _, candidate in candidates do
+					byName[names[candidate]] = references[candidate]
+				end
+			end
+			local held = states[source]
+			return {
+				node = Core.formula(function(use: Use): unknown
+					local chosen = if held ~= nil then use(held) else inputs[source]
+					local cell = if type(chosen) == "string" then byName[chosen] else nil
+					return if cell then use(cell) else nil
+				end),
+			}
 		end
 		local stateId = property.state
 		if stateId ~= nil then

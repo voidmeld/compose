@@ -14,6 +14,8 @@ export type Value = {
 	args: { Literal }?,
 	fields: { string }?,
 	node: string?,
+	nodeFrom: string?,
+	nodes: { string }?,
 	token: string?,
 	state: string?,
 }

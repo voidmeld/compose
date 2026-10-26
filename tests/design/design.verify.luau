@@ -776,6 +776,40 @@ describe("Compose Design views as code", function()
 		expect(#assert(list).children):toBe(1)
 	end)
 
+	it("follows a node chosen by name through state", function()
+		local toy = viewLibrary()
+		local source: Design.State = { id = "source", type = "string", initial = "Stage" }
+		local value = Design.document.setState(Design.document.new("Lucky", toy, "Stack"), toy, { source })
+		local stage: string, rewards: string, flash: string
+		value, stage = Design.document.insert(value, toy, "n1", "Label")
+		value = Design.document.rename(value, toy, stage, "Stage")
+		value, rewards = Design.document.insert(value, toy, "n1", "Label")
+		value = Design.document.rename(value, toy, rewards, "Rewards")
+		value, flash = Design.document.insert(value, toy, "n1", "Flash")
+		value = Design.document.change(value, toy, flash, "target", { nodeFrom = "source", nodes = { stage, rewards } })
+		local code = Design.emit(value, toy)
+		expect(string.find(code, "local named = { Rewards = refs.n3, Stage = refs.n2 }", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "local chosen = named[use(state.source)]", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
+		table.clear(built)
+		Design.render(value, toy)
+		local target: Built? = nil
+		local chosen: unknown = nil
+		for _, record in built do
+			if record.kind == "Flash" then
+				local resolved = record.props.target.node
+				chosen = if resolved then resolved:peek() else nil
+			elseif record.name == "Stage" then
+				target = record
+			end
+		end
+		expect(chosen == target and target ~= nil):toBe(true)
+		local unknownState: Design.Value = { nodeFrom = "missing", nodes = { stage } }
+		expect(refused(function()
+			Design.document.change(value, toy, flash, "target", unknownState)
+		end)):toBe(true)
+	end)
+
 	it("refuses conditions, names and state the contract cannot back", function()
 		local value, toy = view()
 		expect(refused(function()

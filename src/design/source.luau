@@ -254,12 +254,31 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	table.insert(lines, "")
 	local referenced: { [string]: boolean } = {}
 	local referencedIds: { string } = {}
+	local chosenNames: { [string]: string } = {}
+	local nodeNames: { [string]: string } = {}
+	local function nameNodes(node: Node)
+		nodeNames[node.id] = node.name
+		for _, child in node.children do
+			nameNodes(child)
+		end
+	end
+	nameNodes(value.root)
 	local function collect(node: Node)
 		for _, property in node.props do
 			local target = property.node
 			if target ~= nil and not referenced[target] then
 				referenced[target] = true
 				table.insert(referencedIds, target)
+			end
+			local candidates = property.nodes
+			if candidates then
+				for _, candidate in candidates do
+					chosenNames[nodeNames[candidate]] = candidate
+					if not referenced[candidate] then
+						referenced[candidate] = true
+						table.insert(referencedIds, candidate)
+					end
+				end
 			end
 		end
 		for _, child in node.children do
@@ -425,6 +444,19 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local stateId = property.state
 		if stateId ~= nil then
 			return `state.{stateId}`
+		end
+		local source = property.nodeFrom
+		if source ~= nil then
+			local read
+			if Document.stateOf(value, source) ~= nil then
+				read = `use(state.{source})`
+			elseif assert(Document.input(value, source)).kind == "value" then
+				read = `props.{source}`
+			else
+				read = `use(props.{source})`
+			end
+			return `function(use)\n{tabs(depth + 1)}local chosen = named[{read}]\n`
+				.. `{tabs(depth + 1)}return if chosen then use(chosen) else nil\n{tabs(depth)}end`
 		end
 		local current, input, item, output, token =
 			property.literal, property.input, property.item, property.output, property.token
@@ -593,6 +625,18 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		table.insert(lines, "\t\trefs[id]:set(node)")
 		table.insert(lines, "\t\treturn node")
 		table.insert(lines, "\tend")
+		local chosen: { string } = {}
+		for name in chosenNames do
+			table.insert(chosen, name)
+		end
+		table.sort(chosen)
+		if #chosen > 0 then
+			local entries: { string } = {}
+			for _, name in chosen do
+				table.insert(entries, `{name} = refs.{chosenNames[name]}`)
+			end
+			table.insert(lines, "\tlocal named = { " .. table.concat(entries, ", ") .. " }")
+		end
 	end
 	if state and #state > 0 and readsState then
 		local newCell = assert(library.newCell, `{library.name} cannot hold state; it names no cell constructor`)
@@ -825,6 +869,7 @@ function source.parse(code: string, library: Library): Types.Document
 	end
 	local rows: { [string]: Node } = {}
 	local typedLiterals: { [string]: Literal } = {}
+	local namedRefs: { [string]: string } = {}
 	local function plain(): Literal
 		if peek() == "function" then
 			take "function"
@@ -920,7 +965,45 @@ function source.parse(code: string, library: Library): Types.Document
 		elseif peek() == "function" then
 			take "function"
 			take "("
-			if peek() == "use" then
+			if peek() == "use" and peek(2) == "local" then
+				take "use"
+				take ")"
+				take "local"
+				take "chosen"
+				take "="
+				take "named"
+				take "["
+				local wrapped = peek() == "use"
+				if wrapped then
+					take "use"
+					take "("
+				end
+				local holder = name()
+				take "."
+				local source = name()
+				if wrapped then
+					take ")"
+				end
+				assert(holder == "props" or holder == "state", "A chosen node follows an input or state")
+				take "]"
+				take "return"
+				take "if"
+				take "chosen"
+				take "then"
+				take "use"
+				take "("
+				take "chosen"
+				take ")"
+				take "else"
+				take "nil"
+				take "end"
+				local candidates: { string } = {}
+				for _, id in namedRefs do
+					table.insert(candidates, id)
+				end
+				table.sort(candidates)
+				return { nodeFrom = source, nodes = candidates }, nil
+			elseif peek() == "use" then
 				take "use"
 				take ")"
 				take "return"
@@ -1233,7 +1316,23 @@ function source.parse(code: string, library: Library): Types.Document
 	take()
 	take "function"
 	while not (peek() == "return" and peek(1) ~= "node") do
-		if peek() == "local" and tokens[at + 1] and tokens[at + 1].kind == "name" and peek(2) == ":" then
+		if peek() == "local" and peek(1) == "named" and peek(2) == "=" then
+			take "local"
+			take "named"
+			take "="
+			take "{"
+			while peek() ~= "}" do
+				local chosenName = name()
+				take "="
+				take "refs"
+				take "."
+				namedRefs[chosenName] = name()
+				if peek() == "," then
+					take ","
+				end
+			end
+			take "}"
+		elseif peek() == "local" and tokens[at + 1] and tokens[at + 1].kind == "name" and peek(2) == ":" then
 			take "local"
 			local literalName = name()
 			take ":"
@@ -1265,6 +1364,15 @@ function source.parse(code: string, library: Library): Types.Document
 			local target = property.node
 			if target ~= nil then
 				property.node = assert(captured[target], `refs.{target} names no captured node`)
+			end
+			local candidates = property.nodes
+			if candidates then
+				local remapped: { string } = {}
+				for _, candidate in candidates do
+					local mapped: string = assert(captured[candidate], `refs.{candidate} names no captured node`)
+					table.insert(remapped, mapped)
+				end
+				property.nodes = remapped
 			end
 		end
 		for _, child in current.children do
