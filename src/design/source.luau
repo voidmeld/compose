@@ -99,6 +99,19 @@ local function datatypeLiteral(datatype: string, value: Literal): string
 	return `{datatype}.new({table.concat(parts, ", ")})`
 end
 
+local function fieldsLiteral(fields: { Types.ItemField }): Record
+	local list: Record = {}
+	for _, field in fields do
+		local item: Record = { id = field.id, type = field.type }
+		local nested = field.fields
+		if nested then
+			item.fields = fieldsLiteral(nested)
+		end
+		list[#list + 1] = item
+	end
+	return list
+end
+
 local function contractLiteral(contract: Types.Contract): Literal
 	local inputs: Record = {}
 	for _, input in contract.inputs do
@@ -112,12 +125,7 @@ local function contractLiteral(contract: Types.Contract): Literal
 		end
 		local fields = input.fields
 		if fields then
-			local list: Record = {}
-			for _, field in fields do
-				local item: Record = { id = field.id, type = field.type }
-				list[#list + 1] = item
-			end
-			entry.fields = list
+			entry.fields = fieldsLiteral(fields)
 		end
 		inputs[#inputs + 1] = entry
 	end
@@ -324,13 +332,35 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		rowNames[name] = true
 		return name
 	end
+	local scopes: { { fields: { Types.ItemField }? } } = {}
+	local function fieldsOf(from: string): { Types.ItemField }?
+		local declared = Document.input(value, from)
+		if declared ~= nil then
+			return declared.fields
+		end
+		local enclosing = scopes[#scopes]
+		local around = if enclosing then enclosing.fields else nil
+		if around ~= nil then
+			for _, field in around do
+				if field.id == from then
+					return field.fields
+				end
+			end
+		end
+		return nil
+	end
+	local function sourceOf(from: string, depth: number): string
+		if Document.input(value, from) ~= nil then
+			return `props.{from}`
+		end
+		return returning("use", `use(current).{from}`, depth)
+	end
 	local function itemType(template: Node, from: string): string?
 		local known = rowItemTypes[template.id]
 		if known ~= nil then
 			return known
 		end
-		local declared = Document.input(value, from)
-		local fields = if declared then declared.fields else nil
+		local fields = fieldsOf(from)
 		if fields == nil or #fields == 0 then
 			return nil
 		end
@@ -344,9 +374,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		if typed == nil then
 			return returning("row", "row." .. bind.key, depth)
 		end
-		local declared = assert(Document.input(value, bind.from))
 		local keyType = "string"
-		local fields = declared.fields
+		local fields = fieldsOf(bind.from)
 		if fields then
 			for _, field in fields do
 				if field.id == bind.key then
@@ -359,12 +388,17 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	local function rowFunction(template: Node, depth: number, from: string): string
 		local typed = itemType(template, from)
 		local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
+		table.insert(scopes, { fields = fieldsOf(from) })
+		local written
 		if not rowFunctions then
-			return returning(parameter, emit(template, depth + 1), depth)
+			written = returning(parameter, emit(template, depth + 1), depth)
+		else
+			local name = unique(rowBase(template))
+			table.insert(rowDefinitions, `\tlocal function {name}({parameter})\n\t\treturn {emit(template, 2)}\n\tend`)
+			written = name
 		end
-		local name = unique(rowBase(template))
-		table.insert(rowDefinitions, `\tlocal function {name}({parameter})\n\t\treturn {emit(template, 2)}\n\tend`)
-		return name
+		table.remove(scopes)
+		return written
 	end
 	local function layout(current: Literal, depth: number, used: number): string
 		if type(current) ~= "table" then
@@ -557,7 +591,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			end
 		elseif kind.children == "template" then
 			if bind and template then
-				table.insert(body, `{inner}{assert(kind.source)} = props.{bind.from},`)
+				table.insert(body, `{inner}{assert(kind.source)} = {sourceOf(bind.from, depth + 1)},`)
 				local keyProp = kind.key
 				if keyProp then
 					table.insert(body, `{inner}{keyProp} = {literal(bind.key)},`)
@@ -584,7 +618,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 					local keyedCall = assert(library.keyed)
 					local field = tabs(depth + 2)
 					table.insert(body, `{inner}{keyedCall} ` .. "{")
-					table.insert(body, `{field}from = props.{bind.from},`)
+					table.insert(body, `{field}from = {sourceOf(bind.from, depth + 2)},`)
 					table.insert(body, `{field}key = {keyFunction(child, bind, depth + 2)},`)
 					table.insert(body, `{field}render = {rowFunction(child, depth + 2, bind.from)},`)
 					table.insert(body, `{inner}},`)
@@ -595,6 +629,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 					local source
 					if Document.stateOf(value, condition) ~= nil then
 						source = `state.{condition}`
+					elseif Document.input(value, condition) == nil then
+						source = returning("use", `use(current).{condition} == true`, depth + 1)
 					elseif assert(Document.input(value, condition)).kind == "value" then
 						source = returning("", `props.{condition} == true`, depth + 1)
 					else
@@ -878,19 +914,24 @@ local function stateFrom(header: Record): { Types.State }?
 	return state
 end
 
+local function fieldsFrom(entry: Record): { Types.ItemField }
+	local declared: { Types.ItemField } = {}
+	for _, field in list(entry, "fields") do
+		table.insert(declared, {
+			id = text(field, "id"),
+			type = inputType(text(field, "type")),
+			fields = if field.fields ~= nil then fieldsFrom(field) else nil,
+		})
+	end
+	return declared
+end
+
 local function contractOf(header: Record): Types.Contract
 	local found = header.contract
 	assert(type(found) == "table", "The design header needs a contract")
 	local inputs: { Types.Input } = {}
 	for _, entry in list(found, "inputs") do
-		local fields: { Types.ItemField }? = nil
-		if entry.fields ~= nil then
-			local declared: { Types.ItemField } = {}
-			for _, field in list(entry, "fields") do
-				table.insert(declared, { id = text(field, "id"), type = inputType(text(field, "type")) })
-			end
-			fields = declared
-		end
+		local fields: { Types.ItemField }? = if entry.fields ~= nil then fieldsFrom(entry) else nil
 		table.insert(inputs, {
 			id = text(entry, "id"),
 			kind = inputKind(text(entry, "kind")),
@@ -1271,7 +1312,7 @@ function source.parse(code: string, library: Library): Types.Document
 					end
 					table.insert(result.children, template)
 				elseif property and templated and prop == kind.source then
-					from = assert(property.input, `{prop} must read a list input`)
+					from = assert(property.input or property.item, `{prop} must read a list input or item field`)
 				elseif property and templated and prop == kind.key then
 					local current = property.literal
 					assert(type(current) == "string", "Item keys are text")
@@ -1285,7 +1326,23 @@ function source.parse(code: string, library: Library): Types.Document
 				if library.show ~= nil and lead == library.show then
 					take "("
 					local condition: string
-					if peek() == "function" then
+					if peek() == "function" and peek(2) == "use" then
+						take "function"
+						take "("
+						take "use"
+						take ")"
+						take "return"
+						take "use"
+						take "("
+						take "current"
+						take ")"
+						take "."
+						condition = name()
+						take "="
+						take "="
+						take "true"
+						take "end"
+					elseif peek() == "function" then
 						take "function"
 						take "("
 						take ")"
@@ -1317,9 +1374,9 @@ function source.parse(code: string, library: Library): Types.Document
 					take "{"
 					take "from"
 					take "="
-					take "props"
-					take "."
-					local list = name()
+					local listValue = assert(value(), "A keyed list reads a list")
+					local list =
+						assert(listValue.input or listValue.item, "A keyed list reads a list input or item field")
 					take ","
 					take "key"
 					take "="

@@ -231,6 +231,72 @@ describe("Compose Design documents", function()
 		library.tags = nil
 	end)
 
+	it("binds a row's own list and shows row content by an item field", function()
+		library.show = "Toy.show"
+		local rowFields: { Design.ItemField } = { { id = "id", type = "string" }, { id = "label", type = "string" } }
+		local pageFields: { Design.ItemField } = {
+			{ id = "id", type = "string" },
+			{ id = "sent", type = "boolean" },
+			{ id = "rows", type = "list", fields = rowFields },
+		}
+		local first: Design.Row = { id = "a", label = "Alpha" }
+		local second: Design.Row = { id = "b", label = "Beta" }
+		local entries: Design.Row = { first, second }
+		local sentPage: Design.Row = { id = "p1", sent = true, rows = entries }
+		local quietPage: Design.Row = { id = "p2", sent = false, rows = entries }
+		local pages: Design.Row = { sentPage, quietPage }
+		local value = Design.document.new("Board", library, "Stack")
+		value = Design.document.setContract(value, library, {
+			inputs = { { id = "pages", kind = "readable", type = "list", preview = pages, fields = pageFields } },
+			outputs = {},
+		})
+		local outer, page, sent, inner, entry
+		value, outer = Design.document.insert(value, library, "n1", "List")
+		value = Design.document.bind(value, library, outer, { from = "pages", key = "id" })
+		value, page = Design.document.insert(value, library, outer, "Stack")
+		value, sent = Design.document.insert(value, library, page, "Label")
+		value = Design.document.change(value, library, sent, "text", { literal = "Sent" })
+		value = Design.document.showWhen(value, library, sent, "sent")
+		value, inner = Design.document.insert(value, library, page, "List")
+		value = Design.document.bind(value, library, inner, { from = "rows", key = "id" })
+		value, entry = Design.document.insert(value, library, inner, "Label")
+		value = Design.document.change(value, library, entry, "text", { item = "label" })
+		local code = Design.emit(value, library)
+		expect(string.find(code, "use(current).rows", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "use(current).sent == true", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		table.clear(built)
+		Design.render(value, library)
+		local lists: { Built } = {}
+		for _, record in built do
+			if record.kind == "List" then
+				table.insert(lists, record)
+			end
+		end
+		table.clear(built)
+		for _, record in lists do
+			local resolved = record.props.render
+			local template = if resolved then resolved.template else nil
+			if template then
+				template(Core.cell(sentPage))
+				template(Core.cell(quietPage))
+			end
+		end
+		local shown, innerRows = 0, 0
+		for _, record in built do
+			local text = record.props.text
+			if record.kind == "Label" and text ~= nil and text.literal == "Sent" then
+				shown += 1
+			elseif record.kind == "List" then
+				local rows = assert(record.props.from.rows)
+				innerRows += #rows:peek()
+			end
+		end
+		expect(shown):toBe(1)
+		expect(innerRows):toBe(4)
+		library.show = nil
+	end)
+
 	it("undoes and redoes whole edits", function()
 		local first = sample()
 		local history = Design.history(first)

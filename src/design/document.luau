@@ -82,18 +82,20 @@ local function copyNode(node: Node): Node
 	}
 end
 
+local function copyFields(source: { Types.ItemField }): { Types.ItemField }
+	local list: { Types.ItemField } = {}
+	for at, field in source do
+		local nested = field.fields
+		list[at] = { id = field.id, type = field.type, fields = if nested then copyFields(nested) else nil }
+	end
+	return list
+end
+
 local function copyContract(contract: Types.Contract): Types.Contract
 	local inputs: { Types.Input } = {}
 	for index, input in contract.inputs do
-		local fields: { Types.ItemField }? = nil
 		local source = input.fields
-		if source then
-			local list: { Types.ItemField } = {}
-			for at, field in source do
-				list[at] = { id = field.id, type = field.type }
-			end
-			fields = list
-		end
+		local fields: { Types.ItemField }? = if source then copyFields(source) else nil
 		local preview = input.preview
 		inputs[index] = {
 			id = input.id,
@@ -220,6 +222,22 @@ local function checkContract(contract: Types.Contract)
 		assert(not seen[output.id], `Duplicate contract id {output.id}`)
 		seen[output.id] = true
 	end
+end
+
+local function listOf(value: Document, from: string, collection: Types.Input?): Types.Input?
+	local declared = inputOf(value, from)
+	if declared ~= nil then
+		return declared
+	end
+	local fields = if collection then collection.fields else nil
+	if fields ~= nil then
+		for _, field in fields do
+			if field.id == from and field.type == "list" then
+				return { id = from, kind = "readable", type = "list", fields = field.fields }
+			end
+		end
+	end
+	return nil
 end
 
 local function stateOf(value: Document, id: string): Types.State?
@@ -423,6 +441,14 @@ function document.validate(value: Document, library: Library): Document
 			local declared = inputOf(value, condition)
 			local held = stateOf(value, condition)
 			local typed = if declared then declared.type elseif held then held.type else nil
+			local itemFields = if collection then collection.fields else nil
+			if typed == nil and itemFields ~= nil then
+				for _, field in itemFields do
+					if field.id == condition then
+						typed = field.type
+					end
+				end
+			end
 			assert(typed == "boolean", `{node.name} is shown by {condition}, which is not a true or false input`)
 		end
 		for key, property in node.props do
@@ -452,7 +478,7 @@ function document.validate(value: Document, library: Library): Document
 			local bind = node.bind
 			assert(#node.children <= 1 or (bind ~= nil and bind.row ~= nil), `{node.kind} holds one row template`)
 			if bind then
-				local list = assert(inputOf(value, bind.from), `{node.kind} binds unknown input {bind.from}`)
+				local list = assert(listOf(value, bind.from, collection), `{node.kind} binds unknown input {bind.from}`)
 				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
 				assert(#bind.key > 0, `{node.kind} needs an item key`)
 				local row = bind.row
@@ -474,7 +500,7 @@ function document.validate(value: Document, library: Library): Document
 			local bind = node.bind
 			if bind then
 				assert(library.keyed ~= nil, `{library.name} cannot repeat children`)
-				local list = assert(inputOf(value, bind.from), `{node.kind} binds unknown input {bind.from}`)
+				local list = assert(listOf(value, bind.from, collection), `{node.kind} binds unknown input {bind.from}`)
 				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
 				assert(#bind.key > 0, `{node.kind} needs an item key`)
 				local row = bind.row

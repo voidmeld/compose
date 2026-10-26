@@ -102,7 +102,7 @@ export type Library = {
 export type InputKind = "value" | "readable" | "cell"
 export type InputType = "string" | "number" | "boolean" | "color" | "image" | "list" | "record" | "slot"
 
-export type ItemField = { id: string, type: InputType }
+export type ItemField = { id: string, type: InputType, fields: { ItemField }? }
 
 export type Input = {
 	id: string,
