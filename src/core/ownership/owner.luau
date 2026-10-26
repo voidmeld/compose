@@ -6,6 +6,7 @@ local Weak = require "../weak"
 local Inspect = require "./inspect"
 local Reactor = require "../reactive/reactor"
 local watchModule = require "../reactive/watch"
+local NodeCast = require "../reactive/node"
 local Evaluation = require "../reactive/evaluation"
 
 type Dispose = Types.Dispose
@@ -24,10 +25,7 @@ export type Owner = {
 	following: Owner?,
 	release: Dispose?,
 	after: Dispose?,
-	heldRelease: { (subject: unknown) -> () }?,
-	heldSubjects: { unknown }?,
-	holdRelease: ((subject: unknown) -> ())?,
-	holdSubject: unknown,
+	[number]: unknown,
 }
 
 export type Entry = Owner
@@ -84,44 +82,24 @@ local function isOwner(candidate: unknown): boolean
 	end
 	local owner = candidate :: Owner
 	return owner.release == nil
-		and owner.holdRelease == nil
-		and owner.heldSubjects == nil
+		and owner[1] == nil
 		and (owner.reactor ~= nil or owner.parent ~= nil or owner.disposed ~= nil)
 end
 
 local function heldSize(entry: Entry): number
-	local subjects = entry.heldSubjects
-	if subjects ~= nil then
-		return #subjects
-	end
-	return if entry.holdRelease ~= nil then 1 else 0
+	return #entry // 2
 end
 
 local function releaseBatch(batch: Entry, keep: number, failures: { unknown })
-	local single = batch.holdRelease
-	if single ~= nil then
-		if keep < 1 then
-			local subject = batch.holdSubject
-			batch.holdRelease = nil
-			batch.holdSubject = nil
-			local ok, failure: unknown = pcall(single, subject)
+	for index = #batch - 1, keep * 2 + 1, -2 do
+		local releaseSubject, subject = batch[index], batch[index + 1]
+		batch[index] = nil
+		batch[index + 1] = nil
+		if type(releaseSubject) == "function" then
+			local ok, failure: unknown = pcall(NodeCast.releaser(releaseSubject), subject)
 			if not ok then
 				table.insert(failures, failure)
 			end
-		end
-		return
-	end
-	local releases, subjects = batch.heldRelease, batch.heldSubjects
-	if releases == nil or subjects == nil then
-		return
-	end
-	for index = #subjects, keep + 1, -1 do
-		local releaseSubject, subject = releases[index], subjects[index]
-		releases[index] = nil
-		subjects[index] = nil
-		local ok, failure: unknown = pcall(releaseSubject, subject)
-		if not ok then
-			table.insert(failures, failure)
 		end
 	end
 end
@@ -129,7 +107,7 @@ end
 local function releaseEntry(entry: Entry, failures: { unknown })
 	local release = entry.release
 	if release == nil then
-		if entry.holdRelease ~= nil or entry.heldSubjects ~= nil then
+		if entry[1] ~= nil then
 			releaseBatch(entry, 0, failures)
 			return
 		end
@@ -245,26 +223,13 @@ local function holdSubject(owner: Owner, releaseSubject: (subject: unknown) -> (
 		return
 	end
 	local head = owner.head
-	if head == nil or head.release ~= nil or head.reactor ~= nil then
-		attach(owner, { holdRelease = releaseSubject, holdSubject = subject })
+	if head == nil or head[1] == nil then
+		attach(owner, { releaseSubject, subject })
 		return
 	end
-	local single = head.holdRelease
-	if single ~= nil then
-		head.heldRelease = { single, releaseSubject }
-		head.heldSubjects = { head.holdSubject, subject }
-		head.holdRelease = nil
-		head.holdSubject = nil
-	else
-		local releases, subjects = head.heldRelease, head.heldSubjects
-		if releases == nil or subjects == nil then
-			attach(owner, { holdRelease = releaseSubject, holdSubject = subject })
-			return
-		end
-		local index = #subjects + 1
-		releases[index] = releaseSubject
-		subjects[index] = subject
-	end
+	local size = #head
+	head[size + 1] = releaseSubject
+	head[size + 2] = subject
 end
 
 local function heldCount(owner: Owner): number

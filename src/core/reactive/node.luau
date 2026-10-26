@@ -34,6 +34,10 @@ local function isNode(candidate: unknown): boolean
 	return type(candidate) == "table" and classes[metatableOf(candidate)] == true
 end
 
+local function releaser(value: unknown): (subject: unknown) -> ()
+	return (value :: unknown) :: (subject: unknown) -> ()
+end
+
 local function heldEdge(subject: unknown): Node
 	return (subject :: unknown) :: Node
 end
@@ -78,6 +82,7 @@ local function identityKey<V, K>(value: V, _index: number): K
 end
 
 return {
+	releaser = releaser,
 	heldEdge = heldEdge,
 	isNode = isNode,
 	adopt = adopt,
