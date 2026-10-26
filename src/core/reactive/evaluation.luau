@@ -85,7 +85,8 @@ local function enter(consumer: Node?): (Node?, number)
 end
 
 local function snapshot(): (Node?, number)
-	local current = frame()
+	local cached = cache.frame
+	local current: Evaluation = if cached ~= nil and coroutine.running() == cache.thread then cached else frame()
 	return current.consumer, current.order
 end
 

@@ -153,37 +153,6 @@ local function refresh(producer: Node)
 	end
 end
 
-local function record(consumer: Node, producer: Node)
-	if consumer.released then
-		refresh(producer)
-		return
-	end
-	local at = consumer.reads
-	if at == nil then
-		refresh(producer)
-		return
-	end
-	local edge = consumer[at]
-	if edge == nil or edge[1] ~= producer then
-		at += 1
-		consumer.reads = at
-		edge = consumer[at]
-		if edge == nil or edge[1] ~= producer then
-			trim(consumer, at)
-			local attached = attach(producer, consumer)
-			consumer[at] = attached
-			edge = attached
-		end
-	end
-	local update = producer.refresh
-	if update then
-		update(producer)
-	end
-	if edge ~= nil then
-		edge.version = producer.version
-	end
-end
-
 local function notANode(api: string, candidate: unknown): never
 	local actual = Diagnostics.describe(candidate)
 	return Diagnostics.raise(
@@ -218,7 +187,34 @@ local function observe(node: Node, value: unknown)
 		})
 		return
 	end
-	record(consumer, node)
+	if consumer.released then
+		refresh(node)
+		return
+	end
+	local at = consumer.reads
+	if at == nil then
+		refresh(node)
+		return
+	end
+	local edge = consumer[at]
+	if edge == nil or edge[1] ~= node then
+		at += 1
+		consumer.reads = at
+		edge = consumer[at]
+		if edge == nil or edge[1] ~= node then
+			trim(consumer, at)
+			local attached = attach(node, consumer)
+			consumer[at] = attached
+			edge = attached
+		end
+	end
+	local update = node.refresh
+	if update then
+		update(node)
+	end
+	if edge ~= nil then
+		edge.version = node.version
+	end
 end
 
 NodeCast.setObserver(observe)
