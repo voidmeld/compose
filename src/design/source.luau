@@ -178,11 +178,15 @@ local function rowType(library: Library, fields: { Types.ItemField }): string
 	return "{ " .. table.concat(pieces, ", ") .. " }"
 end
 
+local function listItemName(input: Types.Input): string
+	return string.upper(string.sub(input.id, 1, 1)) .. string.sub(input.id, 2) .. "Item"
+end
+
 local function base(library: Library, input: Types.Input): string
 	local fields = input.fields
 	if fields and #fields > 0 then
 		if input.type == "list" then
-			return "{ " .. rowType(library, fields) .. " }"
+			return "{ " .. listItemName(input) .. " }"
 		elseif input.type == "record" then
 			return rowType(library, fields)
 		end
@@ -241,6 +245,13 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		table.insert(lines, "export type Props = {}")
 		table.insert(lines, "")
 	elseif propsType == nil then
+		for _, input in value.contract.inputs do
+			local fields = input.fields
+			if input.type == "list" and fields and #fields > 0 then
+				table.insert(lines, `export type {listItemName(input)} = {rowType(library, fields)}`)
+				table.insert(lines, "")
+			end
+		end
 		table.insert(lines, "export type Props = {")
 		for _, input in value.contract.inputs do
 			local optional = if input.required then "" else "?"
@@ -356,6 +367,15 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		return returning("use", `use(current).{from}`, depth)
 	end
 	local listItemTypes: { [string]: string } = {}
+	if propsType == nil then
+		for _, input in value.contract.inputs do
+			local fields = input.fields
+			if input.type == "list" and fields and #fields > 0 then
+				listItemTypes[input.id] = listItemName(input)
+				rowNames[listItemName(input)] = true
+			end
+		end
+	end
 	local function itemType(template: Node, from: string): string?
 		local known = rowItemTypes[template.id] or listItemTypes[from]
 		if known ~= nil then

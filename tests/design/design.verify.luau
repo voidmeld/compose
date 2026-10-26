@@ -346,7 +346,7 @@ describe("Compose Design documents", function()
 		local code = Design.emit(value, library)
 		expect(string.find(code, "props.onChoose(current:peek())", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "tostring(use(current).score)", 1, true) ~= nil):toBe(true)
-		local _, itemTypes = string.gsub(code, "\ntype %w+Item = ", "")
+		local _, itemTypes = string.gsub(code, "type %w+Item = ", "")
 		expect(itemTypes):toBe(1)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
 		local chosen: { Design.Literal } = {}
@@ -832,7 +832,8 @@ describe("Compose Design views as code", function()
 		local value, toy = view()
 		local code = Design.emit(value, toy)
 		expect(string.find(code, "\tname: string,", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, "games: Toy.Readable<{ { id: string, name: string } }>?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "export type GamesItem = { id: string, name: string }\n", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "games: Toy.Readable<{ GamesItem }>?", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "onPick: ((string) -> ())?", 1, true) ~= nil):toBe(true)
 	end)
 
@@ -885,11 +886,11 @@ describe("Compose Design views as code", function()
 		local options: Design.EmitOptions = { name = "ChooseGame", rowFunctions = true }
 		local code = Design.emit(value, toy, options)
 		expect(string.find(code, "local _design = ", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, "type LabelRowItem = { id: string, name: string }\n", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, "local function LabelRow(current: Toy.Readable<LabelRowItem>)", 1, true) ~= nil):toBe(
+		expect(string.find(code, "export type GamesItem = { id: string, name: string }\n", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "local function LabelRow(current: Toy.Readable<GamesItem>)", 1, true) ~= nil):toBe(
 			true
 		)
-		expect(string.find(code, "key = function(row: LabelRowItem): string\n", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "key = function(row: GamesItem): string\n", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "render = LabelRow,", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, 'UI.Label "Label" {', 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, toy)
