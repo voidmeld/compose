@@ -11,6 +11,7 @@ For a first component, use [quickstart.md](quickstart.md). Otherwise open only t
 - [design-editor.md](design-editor.md): mounting and vendoring the visual design editor, with simulated-engine coverage.
 - [Build-time authoring](../authoring/README.md): content sets, semantic layouts and generated artifacts.
 - [benchmarks.md](benchmarks.md): representative parity, timing and retention checks.
+- [framework-comparison.md](framework-comparison.md): the latest published comparison with other Roblox UI libraries.
 - [Engine verification](../verification/roblox/README.md): the engine checks and their command.
 
 [../AGENTS.md](../AGENTS.md) defines the maintainer rules. Executable public examples are in [../examples](../examples).

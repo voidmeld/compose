@@ -41,6 +41,8 @@ The runner is the CI Ubuntu runner, so compare values from the same branch histo
 
 ## Manual framework comparison
 
+The latest published results are in [framework-comparison.md](framework-comparison.md).
+
 The **Framework comparison** GitHub workflow runs only on `workflow_dispatch`.
 It uses `ubuntu-latest`. It does not run on a pull request or a push.
 It is separate from the required `Gate` check and paired performance.
