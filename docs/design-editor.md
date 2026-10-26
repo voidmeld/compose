@@ -38,6 +38,12 @@ The 2D stage supports cursor-anchored zoom, pan, fit, selection outlines, resize
 
 For a source link, pass a `Design.LinkStore` as `options.link`. The Roblox-only `studio/design/script-store.luau` adapter wraps `ScriptEditorService`; the editor itself only consumes the store protocol.
 
+## Motion
+
+A library gives motion to bound values with `motion = { call, roles, animate }`. A bound input, state or item value can carry a `motion` role. The source writes it as `<call>(<value>, "role")`, and `Design.render` passes the value through `animate(readable, role)`. The theme of the library owns the timing of each role. The `〜` button next to a bound field steps through the roles.
+
+A library plays timed changes with `sequence = { call, toward, build }`. A design keeps its sequences as data in the header. Each step waits `delay`, moves a number `state` value to `to` over `duration` with `easing` (`toward`), or sets any other value when it starts, and calls `output` at its end. The timing values are theme token names. An event property plays a sequence with `{ play = "id" }`, which the source writes as `sequences.id.play`. A sequence with `autoplay` plays when the design shows. `Design.render` makes one player for each sequence through `build(sequence, states, outputs)` and gives them to `context.players`. The inspector lists the sequences, and **▶** plays one on the stage.
+
 ## Studio plugin
 
 Build the plugin from `studio/design/plugin.project.json`. Its **Design** button opens the design module that is selected in the Explorer. If no design module is selected, it opens `ReplicatedStorage.Designs.Screen` and creates it when it is missing. Selecting another design module while the editor is open switches to it. The editor stays linked to the module through `studio/design/script-store.luau`. Edits in the editor write the source, and source edits from Rojo, an agent or the script editor update the editor.

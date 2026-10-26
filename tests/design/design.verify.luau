@@ -234,6 +234,137 @@ describe("Compose Design documents", function()
 		library.tags = nil
 	end)
 
+	it("moves a bound value with a motion role and reads the role back", function()
+		local moved: { string } = {}
+		library.motion = {
+			call = "UI.follow",
+			roles = { "move", "fade" },
+			animate = function(source: Core.Value<Design.Literal?>, role: string): Core.Value<Design.Literal?>
+				table.insert(moved, role)
+				return source
+			end,
+		}
+		local value, id =
+			Design.document.insert(Design.document.new("Moving", library, "Stack"), library, "n1", "Stack")
+		local spread: { Design.State } = { { id = "spread", type = "number", initial = 8 } }
+		value = Design.document.setState(value, library, spread)
+		value = Design.document.change(value, library, id, "gap", { state = "spread", motion = "move" })
+		expect(function()
+			Design.document.change(value, library, id, "gap", { state = "spread", motion = "bounce" })
+		end):toThrow "gap moves with unknown motion role bounce"
+		expect(function()
+			Design.document.change(value, library, id, "gap", { literal = 4, motion = "move" })
+		end):toThrow "gap moves only when it follows an input, state or item"
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'gap = UI.follow(state.spread, "move")', 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, library)
+		expect(Design.emit(parsed, library)):toBe(code)
+		local found = Design.document.find(parsed.root, id)
+		local gap = assert(found).props.gap
+		expect(gap.motion):toBe "move"
+		expect(gap.state):toBe "spread"
+		Design.render(parsed, library)
+		expect(table.concat(moved, " ")):toBe "move"
+		library.motion = nil
+	end)
+
+	it("keeps sequences as design data and plays them from events", function()
+		local plays: { string } = {}
+		library.sequence = {
+			call = "UI.sequence",
+			toward = "UI.toward",
+			build = function(
+				sequence: Design.Sequence,
+				states: { [string]: Core.Value<Design.Literal?> },
+				outputs: { [string]: () -> () }
+			): Design.Player
+				return {
+					play = function()
+						table.insert(plays, sequence.id)
+						for _, step in sequence.steps do
+							local target, to = step.state, step.to
+							if target ~= nil and to ~= nil then
+								states[target]:set(to)
+							end
+							local output = step.output
+							if output ~= nil then
+								outputs[output]()
+							end
+						end
+					end,
+				}
+			end,
+		}
+		local value, id =
+			Design.document.insert(Design.document.new("Reveal", library, "Stack"), library, "n1", "Button")
+		value = Design.document.setContract(value, library, { inputs = {}, outputs = { { id = "onRevealed" } } })
+		local glow: { Design.State } = {
+			{ id = "glow", type = "number", initial = 0 },
+			{ id = "open", type = "boolean", initial = false },
+		}
+		value = Design.document.setState(value, library, glow)
+		expect(function()
+			local missing: { Design.Sequence } = { { id = "reveal", steps = { { state = "missing", to = 1 } } } }
+			Design.document.setSequences(value, library, missing)
+		end):toThrow "Sequence reveal moves unknown state missing"
+		local sequences: { Design.Sequence } = {
+			{
+				id = "reveal",
+				steps = {
+					{ duration = "glide", easing = "standard", state = "glow", to = 1 },
+					{ delay = "short", state = "open", to = true, output = "onRevealed" },
+				},
+			},
+			{ id = "intro", autoplay = true, steps = { { duration = "glide", state = "glow", to = 0.5 } } },
+		}
+		value = Design.document.setSequences(value, library, sequences)
+		value = Design.document.change(value, library, id, "onActivate", { play = "reveal" })
+		expect(function()
+			Design.document.change(value, library, id, "label", { play = "reveal" })
+		end):toThrow "label cannot play a sequence"
+		local code = Design.emit(value, library)
+		expect(string.find(code, "onActivate = sequences.reveal.play", 1, true) ~= nil):toBe(true)
+		expect(
+			string.find(
+				code,
+				'{ duration = "glide", easing = "standard", sample = UI.toward(state.glow, 1) },',
+				1,
+				true
+			) ~= nil
+		):toBe(true)
+		expect(
+			string.find(
+				code,
+				'{ delay = "short", onStart = function() state.open:set(true) end, onEnd = props.onRevealed },',
+				1,
+				true
+			) ~= nil
+		):toBe(true)
+		expect(string.find(code, "sequences.intro.play()", 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, library)
+		expect(Design.emit(parsed, library)):toBe(code)
+		local revealed = 0
+		table.clear(built)
+		Design.render(parsed, library, {
+			outputs = {
+				onRevealed = function(_: { Design.Literal })
+					revealed += 1
+				end,
+			},
+		})
+		expect(table.concat(plays, " ")):toBe "intro"
+		local activate: ((...Design.Literal) -> ())? = nil
+		for _, record in built do
+			if record.kind == "Button" then
+				activate = record.props.onActivate.callback
+			end
+		end
+		assert(activate, "the Button gets a play callback")()
+		expect(table.concat(plays, " ")):toBe "intro reveal"
+		expect(revealed):toBe(1)
+		library.sequence = nil
+	end)
+
 	it("binds a row's own list and shows row content by an item field", function()
 		library.show = "Toy.show"
 		local rowFields: { Design.ItemField } = { { id = "id", type = "string" }, { id = "label", type = "string" } }
