@@ -376,6 +376,15 @@ function LISTENER.run(leader: Node)
 	if update then
 		update(producer)
 	end
+	if producer.first == leader and leader[4] == nil and not statsOn.enabled then
+		local listener = leader.listener
+		local version = producer.version
+		if listener ~= nil and leader.version ~= version then
+			leader.version = version
+			listener(producer.value)
+		end
+		return
+	end
 	runListeners(leader, producer)
 end
 
@@ -384,9 +393,19 @@ CELL_LISTENER.__index = CELL_LISTENER
 
 function CELL_LISTENER.run(leader: Node)
 	local producer = leader[1]
-	if producer ~= nil then
-		runListeners(leader, producer)
+	if producer == nil then
+		return
 	end
+	if producer.first == leader and leader[4] == nil and not statsOn.enabled then
+		local listener = leader.listener
+		local version = producer.version
+		if listener ~= nil and leader.version ~= version then
+			leader.version = version
+			listener(producer.value)
+		end
+		return
+	end
+	runListeners(leader, producer)
 end
 
 local function listen(reactor: Types.Reactor, producer: Node, listener: (value: unknown) -> ()): Dispose
