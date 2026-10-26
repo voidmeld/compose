@@ -510,7 +510,10 @@ function document.validate(value: Document, library: Library): Document
 					rows += 1
 				end
 			end
-			assert(rows <= 1 or (bind ~= nil and bind.row ~= nil), `{node.kind} holds one row template`)
+			assert(
+				rows <= 1 or kind.template == nil or (bind ~= nil and bind.row ~= nil),
+				`{node.kind} holds one row template`
+			)
 			if bind then
 				local list = assert(listOf(value, bind.from, collection), `{node.kind} binds unknown input {bind.from}`)
 				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
@@ -671,6 +674,7 @@ function document.insert(
 	assert(
 		container.children == "list"
 			or ((container.children == "template" or container.children == "slot") and #parent.children == 0)
+			or (container.children == "template" and container.template == nil)
 			or (container.children == "template" and parent.bind ~= nil and parent.bind.row ~= nil),
 		`{parent.kind} cannot take this node`
 	)

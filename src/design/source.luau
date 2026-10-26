@@ -631,7 +631,11 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				end
 			end
 			local templateProp = kind.template
-			if bind and template and templateProp then
+			if templateProp == nil then
+				for _, child in content do
+					table.insert(body, `{inner}{emit(child, depth + 1)},`)
+				end
+			elseif bind and template then
 				local rowId = bind.row or template.id
 				local rowNode = template
 				for _, child in content do

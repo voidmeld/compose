@@ -260,7 +260,11 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 				local rows: ReadOnlyValue<{ Row }> = Core.cell(rowsOf(listFrom(bind.from, item)))
 				props[assert(kind.source, `{node.kind} names no list property`)] = { rows = rows, key = bind.key }
 			end
-			if bind and template and kind.template then
+			if kind.template == nil then
+				for _, child in content do
+					table.insert(children, build(child, item))
+				end
+			elseif bind and template then
 				local rowId = bind.row or template.id
 				local rowNode = template
 				for _, child in content do
@@ -270,7 +274,7 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 						table.insert(children, build(child, item))
 					end
 				end
-				props[kind.template] = {
+				props[assert(kind.template)] = {
 					template = function(row: ReadOnlyValue<Row>): unknown
 						return build(rowNode, row)
 					end,
