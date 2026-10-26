@@ -358,17 +358,19 @@ return function(ui: UI.UI)
 				end
 				table.clear(nodes)
 				stopDesign = runtime.mount(function(): Compose.Node
-					local rendered, content = pcall(Design.render, value, session.library, {
-						inputs = options.inputs,
-						slots = options.slots,
-						token = options.token,
-						decorate = function(node: Design.Node, built: Compose.Node)
-							if ui.isA(built, "GuiObject") then
-								runtime.decorate(built, { Attributes = { [ATTRIBUTE] = node.id } })
-								nodes[node.id] = built
-							end
-						end,
-					})
+					local rendered, content = pcall(function(): unknown
+						return Design.render(value, session.library, {
+							inputs = options.inputs,
+							slots = options.slots,
+							token = options.token,
+							decorate = function(node: Design.Node, built: Compose.Node)
+								if ui.isA(built, "GuiObject") then
+									runtime.decorate(built, { Attributes = { [ATTRIBUTE] = node.id } })
+									nodes[node.id] = built
+								end
+							end,
+						})
+					end)
 					if not rendered then
 						if not started then
 							error(content, 0)

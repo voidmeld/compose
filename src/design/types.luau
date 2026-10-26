@@ -45,6 +45,7 @@ export type Field = {
 	luauType: string?,
 	label: string?,
 	advanced: boolean?,
+	requires: { [string]: { Literal } }?,
 }
 
 export type Row = { [string | number]: Literal }

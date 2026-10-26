@@ -351,6 +351,9 @@ return function(ui: UI.UI)
 			local extra: { string } = {}
 			local advancedKeys: { string } = {}
 			for key, entry in kind.fields do
+				if not Design.document.applies(node, kind, key) then
+					continue
+				end
 				if entry.advanced and node.props[key] == nil then
 					table.insert(advancedKeys, key)
 					continue

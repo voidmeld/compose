@@ -150,10 +150,10 @@ describe("Compose Design documents", function()
 	end)
 
 	it("reads back every literal it writes", function()
-		local nested: { [string]: Design.Literal } = { nested = true }
-		local words: { Design.Literal } = { "a", nested }
-		local record: { [string]: Design.Literal } = { top = 4, ["two words"] = words }
-		local components: { Design.Literal } = { 0, 10, 0, -20 }
+		local nested: Design.Row = { nested = true }
+		local words: Design.Row = { "a", nested }
+		local record: Design.Row = { top = 4, ["two words"] = words }
+		local components: Design.Row = { 0, 10, 0, -20 }
 		local values: { Design.Literal } = { -4.5, 'line\n"quoted"', false, components, record }
 		for _, value in values do
 			local text = Design.literal(value)
@@ -173,10 +173,32 @@ describe("Compose Design documents", function()
 		panel.seeds = { { kind = "Label", props = labelProps } }
 		local value, id = Design.document.insert(Design.document.new("Seeds", library, "Stack"), library, "n1", "Panel")
 		panel.seeds = nil
-		local inserted = assert(Design.document.find(value.root, id))
+		local found = Design.document.find(value.root, id)
+		local inserted = assert(found)
 		expect(#inserted.children):toBe(1)
 		expect(inserted.children[1].kind):toBe "Label"
 		expect(inserted.children[1].props.text.literal):toBe "Seeded"
+	end)
+
+	it("applies a field only when the fields it requires allow it", function()
+		local label = library.kinds.Label
+		local fields = label.fields
+		local titles: { Design.Literal } = { "title" }
+		local emphasis: Design.Field = { type = "boolean", requires = { tone = titles } }
+		label.fields = table.clone(fields)
+		label.fields.emphasis = emphasis
+		local value, id = Design.document.insert(Design.document.new("Needs", library, "Stack"), library, "n1", "Label")
+		expect(function()
+			Design.document.change(value, library, id, "emphasis", { literal = true })
+		end):toThrow "emphasis applies only when tone is title"
+		value = Design.document.change(value, library, id, "tone", { literal = "title" })
+		value = Design.document.change(value, library, id, "emphasis", { literal = true })
+		local found = Design.document.find(value.root, id)
+		expect(assert(found).props.emphasis.literal):toBe(true)
+		value = Design.document.change(value, library, id, "tone", { literal = "body" })
+		found = Design.document.find(value.root, id)
+		expect(assert(found).props.emphasis):toBe(nil)
+		label.fields = fields
 	end)
 
 	it("undoes and redoes whole edits", function()
