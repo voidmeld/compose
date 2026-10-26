@@ -32,6 +32,8 @@ The inspector has an editor for each field type. It edits `value` and `datatype`
 
 A library's `tags = { call, apply }` lets nodes carry style tags; the source wraps a tagged node in `call(node, { "tag" })` and rendering calls `apply`. Inside a repeated row, a list can bind a list field of the row item, and `when` can name a boolean item field. A literal can render a child of a repeated node per item with `{ ["$template"] = childId }`, as a table column's cell does, and an output marker with `["$row"] = true` passes the current item. A field with `perRow = true` holds a literal that the source writes as a function of the current item, as row actions are.
 
+A `content` field holds either a slot input or a subtree of its own: `Design.document.content(value, library, id, key, kind)` adds the child and the source writes `key = function() return <node> end`. The inspector's add button uses the library's `contentKind`. A library `token` that ends with `.` writes tokens as table paths, such as `T.space.md`, and reads them back. A node named from an input always writes its document name as the fallback, so the name survives a round trip.
+
 The 2D stage supports cursor-anchored zoom, pan, fit, selection outlines, resize grips and a size badge. The scene stage supports orbit, pan, filtered raycast picking and axis translation. Fit runs once on the next host frame and can also be requested through the stage or scene API.
 
 For a source link, pass a `Design.LinkStore` as `options.link`. The Roblox-only `studio/design/script-store.luau` adapter wraps `ScriptEditorService`; the editor itself only consumes the store protocol.

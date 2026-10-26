@@ -385,6 +385,54 @@ describe("Compose Design documents", function()
 		library.kinds = kinds
 	end)
 
+	it("holds a content field's subtree as a child and writes it as a builder", function()
+		local kinds = library.kinds
+		local iconField: Design.Field = { type = "content" }
+		library.kinds = table.clone(kinds)
+		local button = table.clone(kinds.Button)
+		button.fields = table.clone(button.fields)
+		button.fields.icon = iconField
+		library.kinds.Button = button
+		local value, buttonId =
+			Design.document.insert(Design.document.new("Content", library, "Stack"), library, "n1", "Button")
+		local glyphId
+		value, glyphId = Design.document.content(value, library, buttonId, "icon", "Label")
+		value = Design.document.change(value, library, glyphId, "text", { literal = "Menu" })
+		local code = Design.emit(value, library)
+		expect(string.find(code, "icon = function()", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		table.clear(built)
+		Design.render(value, library)
+		local icon: unknown = nil
+		for _, record in built do
+			if record.kind == "Button" then
+				icon = record.props.icon.value
+			end
+		end
+		expect(type(icon)):toBe "function"
+		table.clear(built)
+		local builder = icon :: () -> unknown
+		builder()
+		expect(built[1].kind):toBe "Label"
+		value = Design.document.change(value, library, buttonId, "icon", nil)
+		local found = Design.document.find(value.root, buttonId)
+		expect(#assert(found).children):toBe(0)
+		library.kinds = kinds
+	end)
+
+	it("writes tokens as a table path when the library names a path prefix", function()
+		local call = library.token
+		library.token = "T."
+		local value = Design.document.new("Tokens", library, "Stack")
+		value = Design.document.change(value, library, "n1", "gap", { token = "space.md" })
+		local code = Design.emit(value, library)
+		expect(string.find(code, "gap = T.space.md,", 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, library)
+		expect(parsed.root.props.gap.token):toBe "space.md"
+		expect(Design.emit(parsed, library)):toBe(code)
+		library.token = call
+	end)
+
 	it("undoes and redoes whole edits", function()
 		local first = sample()
 		local history = Design.history(first)
@@ -819,7 +867,8 @@ describe("Compose Design views as code", function()
 		)
 		expect(string.find(code, "local UI = Toy.controls()", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "export type Props", 1, true)):toBe(nil)
-		expect(string.find(code, "UI.Stack(props.name) {", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "UI.Stack(props.name or ", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, toy).root.name):toBe(value.root.name)
 		expect(string.find(code, "local state = { expanded = Toy.cell(true) }", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "from = props.games,\n", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "Toy.show(props.offered, function()\n", 1, true) ~= nil):toBe(true)
