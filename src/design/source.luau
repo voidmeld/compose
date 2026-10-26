@@ -355,9 +355,11 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		return returning("use", `use(current).{from}`, depth)
 	end
+	local listItemTypes: { [string]: string } = {}
 	local function itemType(template: Node, from: string): string?
-		local known = rowItemTypes[template.id]
+		local known = rowItemTypes[template.id] or listItemTypes[from]
 		if known ~= nil then
+			rowItemTypes[template.id] = known
 			return known
 		end
 		local fields = fieldsOf(from)
@@ -366,6 +368,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		local name = unique(rowBase(template) .. "Item")
 		rowItemTypes[template.id] = name
+		listItemTypes[from] = name
 		table.insert(rowTypeLines, `type {name} = {rowType(library, fields)}`)
 		return name
 	end
@@ -588,6 +591,20 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			local written = expression(property, depth + 1, (depth + 1) * 4 + #key + 4)
 			local luauType: string? = if field then field.luauType else nil
 			local bound = node.bind
+			local itemName = property.item
+			if itemName ~= nil and field ~= nil and field.type == "string" then
+				local enclosing = scopes[#scopes]
+				local around: { Types.ItemField } = if enclosing and enclosing.fields then enclosing.fields else {}
+				local textual = true
+				for _, entry in around do
+					if entry.id == itemName and entry.type ~= "string" then
+						textual = false
+					end
+				end
+				if not textual then
+					written = returning("use", `tostring(use(current).{itemName})`, depth + 1)
+				end
+			end
 			if current ~= nil and field ~= nil and field.perRow and bound ~= nil then
 				local typed = itemType(node, bound.from)
 				local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
@@ -1174,12 +1191,20 @@ function source.parse(code: string, library: Library): Types.Document
 				take "use"
 				take ")"
 				take "return"
+				local converted = peek() == "tostring"
+				if converted then
+					take "tostring"
+					take "("
+				end
 				take "use"
 				take "("
 				take "current"
 				take ")"
 				take "."
 				local field = name()
+				if converted then
+					take ")"
+				end
 				take "end"
 				return { item = field }, nil
 			elseif peek() == "current" or peek() == ")" then

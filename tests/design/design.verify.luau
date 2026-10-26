@@ -313,9 +313,13 @@ describe("Compose Design documents", function()
 			call = "UI.Table",
 			build = builder "Table",
 		}
-		local alpha: Design.Row = { id = "a", label = "Alpha" }
+		local alpha: Design.Row = { id = "a", label = "Alpha", score = 3 }
 		local rowsPreview: Design.Row = { alpha }
-		local fields: { Design.ItemField } = { { id = "id", type = "string" }, { id = "label", type = "string" } }
+		local fields: { Design.ItemField } = {
+			{ id = "id", type = "string" },
+			{ id = "label", type = "string" },
+			{ id = "score", type = "number" },
+		}
 		local value = Design.document.new("Cells", library, "Stack")
 		value = Design.document.setContract(value, library, {
 			inputs = { { id = "rows", kind = "readable", type = "list", preview = rowsPreview, fields = fields } },
@@ -326,9 +330,14 @@ describe("Compose Design documents", function()
 		value = Design.document.bind(value, library, tableId, { from = "rows", key = "id" })
 		value, cellId = Design.document.insert(value, library, tableId, "Label")
 		value = Design.document.change(value, library, cellId, "text", { item = "label" })
+		local scoreId
+		value, scoreId = Design.document.insert(value, library, tableId, "Label")
+		value = Design.document.change(value, library, scoreId, "text", { item = "score" })
 		local render: Design.Row = { ["$template"] = cellId }
+		local scoreRender: Design.Row = { ["$template"] = scoreId }
 		local column: Design.Row = { id = "label", render = render }
-		local columns: Design.Row = { column }
+		local scoreColumn: Design.Row = { id = "score", render = scoreRender }
+		local columns: Design.Row = { column, scoreColumn }
 		value = Design.document.change(value, library, tableId, "columns", { literal = columns })
 		local activate: Design.Row = { ["$output"] = "onChoose", ["$row"] = true }
 		local action: Design.Row = { id = "choose", label = "Choose", onActivate = activate }
@@ -336,6 +345,9 @@ describe("Compose Design documents", function()
 		value = Design.document.change(value, library, tableId, "actions", { literal = actions })
 		local code = Design.emit(value, library)
 		expect(string.find(code, "props.onChoose(current:peek())", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "tostring(use(current).score)", 1, true) ~= nil):toBe(true)
+		local _, itemTypes = string.gsub(code, "\ntype %w+Item = ", "")
+		expect(itemTypes):toBe(1)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
 		local chosen: { Design.Literal } = {}
 		table.clear(built)
