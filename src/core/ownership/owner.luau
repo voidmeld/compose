@@ -443,8 +443,17 @@ local function listenHeld<T>(owner: Owner, producer: Types.ReadOnlyValue<T>, bod
 		Inspect.watch(owner)
 	end
 	local edge = watchModule.listenEdge(reactorOf(owner), producer, body)
-	holdSubject(owner, watchModule.unlisten, edge)
+	holdSubject(owner, watchModule.releaseHeld, edge)
 	return edge
+end
+
+local function effectHeld(owner: Owner, body: (use: Types.Use) -> ()): Types.Node
+	if Inspect.isActive() then
+		Inspect.watch(owner)
+	end
+	local node = watchModule.terminalNode(reactorOf(owner), body)
+	holdSubject(owner, watchModule.releaseHeld, node)
+	return node
 end
 
 local function watchTerminal(owner: Owner, body: (use: Types.Use) -> (), after: Dispose?): Dispose
@@ -561,6 +570,7 @@ return {
 	adopt = adopt,
 	holdSubject = holdSubject,
 	listenHeld = listenHeld,
+	effectHeld = effectHeld,
 	heldCount = heldCount,
 	rollbackHeld = rollbackHeld,
 	watch = watch,

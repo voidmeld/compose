@@ -569,7 +569,7 @@ local function retireFast(node: Node, key: string)
 			else
 				previous.fastNext = following
 			end
-			Watch.unlisten(edge)
+			Watch.releaseHeld(edge)
 		else
 			previous = edge
 		end
@@ -680,6 +680,14 @@ local function apply(
 		if type(value) == "function" then
 			if classify(host, node, name) == "event" then
 				subscribe(host, node, owner, name, value :: (...unknown) -> ())
+			elseif fresh then
+				local source = value :: Types.Body<unknown>
+				local watcher = Owner.effectHeld(owner, function(use: Types.Use)
+					write(node, name, source(use))
+				end)
+				watcher.fastKey = name
+				watcher.fastNext = fastEdges[node]
+				fastEdges[node] = watcher
 			else
 				bind(target, node, owner, name, value :: Types.Source<unknown>)
 			end
@@ -695,6 +703,11 @@ local function apply(
 	end
 end
 
+local function forget(node: Node)
+	fastEdges[node] = nil
+end
+
 return {
 	apply = apply,
+	forget = forget,
 }

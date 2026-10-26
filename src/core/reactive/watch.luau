@@ -132,13 +132,9 @@ function GUARDED.run(node: Node)
 	rerun(node)
 end
 
-local function start(reactor: Reactor, body: Body, class: {}, label: string?): Dispose
+local function begin(reactor: Reactor, body: Body, class: {}, label: string?): Node
 	local node: Node = {
 		state = Graph.DIRTY,
-		reads = 0,
-		queued = false,
-		released = false,
-		retry = false,
 		reactor = reactor,
 		effect = body,
 	}
@@ -153,6 +149,21 @@ local function start(reactor: Reactor, body: Body, class: {}, label: string?): D
 		Graph.release(node)
 		error(err, 0)
 	end
+	return node
+end
+
+local function releaseHeld(subject: unknown)
+	local node = NodeCast.heldEdge(subject)
+	if node.listener ~= nil then
+		Graph.unlisten(node)
+	elseif not node.released and node.effect ~= nil then
+		Graph.release(node)
+		node.queued = false
+	end
+end
+
+local function start(reactor: Reactor, body: Body, class: {}, label: string?): Dispose
+	local node = begin(reactor, body, class, label)
 	return function()
 		if node.released then
 			return
@@ -174,6 +185,10 @@ local function watchTerminal(reactor: Reactor, body: Body): Dispose
 	return start(reactor, body, TERMINAL, nil)
 end
 
+local function terminalNode(reactor: Reactor, body: Body): Node
+	return begin(reactor, body, TERMINAL, nil)
+end
+
 local function watchStatic<T>(reactor: Reactor, value: Types.ReadOnlyValue<T>, body: (value: T) -> ()): Dispose
 	return Graph.listen(reactor, NodeCast.nodeOf(value), NodeCast.eraseListener(body))
 end
@@ -192,6 +207,8 @@ return {
 	watchStatic = watchStatic,
 	listenEdge = listenEdge,
 	unlisten = Graph.unlisten,
+	terminalNode = terminalNode,
+	releaseHeld = releaseHeld,
 	watchTerminal = watchTerminal,
 	sample = sample,
 }

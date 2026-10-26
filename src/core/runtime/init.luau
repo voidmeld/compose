@@ -130,6 +130,7 @@ local function createRuntime(host: Host.Host): Runtime
 	end
 
 	local function destroyOwnedNode(node: Node)
+		Props.forget(node)
 		local ok, err: unknown = pcall(Nodes.releaseDependents, node)
 		render.destroyNode(node)
 		Nodes.forget(node)
