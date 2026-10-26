@@ -132,6 +132,10 @@ local function contractLiteral(contract: Types.Contract): Literal
 	local outputs: Record = {}
 	for _, output in contract.outputs do
 		local item: Record = { id = output.id }
+		local row = output.row
+		if row ~= nil then
+			item.row = row
+		end
 		local args = output.args
 		if args then
 			local list: Record = {}
@@ -194,7 +198,15 @@ local function base(library: Library, input: Types.Input): string
 	return scalar(library, input.type)
 end
 
-local function outputType(library: Library, output: Types.Output): string
+local function outputType(library: Library, output: Types.Output, contract: Types.Contract): string
+	local row = output.row
+	if row ~= nil then
+		for _, input in contract.inputs do
+			if input.id == row then
+				return `({listItemName(input)}) -> ()`
+			end
+		end
+	end
 	local args = output.args
 	if args == nil then
 		return "(...unknown) -> ()"
@@ -258,7 +270,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			table.insert(lines, `\t{input.id}: {fieldType(library, input)}{optional},`)
 		end
 		for _, output in value.contract.outputs do
-			table.insert(lines, `\t{output.id}: ({outputType(library, output)})?,`)
+			table.insert(lines, `\t{output.id}: ({outputType(library, output, value.contract)})?,`)
 		end
 		table.insert(lines, "}")
 		table.insert(lines, "")
@@ -1064,7 +1076,8 @@ local function contractOf(header: Record): Types.Contract
 			end
 			args = typed
 		end
-		table.insert(outputs, { id = text(entry, "id"), args = args })
+		local row = entry.row
+		table.insert(outputs, { id = text(entry, "id"), args = args, row = if type(row) == "string" then row else nil })
 	end
 	return { inputs = inputs, outputs = outputs }
 end

@@ -323,7 +323,7 @@ describe("Compose Design documents", function()
 		local value = Design.document.new("Cells", library, "Stack")
 		value = Design.document.setContract(value, library, {
 			inputs = { { id = "rows", kind = "readable", type = "list", preview = rowsPreview, fields = fields } },
-			outputs = { { id = "onChoose" } },
+			outputs = { { id = "onChoose", row = "rows" } },
 		})
 		local tableId, cellId
 		value, tableId = Design.document.insert(value, library, "n1", "Table")
@@ -347,6 +347,7 @@ describe("Compose Design documents", function()
 		expect(string.find(code, "props.onChoose(current:peek())", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "tostring(use(current).score)", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "Columns: { Toy.Column<RowsItem, string> } = {", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "onChoose: ((RowsItem) -> ())?", 1, true) ~= nil):toBe(true)
 		local _, itemTypes = string.gsub(code, "type %w+Item = ", "")
 		expect(itemTypes):toBe(1)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)

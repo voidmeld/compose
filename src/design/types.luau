@@ -114,7 +114,7 @@ export type Input = {
 	required: boolean?,
 }
 
-export type Output = { id: string, args: { InputType }? }
+export type Output = { id: string, args: { InputType }?, row: string? }
 
 export type State = { id: string, type: InputType, initial: Literal }
 

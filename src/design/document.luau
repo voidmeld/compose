@@ -109,7 +109,7 @@ local function copyContract(contract: Types.Contract): Types.Contract
 	local outputs: { Types.Output } = {}
 	for index, output in contract.outputs do
 		local args = output.args
-		outputs[index] = { id = output.id, args = if args then table.clone(args) else nil }
+		outputs[index] = { id = output.id, args = if args then table.clone(args) else nil, row = output.row }
 	end
 	return { inputs = inputs, outputs = outputs }
 end
@@ -221,6 +221,14 @@ local function checkContract(contract: Types.Contract)
 		assert(string.match(output.id, OUTPUT) ~= nil, "Outputs are named onSomething")
 		assert(not seen[output.id], `Duplicate contract id {output.id}`)
 		seen[output.id] = true
+		local row = output.row
+		if row ~= nil then
+			local found = false
+			for _, input in contract.inputs do
+				found = found or (input.id == row and input.type == "list" and input.fields ~= nil)
+			end
+			assert(found, `{output.id} carries a row of {row}, which is not a list input with fields`)
+		end
 	end
 end
 
