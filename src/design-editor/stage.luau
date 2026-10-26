@@ -278,6 +278,7 @@ return function(ui: UI.UI)
 				end
 				local size = Theme.label("", Theme.color.white, Theme.size.small, Theme.font.bold)
 				ui.set(size, "Name", "SizeBadge")
+				ui.set(size, "TextTruncate", ui.values.enum("TextTruncate", "None"))
 				ui.set(size, "AutomaticSize", ui.values.enum("AutomaticSize", "X"))
 				ui.set(size, "AnchorPoint", ui.values.vector2(0.5, 0))
 				ui.set(size, "Position", ui.values.udim2(0.5, 0, 1, 8))
@@ -374,6 +375,20 @@ return function(ui: UI.UI)
 								if ui.isA(built, "GuiObject") then
 									runtime.decorate(built, { Attributes = { [ATTRIBUTE] = node.id } })
 									nodes[node.id] = built
+									local kind = session.library.kinds[node.kind]
+									if kind and kind.children == "list" and #node.children == 0 then
+										local floor = ui.new "UISizeConstraint"
+										ui.set(floor, "Name", "DesignEmptyFloor")
+										ui.set(floor, "MinSize", ui.values.vector2(96, 48))
+										ui.set(floor, "Parent", built)
+										local mark = ui.new "UIStroke"
+										ui.set(mark, "Name", "DesignEmptyMark")
+										ui.set(mark, "Color", Theme.color.tertiary)
+										ui.set(mark, "Transparency", 0.4)
+										ui.set(mark, "Thickness", 1)
+										ui.set(mark, "ApplyStrokeMode", ui.values.enum("ApplyStrokeMode", "Border"))
+										ui.set(mark, "Parent", built)
+									end
 								end
 							end,
 						})
