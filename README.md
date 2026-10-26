@@ -90,9 +90,7 @@ Terms: a component is a function that returns composition. A cell holds state. A
 
 ## Performance
 
-[![Compose performance on the latest main commit](https://raw.githubusercontent.com/voidmeld/compose/perf-results/summary.svg)](https://github.com/voidmeld/compose/blob/perf-results/README.md)
-
-Each push to `main` publishes these numbers. Select the table for every benchmark, the change from the previous commit and trend charts.
+See the [framework comparison](docs/framework-comparison.md).
 
 ## Validate
 

@@ -129,65 +129,6 @@ local function change(current: number, previous: number?): string
 	return ("%+.1f%%"):format((current / previous - 1) * 100)
 end
 
-local function escape(text: string): string
-	return (string.gsub(text, '[&<>"]', { ["&"] = "&amp;", ["<"] = "&lt;", [">"] = "&gt;", ['"'] = "&quot;" }))
-end
-
-local function summary(entries: { Entry }): string
-	local latest = entries[#entries]
-	local previous = entries[#entries - 1]
-	local before: { [string]: number } = {}
-	if previous then
-		for _, row in previous.rows do
-			before[row.name] = row.median
-		end
-	end
-	local rows: { Row } = {}
-	for _, row in latest.rows do
-		if row.unit == CHARTED_UNIT and string.find(row.name, "/compose", 1, true) then
-			table.insert(rows, row)
-		end
-	end
-	local width, rowHeight, top = 640, 24, 64
-	local height = top + rowHeight * (#rows + 1) + 16
-	local lines = {
-		`<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="13">`,
-		`<rect width="{width}" height="{height}" rx="8" fill="#ffffff" stroke="#d0d7de"/>`,
-		`<text x="16" y="28" font-size="16" font-weight="600" fill="#1f2328">Compose performance</text>`,
-		`<text x="16" y="48" fill="#59636e">{escape(string.sub(latest.commit, 1, 12))} · {escape(latest.date)} · median of the CI Ubuntu runner's paired candidate</text>`,
-		`<text x="16" y="{top + 16}" font-weight="600" fill="#59636e">Benchmark</text>`,
-		`<text x="400" y="{top + 16}" font-weight="600" fill="#59636e" text-anchor="end">Median</text>`,
-		`<text x="500" y="{top + 16}" font-weight="600" fill="#59636e" text-anchor="end">p95</text>`,
-		`<text x="620" y="{top + 16}" font-weight="600" fill="#59636e" text-anchor="end">Change</text>`,
-	}
-	for index, row in rows do
-		local y = top + rowHeight * index + 16
-		local delta = change(row.median, before[row.name])
-		local tone = if string.sub(delta, 1, 1) == "+" and delta ~= "+0.0%"
-			then "#cf222e"
-			elseif string.sub(delta, 1, 1) == "-" then "#1a7f37"
-			else "#59636e"
-		if index % 2 == 0 then
-			table.insert(lines, `<rect x="8" y="{y - 16}" width="{width - 16}" height="{rowHeight}" fill="#f6f8fa"/>`)
-		end
-		table.insert(
-			lines,
-			`<text x="16" y="{y}" fill="#1f2328">{escape((string.gsub(row.name, "/compose$", "")))}</text>`
-		)
-		table.insert(
-			lines,
-			`<text x="400" y="{y}" fill="#1f2328" text-anchor="end">{escape(format(row.median, row.unit))}</text>`
-		)
-		table.insert(
-			lines,
-			`<text x="500" y="{y}" fill="#1f2328" text-anchor="end">{escape(format(row.p95, row.unit))}</text>`
-		)
-		table.insert(lines, `<text x="620" y="{y}" fill="{tone}" text-anchor="end">{escape(delta)}</text>`)
-	end
-	table.insert(lines, "</svg>")
-	return table.concat(lines, "\n") .. "\n"
-end
-
 local function render(entries: { Entry }): string
 	local latest = entries[#entries]
 	local previous = entries[#entries - 1]
@@ -264,5 +205,4 @@ local entry: Entry = { commit = commit, date = date, rows = rowsOf(paths) }
 fs.writeStringToFile(`{results}/{date}-{string.sub(commit, 1, 12)}.json`, encodeEntry(entry))
 local entries = history(results)
 fs.writeStringToFile(`{directory}/README.md`, render(entries))
-fs.writeStringToFile(`{directory}/summary.svg`, summary(entries))
 print(`publish: {#entry.rows} benchmarks for {commit}`)
