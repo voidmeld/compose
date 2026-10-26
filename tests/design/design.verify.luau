@@ -201,6 +201,36 @@ describe("Compose Design documents", function()
 		label.fields = fields
 	end)
 
+	it("tags nodes for style rules and reads the tags back", function()
+		local applied: { [unknown]: { string } } = {}
+		library.tags = {
+			call = "UI.tag",
+			apply = function(built: unknown, tags: { string })
+				applied[built] = tags
+			end,
+		}
+		local value, id = Design.document.insert(Design.document.new("Tags", library, "Stack"), library, "n1", "Label")
+		value = Design.document.tag(value, library, id, { "amigos-stat", "amigos-feature" })
+		expect(function()
+			Design.document.tag(value, library, id, { "not a tag" })
+		end):toThrow()
+		local code = Design.emit(value, library)
+		expect(string.find(code, "UI.tag(", 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, library)
+		expect(Design.emit(parsed, library)):toBe(code)
+		local found = Design.document.find(parsed.root, id)
+		expect(table.concat(assert(assert(found).tags), " ")):toBe "amigos-stat amigos-feature"
+		Design.render(parsed, library)
+		local tagged = 0
+		for _, tags in applied do
+			if table.concat(tags, " ") == "amigos-stat amigos-feature" then
+				tagged += 1
+			end
+		end
+		expect(tagged):toBe(1)
+		library.tags = nil
+	end)
+
 	it("undoes and redoes whole edits", function()
 		local first = sample()
 		local history = Design.history(first)

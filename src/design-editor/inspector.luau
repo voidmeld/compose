@@ -314,6 +314,19 @@ return function(ui: UI.UI)
 				ui.set(caption, "Parent", frame)
 				return frame, caption
 			end
+			if session.library.tags ~= nil then
+				local tagRow = row("Tags", "Style tags")
+				local tags = field(table.concat(node.tags or {}, ", "), function(text: string)
+					local tags: { string } = {}
+					for tag in string.gmatch(text, "[^,%s]+") do
+						table.insert(tags, tag)
+					end
+					session.tag(if #tags > 0 then tags else nil)
+				end, true)
+				ui.set(tags, "PlaceholderText", "None")
+				ui.set(tags, "Size", ui.values.udim2(1, 0, 1, 0))
+				ui.set(tags, "Parent", editorSlot(tagRow))
+			end
 			if kind.children == "template" then
 				section "Data"
 				local lists: { string } = {}

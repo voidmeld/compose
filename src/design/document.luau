@@ -78,6 +78,7 @@ local function copyNode(node: Node): Node
 		nameField = node.nameField,
 		nameInput = node.nameInput,
 		when = node.when,
+		tags = if node.tags then table.clone(node.tags) else nil,
 	}
 end
 
@@ -681,6 +682,19 @@ function document.change(value: Document, library: Library, id: string, key: str
 			end
 		end
 	end
+	return document.validate(nextValue, library)
+end
+
+function document.tag(value: Document, library: Library, id: string, tags: { string }?): Document
+	assert(tags == nil or library.tags ~= nil, `{library.name} has no tags`)
+	local nextValue = copyDocument(value)
+	local node = assert(document.find(nextValue.root, id), "Choose a node")
+	if tags ~= nil then
+		for _, tag in tags do
+			assert(type(tag) == "string" and string.match(tag, "^[%w_%-]+$"), "A tag is letters, digits, - and _")
+		end
+	end
+	node.tags = if tags ~= nil and #tags > 0 then table.clone(tags) else nil
 	return document.validate(nextValue, library)
 end
 

@@ -93,6 +93,7 @@ export type Library = {
 	show: string?,
 	keyed: string?,
 	categories: { string }?,
+	tags: { call: string, apply: (built: unknown, tags: { string }) -> () }?,
 	space: ("2d" | "3d")?,
 	provide: ((content: unknown) -> unknown)?,
 	kinds: { [string]: Kind },
@@ -130,6 +131,7 @@ export type Node = {
 	nameField: string?,
 	nameInput: string?,
 	when: string?,
+	tags: { string }?,
 }
 
 export type Document = {

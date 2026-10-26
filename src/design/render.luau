@@ -264,6 +264,10 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			end
 		end
 		local built = kind.build(props, children, named)
+		local tags, tagging = node.tags, library.tags
+		if tags ~= nil and tagging ~= nil then
+			tagging.apply(built, tags)
+		end
 		local captured = references[node.id]
 		if captured ~= nil then
 			captured:set(built)

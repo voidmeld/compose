@@ -488,12 +488,25 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local call = assert(library.token, `{library.name} has no theme tokens`)
 		return `{call} {literal(assert(token))}`
 	end
+	local function tagged(node: Node, depth: number): string
+		local tags, tagging = node.tags, library.tags
+		if tags == nil or tagging == nil then
+			return emitNode(node, depth)
+		end
+		local inner = tabs(depth + 1)
+		local quoted: { string } = {}
+		for _, tag in tags do
+			table.insert(quoted, string.format("%q", tag))
+		end
+		local list = `\{ {table.concat(quoted, ", ")} \}`
+		return `{tagging.call}(\n{inner}{emitNode(node, depth + 1)},\n{inner}{list}\n{tabs(depth)})`
+	end
 	emit = function(node: Node, depth: number): string
 		if referenced[node.id] then
 			local inner = tabs(depth + 1)
-			return `capture(\n{inner}"{node.id}",\n{inner}{emitNode(node, depth + 1)}\n{tabs(depth)})`
+			return `capture(\n{inner}"{node.id}",\n{inner}{tagged(node, depth + 1)}\n{tabs(depth)})`
 		end
-		return emitNode(node, depth)
+		return tagged(node, depth)
 	end
 	emitNode = function(node: Node, depth: number): string
 		local kind = assert(library.kinds[node.kind])
@@ -1176,6 +1189,24 @@ function source.parse(code: string, library: Library): Types.Document
 			return inner
 		end
 		local call = dotted()
+		local tagging = library.tags
+		if tagging ~= nil and call == tagging.call and peek() == "(" then
+			take "("
+			local inner = node()
+			take ","
+			local raw = plain()
+			take ")"
+			local tags: { string } = {}
+			if type(raw) == "table" then
+				for _, tag in raw do
+					if type(tag) == "string" then
+						table.insert(tags, tag)
+					end
+				end
+			end
+			inner.tags = tags
+			return inner
+		end
 		local kindName = assert(calls[call], `{call} is not a {library.name} kind`)
 		local kind = library.kinds[kindName]
 		local templated = kind.children == "template"
