@@ -239,7 +239,10 @@ describe("Compose Design documents", function()
 		library.motion = {
 			call = "UI.follow",
 			roles = { "move", "fade" },
-			animate = function(source: Core.Value<Design.Literal?>, role: string): Core.Value<Design.Literal?>
+			animate = function(
+				source: Core.ReadOnlyValue<Design.Literal?>,
+				role: string
+			): Core.ReadOnlyValue<Design.Literal?>
 				table.insert(moved, role)
 				return source
 			end,

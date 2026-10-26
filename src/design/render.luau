@@ -4,7 +4,7 @@ local Core = require "../core"
 local Types = require "./types"
 local Document = require "./document"
 
-type ReadOnlyValue<T> = Core.Value<T>
+type ReadOnlyValue<T> = Core.ReadOnlyValue<T>
 type Use = Core.Use
 type Literal = Types.Literal
 type Row = Types.Row
