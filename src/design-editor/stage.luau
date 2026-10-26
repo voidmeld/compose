@@ -348,6 +348,7 @@ return function(ui: UI.UI)
 			Compose.cleanup(release)
 			return box
 		end
+		local started = false
 		local root = Compose.createRootOwner(function()
 			Compose.watch(function(use: Compose.Use)
 				local value = use(session.document)
@@ -357,7 +358,7 @@ return function(ui: UI.UI)
 				end
 				table.clear(nodes)
 				stopDesign = runtime.mount(function(): Compose.Node
-					local content = Design.render(value, session.library, {
+					local rendered, content = pcall(Design.render, value, session.library, {
 						inputs = options.inputs,
 						slots = options.slots,
 						token = options.token,
@@ -368,6 +369,14 @@ return function(ui: UI.UI)
 							end
 						end,
 					})
+					if not rendered then
+						if not started then
+							error(content, 0)
+						end
+						table.clear(nodes)
+						session.problem:set(`This design does not render: {content}`)
+						return nil
+					end
 					local provide = session.library.provide
 					return if provide then provide(content) else content
 				end, surface)
@@ -381,6 +390,7 @@ return function(ui: UI.UI)
 				return use(session.selected)
 			end)
 		end, runtime.reactor)
+		started = true
 		local release = Compose.owner.own(ui.owner, root.dispose)
 		local function apply()
 			local scale = zoom:peek()

@@ -63,9 +63,12 @@ export type Resolved = {
 
 export type Children = "none" | "list" | "template" | "slot"
 
+export type Seed = { kind: string, props: { [string]: Literal }?, children: { Seed }? }
+
 export type Kind = {
 	fields: { [string]: Field },
 	defaults: { [string]: Literal }?,
+	seeds: { Seed }?,
 	children: Children,
 	template: string?,
 	slot: string?,

@@ -277,6 +277,26 @@ describe("host-neutral design editor", function()
 		w.close()
 	end)
 
+	it("reports a design that fails to render and keeps editing", function()
+		local w = Support.world()
+		local rootKind = w.library.kinds[w.document.root.kind]
+		local build = rootKind.build
+		local editor = w.mount()
+		w.settle()
+		rootKind.build = function(): unknown
+			error "broken control"
+		end
+		editor.session.change("Visible", { literal = false })
+		w.settle()
+		expect(string.find(editor.session.problem:peek() or "", "broken control", 1, true) ~= nil):toBe(true)
+		rootKind.build = build
+		editor.session.change("Visible", { literal = true })
+		w.settle()
+		expect(assert(editor.stage).nodes[w.document.root.id] ~= nil):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("labels inspector rows and folds advanced fields until asked", function()
 		local w = Support.world()
 		local rootKind = w.library.kinds[w.document.root.kind]

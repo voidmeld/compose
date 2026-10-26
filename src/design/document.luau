@@ -590,12 +590,33 @@ function document.insert(
 			or (container.children == "template" and parent.bind ~= nil and parent.bind.row ~= nil),
 		`{parent.kind} cannot take this node`
 	)
-	local kind = assert(library.kinds[kindName], `Unknown {library.name} kind {kindName}`)
-	local id = `n{nextValue.nextId}`
-	nextValue.nextId += 1
-	local node: Node = { id = id, kind = kindName, name = kindName, props = defaults(kind), children = {} }
+	local function create(seed: Types.Seed): Node
+		local kind = assert(library.kinds[seed.kind], `Unknown {library.name} kind {seed.kind}`)
+		local created: Node = {
+			id = `n{nextValue.nextId}`,
+			kind = seed.kind,
+			name = seed.kind,
+			props = defaults(kind),
+			children = {},
+		}
+		nextValue.nextId += 1
+		local literals = seed.props
+		if literals then
+			for key, item in literals do
+				created.props[key] = { literal = copyLiteral(item) }
+			end
+		end
+		local nested = seed.children or kind.seeds
+		if nested then
+			for _, child in nested do
+				table.insert(created.children, create(child))
+			end
+		end
+		return created
+	end
+	local node = create { kind = kindName }
 	table.insert(parent.children, math.clamp(at or #parent.children + 1, 1, #parent.children + 1), node)
-	return document.validate(nextValue, library), id
+	return document.validate(nextValue, library), node.id
 end
 
 function document.change(value: Document, library: Library, id: string, key: string, property: Value?): Document

@@ -150,13 +150,11 @@ describe("Compose Design documents", function()
 	end)
 
 	it("reads back every literal it writes", function()
-		local values: { Design.Literal } = {
-			-4.5,
-			"line\n\"quoted\"",
-			false,
-			{ 0, 10, 0, -20 },
-			{ top = 4, ["two words"] = { "a", { nested = true } } },
-		}
+		local nested: { [string]: Design.Literal } = { nested = true }
+		local words: { Design.Literal } = { "a", nested }
+		local record: { [string]: Design.Literal } = { top = 4, ["two words"] = words }
+		local components: { Design.Literal } = { 0, 10, 0, -20 }
+		local values: { Design.Literal } = { -4.5, 'line\n"quoted"', false, components, record }
 		for _, value in values do
 			local text = Design.literal(value)
 			expect(Design.literal(Design.parseLiteral(text))):toBe(text)
@@ -167,6 +165,18 @@ describe("Compose Design documents", function()
 		expect(function()
 			Design.parseLiteral "1 2"
 		end):toThrow()
+	end)
+
+	it("inserts a kind with the children it seeds", function()
+		local panel = library.kinds.Panel
+		local labelProps: { [string]: Design.Literal } = { text = "Seeded" }
+		panel.seeds = { { kind = "Label", props = labelProps } }
+		local value, id = Design.document.insert(Design.document.new("Seeds", library, "Stack"), library, "n1", "Panel")
+		panel.seeds = nil
+		local inserted = assert(Design.document.find(value.root, id))
+		expect(#inserted.children):toBe(1)
+		expect(inserted.children[1].kind):toBe "Label"
+		expect(inserted.children[1].props.text.literal):toBe "Seeded"
 	end)
 
 	it("undoes and redoes whole edits", function()
