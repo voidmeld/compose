@@ -12,6 +12,7 @@ local Types = require "@self/types"
 export type Literal = Types.Literal
 export type Value = Types.Value
 export type Field = Types.Field
+export type FieldType = Types.FieldType
 export type Kind = Types.Kind
 export type Library = Types.Library
 export type Input = Types.Input
