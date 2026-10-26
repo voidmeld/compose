@@ -64,6 +64,13 @@ local library: Design.Library = {
 			call = "UI.List",
 			build = builder "List",
 		},
+		Panel = {
+			fields = { title = { type = "string" } },
+			children = "slot",
+			slot = "content",
+			call = "UI.Panel",
+			build = builder "Panel",
+		},
 		Slot = {
 			fields = { content = { type = "content" } },
 			children = "none",
@@ -193,6 +200,29 @@ describe("Compose Design documents", function()
 			expect(closed):toEqual { { "back" } }
 		end)
 	end)
+	it("builds slot content only when the slot is called and reads it back from source", function()
+		local value = Design.document.new("Panel", library, "Panel")
+		local body
+		value, body = Design.document.insert(value, library, "n1", "Label")
+		value = Design.document.change(value, library, body, "text", { literal = "Inside" })
+		expect(function()
+			Design.document.insert(value, library, "n1", "Label")
+		end):toThrow()
+		table.clear(built)
+		local panel = Design.render(value, library) :: Built
+		expect(#built):toBe(1)
+		expect(#panel.children):toBe(0)
+		local slot = assert(panel.props.content.slot)
+		local inside = slot() :: Built
+		expect(inside.kind):toBe "Label"
+		expect(inside.props.text.literal):toBe "Inside"
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'content = function() return UI.Label "Label" {', 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, library)
+		expect(parsed.root.children[1].kind):toBe "Label"
+		expect(parsed.root.children[1].props.text.literal):toBe "Inside"
+	end)
+
 	it("edits through a session that tracks selection, problems and history", function()
 		Core.withRootOwner(function()
 			local session = Design.session(library, sample())
