@@ -109,6 +109,11 @@ local draft: Gate.Draft = {
 		check("format", "source is formatted exactly as stylua.toml specifies", { "stylua", "--check" }, SOURCE_TREES),
 		script("type-policy", "strict maintained Luau has no explicit any", "tools/check-no-any.luau"),
 		script(
+			"spec-style",
+			"specifications declare compact describe, it and expect bindings once, except raw harness API subjects",
+			"tools/check-spec-style.luau"
+		),
+		script(
 			"comments",
 			"source contains only permitted tool directives, never explanatory comments",
 			"tools/check-code-comments.luau"

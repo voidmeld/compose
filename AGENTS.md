@@ -20,6 +20,7 @@ This file owns the contribution rules. Each fact has one owning document.
 
 - While you edit, run focused checks through the gate: `lute run tools/gate.luau --file tests/path/name.verify.luau` for one specification, `--name text` for the cases whose name contains the text, `--tier fast` for the fast tier.
 - Write every test as a Verify case. Write every benchmark as a Verify benchmark and every engine check as a Verify case.
+- Use the test harness and declare `local describe, it, expect = Test.describe, Test.it, Test.expect` once per specification. The fast gate's `spec-style` producer runs `tools/check-spec-style.luau`; `tools/checks-config.luau` excludes specifications whose subject is Verify's raw harness API.
 - After you add or remove a specification, run `lute run tools/check-test-manifest.luau --write`.
 - Commit the candidate. Then run `lute run tools/gate.luau` once on the clean HEAD. Its fresh-clone check must pass before integration.
 - Do not change verified bytes after the gate.
