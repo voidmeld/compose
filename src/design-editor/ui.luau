@@ -118,6 +118,14 @@ local function create(runtime: Compose.Runtime, environment: Environment.Environ
 			return values.color(r / 255, g / 255, b / 255)
 		end,
 		service = environment.service,
+		keyDown = function(keys: { string }): boolean
+			for _, key in keys do
+				if call(environment.service "UserInputService", "IsKeyDown", values.enum("KeyCode", key)) == true then
+					return true
+				end
+			end
+			return false
+		end,
 		descendants = environment.descendants,
 		new = new,
 		get = get,

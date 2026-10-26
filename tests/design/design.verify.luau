@@ -1366,4 +1366,269 @@ describe("Compose Design views as code", function()
 	end)
 end)
 
+describe("Compose Design selection sets", function()
+	local function siblings(): Design.Document
+		local value = Design.document.new("Selection", library, "Stack")
+		for _ = 1, 4 do
+			value = Design.document.insert(value, library, "n1", "Label")
+		end
+		return value
+	end
+
+	it("toggles, ranges and clears an ordered selection without adding history", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, siblings())
+			session.select "n2"
+			session.select("n4", "toggle")
+			expect(session.selection:peek()):toEqual { "n2", "n4" }
+			session.select("n2", "toggle")
+			expect(session.selection:peek()):toEqual { "n4" }
+			session.select "n2"
+			session.select("n5", "range")
+			expect(session.selection:peek()):toEqual { "n2", "n3", "n4", "n5" }
+			session.select("n3", "range")
+			expect(session.selection:peek()):toEqual { "n2", "n3" }
+			session.selectMany { "n5", "missing", "n2", "n2" }
+			expect(session.selection:peek()):toEqual { "n2", "n5" }
+			session.selectMany {}
+			expect(session.selected:peek()):toBe ""
+			expect(session.selection:peek()):toEqual {}
+			expect(session.canUndo:peek()):toBe(false)
+		end)
+	end)
+
+	it("changes every selected node atomically and restores the selection through undo and redo", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, siblings())
+			session.selectMany { "n2", "n4" }
+			local before = session.document:peek()
+			expect(session.change("text", { literal = "Together" })):toBe(true)
+			local after = session.document:peek()
+			expect(after.root.children[1].props.text.literal):toBe "Together"
+			expect(after.root.children[3].props.text.literal):toBe "Together"
+			expect(after.root.children[2].props.text.literal):toBe "Label"
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(before)
+			expect(session.selection:peek()):toEqual { "n2", "n4" }
+			expect(session.canUndo:peek()):toBe(false)
+			expect(session.redo()):toBe(true)
+			expect(session.document:peek()):toBe(after)
+			session.selectMany { "n2", "n1" }
+			expect(session.change("text", { literal = "Refused" })):toBe(false)
+			expect(session.document:peek()):toBe(after)
+		end)
+	end)
+
+	it("duplicates, copies, pastes and deletes forests in one step per command", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, siblings())
+			session.selectMany { "n2", "n4" }
+			local before = session.document:peek()
+			expect(session.duplicate()):toBe(true)
+			expect(#session.document:peek().root.children):toBe(6)
+			expect(session.selection:peek()):toEqual { "n6", "n7" }
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(before)
+			expect(session.selection:peek()):toEqual { "n2", "n4" }
+			expect(session.redo()):toBe(true)
+			expect(session.copy()):toBe(true)
+			session.select "n1"
+			local copied = session.document:peek()
+			expect(session.paste()):toBe(true)
+			expect(#session.document:peek().root.children):toBe(8)
+			expect(#session.selection:peek()):toBe(2)
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(copied)
+			expect(session.redo()):toBe(true)
+			local pasted = session.document:peek()
+			expect(session.remove()):toBe(true)
+			expect(#session.document:peek().root.children):toBe(6)
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(pasted)
+			expect(#session.selection:peek()):toBe(2)
+			expect(session.redo()):toBe(true)
+			expect(#session.document:peek().root.children):toBe(6)
+		end)
+	end)
+
+	it("moves and reorders selected siblings in document order with atomic refusals", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, siblings())
+			session.selectMany { "n4", "n3" }
+			local before = session.document:peek()
+			expect(session.shift(-1)):toBe(true)
+			local moved = session.document:peek()
+			expect(moved.root.children[1].id):toBe "n3"
+			expect(moved.root.children[2].id):toBe "n4"
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(before)
+			expect(session.redo()):toBe(true)
+			expect(session.shift(-1)):toBe(false)
+			expect(session.document:peek()):toBe(moved)
+			expect(session.move("n3", "n1", 3)):toBe(true)
+			expect(session.document:peek().root.children[3].id):toBe "n3"
+			expect(session.document:peek().root.children[4].id):toBe "n4"
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(moved)
+			expect(session.redo()):toBe(true)
+			expect(session.move("n3", "n4")):toBe(false)
+			expect(session.document:peek().root.children[3].id):toBe "n3"
+		end)
+	end)
+
+	it("wraps noncontiguous siblings at the first position and unwraps in order", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, siblings())
+			session.selectMany { "n4", "n2" }
+			local before = session.document:peek()
+			expect(session.wrap()):toBe(true)
+			local wrapped = session.document:peek()
+			local container = wrapped.root.children[1]
+			expect(container.kind):toBe "Stack"
+			expect(container.children[1].id):toBe "n2"
+			expect(container.children[2].id):toBe "n4"
+			expect(wrapped.root.children[2].id):toBe "n3"
+			expect(session.selection:peek()):toEqual { container.id }
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(before)
+			expect(session.selection:peek()):toEqual { "n2", "n4" }
+			expect(session.redo()):toBe(true)
+			expect(session.unwrap()):toBe(true)
+			expect(session.selection:peek()):toEqual { "n2", "n4" }
+			expect(session.document:peek().root.children[2].id):toBe "n4"
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(wrapped)
+			expect(session.redo()):toBe(true)
+			local code = Design.emit(session.document:peek(), library)
+			expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		end)
+	end)
+
+	it("normalizes overlapping selections and refuses invalid wrap and unwrap without history", function()
+		Core.withRootOwner(function()
+			local value, container = Design.document.insert(siblings(), library, "n1", "Stack")
+			local child
+			value, child = Design.document.insert(value, library, container, "Label")
+			local session = Design.session(library, value)
+			session.selectMany { container, child }
+			expect(session.copy()):toBe(true)
+			expect(session.remove()):toBe(true)
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(value)
+			session.selectMany { "n2", child }
+			expect(session.wrap()):toBe(false)
+			expect(session.document:peek()):toBe(value)
+			expect(session.canUndo:peek()):toBe(false)
+			session.select "n2"
+			expect(session.unwrap()):toBe(false)
+			session.select "n1"
+			expect(session.wrap()):toBe(false)
+			expect(session.unwrap()):toBe(false)
+			expect(session.document:peek()):toBe(value)
+		end)
+	end)
+
+	it("remaps references across a copied selection and keeps failed group edits out of history", function()
+		Core.withRootOwner(function()
+			local value, target = Design.document.insert(siblings(), library, "n1", "Flash")
+			value = Design.document.change(value, library, target, "target", { node = "n2" })
+			local session = Design.session(library, value)
+			session.selectMany { "n2", target }
+			expect(session.duplicate()):toBe(true)
+			local selection = session.selection:peek()
+			local flash = assert(Design.document.find(session.document:peek().root, selection[2]), "Flash")
+			expect(flash.props.target.node):toBe(selection[1])
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(value)
+			expect(session.copy()):toBe(true)
+			session.select "n1"
+			expect(session.paste()):toBe(true)
+			selection = session.selection:peek()
+			flash = assert(Design.document.find(session.document:peek().root, selection[2]), "Flash")
+			expect(flash.props.target.node):toBe(selection[1])
+			expect(session.undo()):toBe(true)
+			session.selectMany { "n2", target }
+			expect(session.remove()):toBe(true)
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(value)
+			session.select "n2"
+			expect(session.remove()):toBe(false)
+			expect(session.document:peek()):toBe(value)
+			expect(session.canUndo:peek()):toBe(false)
+		end)
+	end)
+
+	it("keeps hidden and locked flags in the header across edits, history and source round trips", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, siblings())
+			local before = session.document:peek()
+			expect(session.hide("n3", true)):toBe(true)
+			local hidden = session.document:peek()
+			expect(session.lock("n3", true)):toBe(true)
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(hidden)
+			expect(session.redo()):toBe(true)
+			session.select "n3"
+			expect(session.rename "HiddenLabel"):toBe(true)
+			local code = Design.emit(session.document:peek(), library)
+			local parsed = Design.parse(code, library)
+			expect(parsed.root.children[2].hidden):toBe(true)
+			expect(parsed.root.children[2].locked):toBe(true)
+			expect(parsed.root.children[2].name):toBe "HiddenLabel"
+			expect(parsed.root.children[2].props.text.literal):toBe "Label"
+			expect(Design.emit(parsed, library)):toBe(code)
+			table.clear(built)
+			Design.render(parsed, library)
+			expect(#built):toBe(5)
+			table.clear(built)
+			Design.render(parsed, library, {
+				exclude = function(node: Design.Node): boolean
+					return node.hidden == true
+				end,
+			})
+			expect(#built):toBe(4)
+			expect(session.undo()):toBe(true)
+			expect(session.undo()):toBe(true)
+			expect(session.undo()):toBe(true)
+			expect(session.document:peek()):toBe(before)
+		end)
+	end)
+
+	it("attaches editor flags to their content fields when source orders templates differently", function()
+		Core.withRootOwner(function()
+			local extended = Design.extend(library, {
+				kinds = {
+					Pair = {
+						fields = { left = { type = "content" }, right = { type = "content" } },
+						children = "list",
+						call = "UI.Pair",
+						build = builder "Pair",
+					},
+				},
+			})
+			local value, right = Design.document.content(
+				Design.document.new("Slots", extended, "Pair"),
+				extended,
+				"n1",
+				"right",
+				"Label"
+			)
+			local left
+			value, left = Design.document.content(value, extended, "n1", "left", "Label")
+			value = Design.document.rename(value, extended, right, "Right")
+			value = Design.document.rename(value, extended, left, "Left")
+			local session = Design.session(extended, value)
+			expect(session.hide(right, true)):toBe(true)
+			expect(session.lock(left, true)):toBe(true)
+			local code = Design.emit(session.document:peek(), extended)
+			local parsed = Design.parse(code, extended)
+			for _, node in parsed.root.children do
+				expect(node.hidden == true):toBe(node.name == "Right")
+				expect(node.locked == true):toBe(node.name == "Left")
+			end
+			expect(Design.emit(parsed, extended)):toBe(code)
+		end)
+	end)
+end)
+
 return nil

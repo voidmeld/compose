@@ -1021,4 +1021,337 @@ describe("host-neutral design editor", function()
 	end)
 end)
 
+describe("design editor selection sets", function()
+	local function click(w: typeof(Support.world()), editor: DesignEditor.Editor, id: string)
+		local stage = assert(editor.stage)
+		local instance = stage.nodes[id]
+		local at, extent = w.point(instance, "AbsolutePosition"), w.point(instance, "AbsoluteSize")
+		local input = w.pointer("MouseButton1", at.X + extent.X / 2, at.Y + extent.Y / 2)
+		w.fire(stage.overlay, "InputBegan", input)
+		w.fire(w.input, "InputEnded", input)
+		w.settle()
+	end
+
+	it("toggles stage selections, draws their union and individual outlines, and clears with Escape", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local stage = assert(editor.stage)
+		w.settle()
+		stage.zoomTo(1)
+		w.settle()
+		click(w, editor, w.first)
+		w.down[w.values.Enum.KeyCode.LeftShift] = true
+		click(w, editor, w.second)
+		w.down[w.values.Enum.KeyCode.LeftShift] = nil
+		expect(editor.session.selection:peek()):toEqual { w.first, w.second }
+		expect(w.read(w.find(stage.overlay, `DesignSelected_{w.first}`), "Visible")):toBe(true)
+		expect(w.read(w.find(stage.overlay, `DesignSelected_{w.second}`), "Visible")):toBe(true)
+		local union = w.find(stage.overlay, "DesignSelected")
+		local firstAt = w.point(stage.nodes[w.first], "AbsolutePosition")
+		local secondAt = w.point(stage.nodes[w.second], "AbsolutePosition")
+		local secondSize = w.point(stage.nodes[w.second], "AbsoluteSize")
+		local at, extent = w.point(union, "AbsolutePosition"), w.point(union, "AbsoluteSize")
+		expect(math.abs(at.X - firstAt.X) < 1):toBe(true)
+		expect(math.abs(at.Y - firstAt.Y) < 1):toBe(true)
+		expect(math.abs(extent.Y - (secondAt.Y + secondSize.Y - firstAt.Y)) < 1):toBe(true)
+		w.down[w.values.Enum.KeyCode.LeftControl] = true
+		click(w, editor, w.first)
+		w.down[w.values.Enum.KeyCode.LeftControl] = nil
+		expect(editor.session.selection:peek()):toEqual { w.second }
+		local context = w.find(editor.root, "ComposeDesignShortcuts")
+		w.fire(w.find(context, "Parent"), "Pressed")
+		w.settle()
+		expect(editor.session.selection:peek()):toEqual {}
+		expect(w.read(union, "Visible")):toBe(false)
+		editor.dispose()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("ranges siblings in layers and applies mixed shared inspector fields to every selected kind", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local layers = w.find(editor.root, "DesignLayers")
+		w.fire(w.find(layers, w.first), "Activated")
+		w.down[w.values.Enum.KeyCode.LeftShift] = true
+		w.fire(w.find(layers, w.second), "Activated")
+		w.down[w.values.Enum.KeyCode.LeftShift] = nil
+		w.settle()
+		expect(editor.session.selection:peek()):toEqual { w.first, w.second }
+		local inspector = w.find(editor.root, "DesignInspector")
+		local textRow = w.find(inspector, "text")
+		expect(w.read(w.find(textRow, "Label"), "Text")):toBe "Text (Mixed)"
+		local box = assert(textRow:FindFirstChildWhichIsA("TextBox", true))
+		expect(w.read(box, "PlaceholderText")):toBe "Mixed"
+		expect(Support.instance(inspector):FindFirstChild("onActivate", true)):toBe(nil)
+		local before = editor.session.document:peek()
+		Support.instance(box).Text = "Shared"
+		w.fire(box, "FocusLost", true)
+		w.settle()
+		for _, node in editor.session.document:peek().root.children do
+			expect(node.props.text.literal):toBe "Shared"
+		end
+		expect(editor.session.undo()):toBe(true)
+		expect(editor.session.document:peek()):toBe(before)
+		expect(editor.session.redo()):toBe(true)
+		w.down[w.values.Enum.KeyCode.LeftMeta] = true
+		w.fire(w.find(layers, w.first), "Activated")
+		w.down[w.values.Enum.KeyCode.LeftMeta] = nil
+		expect(editor.session.selection:peek()):toEqual { w.second }
+		editor.dispose()
+		w.close()
+	end)
+
+	it("marquees intersecting bounds from empty canvas at multiple zoom levels", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local stage = assert(editor.stage)
+		w.settle()
+		for _, zoom in { 0.5, 1, 2 } do
+			stage.zoomTo(zoom)
+			w.settle()
+			local at = w.point(stage.nodes[w.first], "AbsolutePosition")
+			local last = w.point(stage.nodes[w.second], "AbsolutePosition")
+			local extent = w.point(stage.nodes[w.second], "AbsoluteSize")
+			local x = at.X - 10
+			local y = at.Y - 10
+			w.fire(stage.overlay, "InputBegan", w.pointer("MouseButton1", x, y))
+			w.fire(w.input, "InputChanged", w.pointer("MouseMovement", last.X + extent.X / 2, last.Y + 1))
+			expect(w.read(w.find(stage.overlay, "DesignMarquee"), "Visible")):toBe(true)
+			w.fire(w.input, "InputEnded", w.pointer("MouseButton1", last.X + extent.X / 2, last.Y + 1))
+			w.settle()
+			expect(editor.session.selection:peek()):toEqual { w.first, w.second }
+			expect(w.read(w.find(stage.overlay, "DesignMarquee"), "Visible")):toBe(false)
+		end
+		expect(editor.session.canUndo:peek()):toBe(false)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("drags the selected siblings together in one undoable stage move", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local session = editor.session
+		session.select "n1"
+		expect(session.insert "Text"):toBe(true)
+		local third = session.selected:peek()
+		session.changeMany { width = { literal = 120 }, height = { literal = 36 } }
+		session.selectMany { w.first, w.second }
+		w.settle()
+		local stage = assert(editor.stage)
+		local at, extent =
+			w.point(stage.nodes[w.first], "AbsolutePosition"), w.point(stage.nodes[w.first], "AbsoluteSize")
+		local last, size = w.point(stage.nodes[third], "AbsolutePosition"), w.point(stage.nodes[third], "AbsoluteSize")
+		local before = session.document:peek()
+		w.fire(stage.overlay, "InputBegan", w.pointer("MouseButton1", at.X + extent.X / 2, at.Y + extent.Y / 2))
+		w.fire(w.input, "InputChanged", w.pointer("MouseMovement", last.X + 20, last.Y + size.Y + 5))
+		w.fire(w.input, "InputEnded", w.pointer("MouseButton1", last.X + 20, last.Y + size.Y + 5))
+		w.settle()
+		expect(session.document:peek().root.children[1].id):toBe(third)
+		expect(session.document:peek().root.children[2].id):toBe(w.first)
+		expect(session.document:peek().root.children[3].id):toBe(w.second)
+		expect(session.undo()):toBe(true)
+		expect(session.document:peek()):toBe(before)
+		expect(session.redo()):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("wraps and unwraps from shortcuts and the layer context menu with history and source parity", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local session = editor.session
+		session.selectMany { w.first, w.second }
+		local before = session.document:peek()
+		local shortcuts = w.find(editor.root, "ComposeDesignShortcuts")
+		w.fire(w.find(shortcuts, "Wrap"), "Pressed")
+		w.settle()
+		local wrapped = session.document:peek()
+		local container = wrapped.root.children[1]
+		expect(container.kind):toBe "Stack"
+		expect(#container.children):toBe(2)
+		expect(session.undo()):toBe(true)
+		expect(session.document:peek()):toBe(before)
+		expect(session.redo()):toBe(true)
+		w.settle()
+		local layers = w.find(editor.root, "DesignLayers")
+		local row = w.find(layers, container.id)
+		local point = w.point(row, "AbsolutePosition")
+		w.fire(row, "InputBegan", w.pointer("MouseButton2", point.X + 30, point.Y + 12))
+		local menu = w.find(editor.root, "LayerContextMenu")
+		expect(w.read(menu, "Visible")):toBe(true)
+		w.fire(w.find(menu, "Unwrap"), "Activated")
+		w.settle()
+		expect(session.selection:peek()):toEqual { w.first, w.second }
+		expect(#session.document:peek().root.children):toBe(2)
+		expect(session.undo()):toBe(true)
+		expect(session.document:peek()):toBe(wrapped)
+		expect(session.redo()):toBe(true)
+		w.settle()
+		w.fire(w.find(layers, w.first), "InputBegan", w.pointer("MouseButton2", point.X + 30, point.Y + 12))
+		w.fire(w.find(menu, "Wrap"), "Activated")
+		w.settle()
+		w.down[w.values.Enum.KeyCode.LeftShift] = true
+		w.fire(w.find(shortcuts, "Wrap"), "Pressed")
+		w.fire(w.find(shortcuts, "Unwrap"), "Pressed")
+		w.down[w.values.Enum.KeyCode.LeftShift] = nil
+		w.settle()
+		expect(#session.document:peek().root.children):toBe(2)
+		local code = Design.emit(session.document:peek(), w.library)
+		expect(Design.emit(Design.parse(code, w.library), w.library)):toBe(code)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("hides and locks layer rows while preserving layer selection, history and header round trips", function()
+		local w = Support.world()
+		local editor = w.mount()
+		w.settle()
+		local session, stage = editor.session, assert(editor.stage)
+		local layers = w.find(editor.root, "DesignLayers")
+		w.fire(w.find(w.find(layers, w.first), "Hide"), "Activated")
+		w.settle()
+		expect(stage.nodes[w.first]):toBe(nil)
+		expect(w.find(layers, w.first)):toBeOk()
+		expect(session.undo()):toBe(true)
+		w.settle()
+		expect(stage.nodes[w.first]):toBeOk()
+		expect(session.redo()):toBe(true)
+		w.settle()
+		w.fire(w.find(w.find(layers, w.second), "Lock"), "Activated")
+		w.settle()
+		click(w, editor, w.second)
+		expect(session.selection:peek()):toEqual {}
+		w.fire(w.find(layers, w.second), "Activated")
+		w.settle()
+		expect(session.selection:peek()):toEqual { w.second }
+		local before = session.document:peek()
+		local at, extent =
+			w.point(stage.nodes[w.second], "AbsolutePosition"), w.point(stage.nodes[w.second], "AbsoluteSize")
+		w.fire(stage.overlay, "InputBegan", w.pointer("MouseButton1", at.X + extent.X / 2, at.Y + extent.Y / 2))
+		w.fire(w.input, "InputChanged", w.pointer("MouseMovement", at.X + 40, at.Y + 80))
+		w.fire(w.input, "InputEnded", w.pointer("MouseButton1", at.X + 40, at.Y + 80))
+		expect(session.document:peek()):toBe(before)
+		local code = Design.emit(before, w.library)
+		local parsed = Design.parse(code, w.library)
+		expect(parsed.root.children[1].hidden):toBe(true)
+		expect(parsed.root.children[2].locked):toBe(true)
+		expect(Design.emit(parsed, w.library)):toBe(code)
+		expect(session.undo()):toBe(true)
+		w.settle()
+		click(w, editor, w.second)
+		expect(session.selection:peek()):toEqual { w.second }
+		editor.dispose()
+		w.close()
+	end)
+
+	it("runs clipboard, reorder and delete shortcuts on the whole selection", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local session = editor.session
+		local shortcuts = w.find(editor.root, "ComposeDesignShortcuts")
+		session.selectMany { w.first, w.second }
+		local before = session.document:peek()
+		w.fire(w.find(shortcuts, "Duplicate"), "Pressed")
+		expect(#session.document:peek().root.children):toBe(4)
+		expect(#session.selection:peek()):toBe(2)
+		w.fire(w.find(shortcuts, "MoveUp"), "Pressed")
+		expect(session.document:peek().root.children[1].id):toBe(session.selection:peek()[1])
+		expect(session.undo()):toBe(true)
+		w.fire(w.find(shortcuts, "Copy"), "Pressed")
+		w.fire(w.find(shortcuts, "Paste"), "Pressed")
+		expect(#session.document:peek().root.children):toBe(6)
+		w.fire(w.find(shortcuts, "Delete"), "Pressed")
+		expect(#session.document:peek().root.children):toBe(4)
+		expect(session.undo()):toBe(true)
+		expect(#session.selection:peek()):toBe(2)
+		expect(session.undo()):toBe(true)
+		expect(session.undo()):toBe(true)
+		expect(session.document:peek()):toBe(before)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("keeps scene selection offsets through a group gizmo move and respects hidden and locked subtrees", function()
+		local w = Support.world "3d"
+		local editor = w.mount()
+		local session, scene = editor.session, assert(editor.scene)
+		session.select "n1"
+		expect(session.insert "Part"):toBe(true)
+		local second = session.selected:peek()
+		expect(session.change("position", { literal = { 10, 3, 0 } })):toBe(true)
+		session.selectMany { w.first, second }
+		w.settle()
+		scene.fit()
+		w.settle()
+		expect(w.find(scene.world, `Selected_{w.first}`)):toBeOk()
+		expect(w.find(scene.world, `Selected_{second}`)):toBeOk()
+		local tip = w.find(scene.world, "TipX")
+		local position = w.read(w.read(tip, "CFrame"), "Position")
+		local projected = w.environment.invoke(w.read(scene.camera, "CFrame"), "PointToObjectSpace", position)
+		local at, size = w.point(scene.viewport, "AbsolutePosition"), w.point(scene.viewport, "AbsoluteSize")
+		local tanY = math.tan(math.rad(w.number(scene.camera, "FieldOfView")) / 2)
+		local tanX = tanY * size.X / size.Y
+		local z = -w.number(projected, "Z")
+		local x = at.X + (w.number(projected, "X") / z / tanX + 1) * size.X / 2
+		local y = at.Y + (1 - w.number(projected, "Y") / z / tanY) * size.Y / 2
+		local before = session.document:peek()
+		w.fire(scene.viewport, "InputBegan", w.pointer("MouseButton1", x, y))
+		w.fire(w.input, "InputChanged", w.pointer("MouseMovement", x + 60, y))
+		w.fire(w.input, "InputEnded", w.pointer("MouseButton1", x + 60, y))
+		w.settle()
+		local function positionX(id: string): number
+			return w.number(w.read(w.read(scene.nodes[id], "CFrame"), "Position"), "X")
+		end
+		expect(positionX(w.first) > 0):toBe(true)
+		expect(positionX(second) - positionX(w.first)):toBeCloseTo(10, 0.001)
+		expect(session.undo()):toBe(true)
+		expect(session.document:peek()):toBe(before)
+		expect(session.redo()):toBe(true)
+		expect(session.hide(w.first, true)):toBe(true)
+		expect(session.lock("n1", true)):toBe(true)
+		w.settle()
+		expect(scene.nodes[w.first]):toBe(nil)
+		expect(scene.pick { X = at.X + size.X / 2, Y = at.Y + size.Y / 2 }):toBe(nil)
+		session.select(second)
+		w.settle()
+		expect(w.read(w.find(scene.world, "TipX"), "CanQuery")):toBe(false)
+		local code = Design.emit(session.document:peek(), w.library)
+		expect(Design.emit(Design.parse(code, w.library), w.library)):toBe(code)
+		editor.dispose()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("toggles scene picks and marquees projected bounds without adding an edit", function()
+		local w = Support.world "3d"
+		local editor = w.mount()
+		local scene = assert(editor.scene)
+		w.settle()
+		scene.fit()
+		local at, size = w.point(scene.viewport, "AbsolutePosition"), w.point(scene.viewport, "AbsoluteSize")
+		editor.session.selectMany {}
+		w.down[w.values.Enum.KeyCode.LeftShift] = true
+		w.fire(scene.viewport, "InputBegan", w.pointer("MouseButton1", at.X + size.X / 2, at.Y + size.Y / 2))
+		w.fire(w.input, "InputEnded", w.pointer("MouseButton1", at.X + size.X / 2, at.Y + size.Y / 2))
+		expect(editor.session.selection:peek()):toEqual { w.first }
+		w.fire(scene.viewport, "InputBegan", w.pointer("MouseButton1", at.X + size.X / 2, at.Y + size.Y / 2))
+		w.fire(w.input, "InputEnded", w.pointer("MouseButton1", at.X + size.X / 2, at.Y + size.Y / 2))
+		expect(editor.session.selection:peek()):toEqual {}
+		w.down[w.values.Enum.KeyCode.LeftShift] = nil
+		w.fire(scene.viewport, "InputBegan", w.pointer("MouseButton1", at.X + 5, at.Y + 5))
+		w.fire(w.input, "InputChanged", w.pointer("MouseMovement", at.X + size.X - 5, at.Y + size.Y - 5))
+		expect(w.read(w.find(scene.viewport, "DesignMarquee"), "Visible")):toBe(true)
+		w.fire(w.input, "InputEnded", w.pointer("MouseButton1", at.X + size.X - 5, at.Y + size.Y - 5))
+		expect(editor.session.selection:peek()):toEqual { w.first }
+		expect(editor.session.canUndo:peek()):toBe(false)
+		editor.dispose()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+end)
+
 return nil

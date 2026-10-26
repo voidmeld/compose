@@ -2064,6 +2064,8 @@ The generator refuses a plan and does not emit a tree that breaks at runtime.
 
 Require `src/design`. A `Library` provides `name`, `parameter`, `parameterType`, `prelude`, `returnType`, `readable`, `cell` and `kinds`. Each kind declares `fields`, `children`, a source `call` and `build(props, children, name) -> unknown`. Builders use the supplied runtime under the active owner. They own subscriptions and created nodes. Inputs, token tables and mount targets stay borrowed.
 
+`library.containerKind` names the default list container for wrapping. Without it, wrapping uses the root kind, which must accept a list of children. The bundled libraries use `Stack` and `Model`.
+
 ### `Design.document`
 
 `new(name, library, rootKind) -> Document` creates a document. Edits return copies that pass validation. The edit calls are `insert(value, library, parentId, kind) -> (Document, id)`, `change(value, library, id, key, Value?)` and `rename(value, library, id, name)`. They also include `move(value, library, id, parentId, before?)`, `remove(value, library, id)`, `setContract(value, library, contract)` and `bind(value, library, id, Bind?)`. `showWhen(value, library, id, inputOrItemField?)` sets the display condition. `content(value, library, id, key, kind)` adds a content subtree. `validate(value, library)` rejects invalid fields, bindings, references and structure. Documents contain plain data only, with at most 500 nodes and 32 levels. `copy(value)` copies a document. Literal copying, literal validation and sequence lookup remain private implementation helpers.
@@ -2092,6 +2094,8 @@ An output has `id`, optional `args: { InputType }` or `row` naming a list input 
 
 The writer omits a literal only when it equals its field's declared `default`, the value the called control uses when the prop is absent. Kind `defaults` are values a new node starts with, so the writer keeps them. It also omits a template wrapper's key when it equals the key field's declared default. `UDim2` uses `fromOffset` for zero scales and `fromScale` for zero offsets. Other values use `new`. All-zero and all-one vectors use `zero` and `one`. Token components stay as token expressions, even when their resolved value is zero.
 
+Nodes may carry `hidden` and `locked` editor flags. Source stores these flags by child path in `_design.editor`. They do not become builder properties or remove nodes from the emitted component.
+
 `EmitOptions` accepts `name`, `rowFunctions`, `localControls`, `controls`, `propsType` and `prelude`. The generated component accepts the library controls parameter and typed `Props`. Readable inputs pass directly to controls. `library.show` and `library.keyed` name structural functions in generated source. A `library.token` ending in `.` writes token paths (`Tokens.font.title`); other token names become resolver calls. Token tables belong to the consumer and may contain host datatypes and reactive values. Attributes use an ordinary `value` field forwarded by the kind to the runtime's reserved `Attributes` property; Design adds no host attribute policy.
 
 ### `Design.parse`
@@ -2114,6 +2118,8 @@ It accepts `UDim2.new`, `UDim2.fromOffset`, `UDim2.fromScale`, `UDim.new` and ve
 
 Datatype component tokens must resolve to numbers. `resolveToken` can supply a numeric `value`, `literal` or `readable`. Reactive components produce a readable component array. The builder converts the resolved array to its host datatype.
 
+`exclude(node) -> boolean` skips a node and its subtree. The editor uses it for hidden nodes. Rendering without this callback includes hidden nodes.
+
 `Resolved` supplies `literal`, opaque `value`, `readable`, `callback`, `slot`, `rows`, `template`, `node` and `key`. A binding takes precedence over snapshot inputs and previews and reaches the kind builder without conversion. Use `readable` for live plain values, `rows` for a live row collection, and `value` for an opaque host value or formula that the builder understands. Bindings do not transfer ownership of sources. Builders must consume the appropriate resolved member and pass structural children to runtime constructors.
 
 Supplying `bindings`, including an empty table, enables live conditional children and keyed repeated children through Compose structural directives. Template kinds receive reactive row formulas, including nested item lists. Replacing a keyed row updates its item bindings and event arguments; removing it disposes its owned subtree. Without `bindings`, rendering uses snapshots for list structure and conditions, as an editor preview does. Mount live designs under an owner and dispose their mount normally. Failed mounts unwind slots, nodes and subscriptions through the runtime.
@@ -2125,6 +2131,12 @@ Supplying `bindings`, including an empty table, enables live conditional childre
 ### `Design.session`
 
 `session(library, initial) -> Session` owns document, selection and edit history. Edit methods return success and put refusals in `problem` without replacing the current document.
+
+`selection` holds node ids in document order. `selected` holds the focused id, or `""` for an empty selection. Read these cells and use `select(id, mode?)` or `selectMany(ids)` to change selection. Modes are `replace` (the default), `toggle` and `range`. A range includes siblings between the anchor and the target. A target outside the anchor's siblings toggles instead. `selectMany({})` clears selection. Selection changes add no history.
+
+`change`, `changeMany`, `rename`, `tag` and `bind` apply to every selected node. `change(key, value)` also accepts a function `(node) -> Value?` for edits that preserve each node's other values. A group edit commits once or refuses as a whole. `remove`, `duplicate`, `copy`, `paste` and `shift` operate on selected subtrees in document order. Selecting an ancestor and its child processes that subtree once. `move(id, destination, before?)` moves the selection when it contains `id`; otherwise it moves only `id`. `before` indexes the destination after removing the moving nodes. Copying does not add history. Undo and redo restore selection along with the document.
+
+`wrap()` replaces selected siblings with a default list container at the first selected position. `unwrap()` replaces selected list containers with their children. The root cannot be wrapped, unwrapped, removed, duplicated or moved. `hide(id, boolean)` and `lock(id, boolean)` set editor flags. Each successful command is one undo step. Locking limits stage interactions; session edits and layer selection remain available.
 
 ### `Design.history`
 

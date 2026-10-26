@@ -109,6 +109,12 @@ Pass a `Design.LinkStore` as `options.link` to link source.
 The Roblox adapter `studio/design/script-store.luau` wraps `ScriptEditorService`.
 The editor uses only the store protocol.
 
+Shift-click or Command/Ctrl-click on the stage toggles a node. Command/Ctrl-click in layers also toggles; Shift-click selects a sibling range. Drag on empty canvas to select intersecting bounds. Selection has a union outline and an outline per node. Escape clears it. Delete, Duplicate, Copy, Paste, Alt+Up/Down and dragging act on the selection. Each edit is one undo step. The inspector shows shared fields, marks differing values as Mixed, and applies an edit to every selected node.
+
+Command/Ctrl+G wraps selected siblings in the library's default list container. Their order stays the same. Command/Ctrl+Shift+G replaces a selected container with its children. Right-click a layer for Wrap and Unwrap. Both commands support undo and redo.
+
+Each layer has Hide and Lock buttons. Hidden subtrees leave the stage preview but remain in emitted components. Locked subtrees cannot be picked or moved on the stage; they remain selectable and editable in layers. Both flags persist in the design header through source edits and undo/redo.
+
 ## Motion
 
 A library provides motion with `motion = { call, roles, animate }`.
@@ -168,6 +174,8 @@ The [API reference](api.md#design-editor) gives signatures and failures.
 [The editor tests](../tests/design/editor.lute.verify.luau) mount the real editor and libraries with the Roblox host and reflected simulation.
 They check geometry, layer order, inspector controls, resize history, zoom, fit, toolbar actions, keyboard actions and source links.
 They also check disposal, failed construction and 3D raycasts.
+
+Selection tests also check modifier clicks, sibling ranges, marquee intersections at several zoom levels, union outlines, mixed inspector edits, group dragging, wrap menus and hide/lock history. Live Studio still needs checks for modifier chords, pointer capture outside the canvas, context-menu placement, outline and marquee appearance, and source-linked persistence after reopening the plugin.
 
 The fixture provides fixed Unicode text measurements.
 Its layout reader ignores text truncation because the simulator does not model it.
