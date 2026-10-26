@@ -166,7 +166,7 @@ describe("Compose Design documents", function()
 		local code = Design.emit(value, library)
 		expect(string.find(code, "export type Props", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "title: Toy.Readable<string>?", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, "function(use) return use(current).name end", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "return use(current).name\n", 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, library)
 		expect(Design.emit(parsed, library)):toBe(code)
 		expect(parsed.root.children[2].bind):toEqual { from = "rows", key = "id" }
@@ -226,7 +226,7 @@ describe("Compose Design documents", function()
 		expect(inside.kind):toBe "Label"
 		expect(inside.props.text.literal):toBe "Inside"
 		local code = Design.emit(value, library)
-		expect(string.find(code, 'content = function() return UI.Label "Label" {', 1, true) ~= nil):toBe(true)
+		expect(string.find(code, 'content = function()\n\t\t\treturn UI.Label "Label" {', 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, library)
 		expect(parsed.root.children[1].kind):toBe "Label"
 		expect(parsed.root.children[1].props.text.literal):toBe "Inside"
@@ -308,7 +308,7 @@ describe("Compose Design documents", function()
 		expect(assert(assert(flashRecord).props.target.node):peek()):toBe(labelRecord)
 		local code = Design.emit(value, library)
 		expect(string.find(code, "local refs = { " .. label .. " = Toy.cell(nil) }", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, `capture("{label}", UI.Label "Label"`, 1, true) ~= nil):toBe(true)
+		expect(string.find(code, `capture(\n\t\t\t"{label}",\n\t\t\tUI.Label "Label"`, 1, true) ~= nil):toBe(true)
 		expect(string.find(code, `target = refs.{label},`, 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, library)):toEqual(value)
 	end)
@@ -519,6 +519,12 @@ describe("Compose Design source link", function()
 	end)
 end)
 
+local function outputCall(name: string): Design.Literal
+	local record: { [string | number]: Design.Literal } = {}
+	record["$output"] = name
+	return record
+end
+
 describe("Compose Design views as code", function()
 	local function viewLibrary(): Design.Library
 		local copied = table.clone(library)
@@ -570,8 +576,8 @@ describe("Compose Design views as code", function()
 		expect(string.find(code, "export type Props", 1, true)):toBe(nil)
 		expect(string.find(code, "UI.Stack(props.name) {", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "local state = { expanded = Toy.cell(true) }", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, "Toy.keyed { from = props.games", 1, true) ~= nil):toBe(true)
-		expect(string.find(code, "Toy.show(props.offered, function() return UI.Label", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "from = props.games,\n", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "Toy.show(props.offered, function()\n", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "Visible = state.expanded", 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, toy)
 		expect(parsed.root.nameInput):toBe "name"
@@ -628,6 +634,65 @@ describe("Compose Design views as code", function()
 		local short: Design.Literal = { 1, 0 }
 		expect(refused(function()
 			Design.document.change(value, toy, box, "Size", { literal = short })
+		end)):toBe(true)
+	end)
+
+	it("names row functions, mixes rows with static children and keeps the header used", function()
+		local value, toy = view()
+		value = Design.document.bind(value, toy, "n2", { from = "games", key = "id", row = "n3" })
+		local archived
+		value, archived = Design.document.insert(value, toy, "n2", "Label")
+		value = Design.document.change(value, toy, archived, "text", { literal = "Archived" })
+		local options: Design.EmitOptions = { name = "ChooseGame", rowFunctions = true }
+		local code = Design.emit(value, toy, options)
+		expect(string.find(code, "local _design = ", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "local function LabelRow(current)", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "render = LabelRow,", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, 'UI.Label "Label" {', 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, toy)
+		expect(#parsed.root.children[1].children):toBe(2)
+		expect(Design.emit(parsed, toy, options)):toBe(code)
+		table.clear(built)
+		local supplied: { [string]: Design.Literal } = { name = "Picker" }
+		local context: Design.RenderContext = { inputs = supplied }
+		local root = Design.render(value, toy, context) :: Built
+		expect(#(root.children[1] :: Built).children):toBe(3)
+	end)
+
+	it("binds outputs inside literal records and accepts declared extra literal kinds", function()
+		local toy = viewLibrary()
+		local menuFields: { [string]: Design.Field } = {
+			items = { type = "value", also = { "table" } },
+			gap = { type = "choice", options = { "s", "m" }, also = { "number" } },
+		}
+		toy.kinds = table.clone(toy.kinds)
+		toy.kinds.Menu = { fields = menuFields, children = "none", call = "UI.Menu", build = builder "Menu" }
+		local value, menu = Design.document.insert(Design.document.new("Report", toy, "Stack"), toy, "n1", "Menu")
+		local reportArgs: { Design.InputType } = {}
+		local report: Design.Output = { id = "onReport", args = reportArgs }
+		value = Design.document.setContract(value, toy, { inputs = {}, outputs = { report } })
+		local item: { [string | number]: Design.Literal } = { label = "Report" }
+		item.onSelect = outputCall "onReport"
+		local items: Design.Literal = { item }
+		value = Design.document.change(value, toy, menu, "items", { literal = items })
+		value = Design.document.change(value, toy, menu, "gap", { literal = 12 })
+		local code = Design.emit(value, toy)
+		expect(string.find(code, "onSelect = function(...)\n", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "gap = 12", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
+		local handlers: { [string]: (args: { Design.Literal }) -> () } = {
+			onReport = function() end,
+		}
+		local context: Design.RenderContext = { outputs = handlers }
+		table.clear(built)
+		Design.render(value, toy, context)
+		expect(type(built[1].props.items.value)):toBe "table"
+		local missing: Design.Literal = { outputCall "onMissing" }
+		expect(refused(function()
+			Design.document.change(value, toy, menu, "items", { literal = missing })
+		end)):toBe(true)
+		expect(refused(function()
+			Design.document.change(value, toy, menu, "gap", { literal = true })
 		end)):toBe(true)
 	end)
 
