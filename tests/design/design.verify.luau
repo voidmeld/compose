@@ -375,6 +375,10 @@ describe("Compose Design documents", function()
 		local cells = made.props.columns.value :: Cells
 		cells[1].render(Core.cell(alpha))
 		expect(built[1].kind):toBe "Label"
+		table.clear(built)
+		cells[2].render(Core.cell(alpha))
+		local scoreText = assert(built[1].props.text.readable)
+		expect(scoreText:peek()):toBe "3"
 		local rowActions = made.props.actions.value :: Actions
 		rowActions(Core.cell(alpha))[1].onActivate()
 		expect(chosen[1]):toBe(alpha)
