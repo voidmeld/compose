@@ -1,8 +1,12 @@
 --!strict
 
-local Design = require "../../src/design"
+export type Store = {
+	read: () -> string,
+	write: (expected: string, generated: string) -> boolean,
+	watch: (changed: () -> ()) -> () -> (),
+}
 
-return function(target: ModuleScript): Design.LinkStore
+return function(target: ModuleScript): Store
 	local ScriptEditorService = game:GetService "ScriptEditorService"
 	return {
 		read = function(): string

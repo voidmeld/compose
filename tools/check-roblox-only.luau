@@ -5,6 +5,7 @@ local process = require "@lute/process"
 local lock = require "../dependencies.lock"
 
 local CACHE = ".lute/roblox-types/" .. lock.robloxTypes.sha256 .. ".d.luau"
+local SOURCEMAP = ".lute/studio-sourcemap.json"
 
 local function checked(arguments: { string }): boolean
 	local result = process.run(arguments, { stdio = "inherit" })
@@ -42,16 +43,31 @@ local function main(): number
 		"--base-luaurc=.luaurc",
 		"--ignore=**/.lute/**",
 		"verification",
+	}
+	if
+		not checked { "rojo", "sourcemap", "studio/design/plugin.project.json", "--absolute", "--output", SOURCEMAP }
+	then
+		return 1
+	end
+	local plugin = {
+		"luau-lsp",
+		"analyze",
+		"--platform=roblox",
+		"--definitions=" .. CACHE,
+		"--base-luaurc=.luaurc",
+		"--sourcemap=" .. SOURCEMAP,
 		"studio",
 	}
-	if not checked(arguments) then
-		return 1
+	for _, command in { arguments, plugin } do
+		if not checked(command) then
+			return 1
+		end
+		table.insert(command, 3, "--flag:LuauSolverV2=true")
+		if not checked(command) then
+			return 1
+		end
 	end
-	table.insert(arguments, 3, "--flag:LuauSolverV2=true")
-	if not checked(arguments) then
-		return 1
-	end
-	print "check-roblox-only: native verification type-checks under both solvers; engine checks have not run"
+	print "check-roblox-only: native verification type-checks under both solvers with the Studio plugin; engine checks have not run"
 	return 0
 end
 

@@ -1,0 +1,17 @@
+{
+  "name": "Compose Design",
+  "tree": {
+    "$className": "Folder",
+    "ComposeDesign": {
+      "$path": "plugin.server.luau",
+      "ScriptStore": { "$path": "script-store.luau" },
+      "compose": {
+        "$className": "Folder",
+        "core": { "$path": "../../src/core" },
+        "roblox": { "$path": "../../src/roblox" },
+        "design": { "$path": "../../src/design" },
+        "design-editor": { "$path": "../../src/design-editor" }
+      }
+    }
+  }
+}

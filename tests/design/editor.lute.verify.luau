@@ -1,6 +1,7 @@
 --!strict
 
 local Design = require "../../src/design"
+local DesignEditor = require "../../src/design-editor"
 local Support = require "./editor-support"
 local Test = require "../harness"
 
@@ -185,6 +186,46 @@ describe("host-neutral design editor", function()
 		w.settle()
 		expect(chosen[1]):toBe "Dark"
 		editor.dispose()
+		w.close()
+	end)
+
+	it("opens a kit workspace on an empty linked module, seeds it and releases it", function()
+		local w = Support.world()
+		local released = 0
+		local source = ""
+		local kit = DesignEditor.kit("Test", function(): DesignEditor.Workspace
+			return {
+				runtime = w.runtime,
+				environment = w.environment,
+				library = w.library,
+				root = w.document.root.kind,
+				devices = { { name = "Phone", size = { X = 390, Y = 844 } } },
+				dispose = function()
+					released += 1
+				end,
+			}
+		end)
+		local editor = kit.edit(w.screen, "Seeded", {
+			read = function(): string
+				return source
+			end,
+			write = function(expected: string, generated: string): boolean
+				if source ~= expected then
+					return false
+				end
+				source = generated
+				return true
+			end,
+			watch = function(_changed: () -> ()): () -> ()
+				return function() end
+			end,
+		})
+		w.settle()
+		expect(string.find(source, "local _design", 1, true) ~= nil):toBe(true)
+		expect(editor.session.document:peek().name):toBe "Seeded"
+		expect(w.find(editor.root, "ArtboardSize").Text):toBe "390 × 844"
+		editor.dispose()
+		expect(released):toBe(1)
 		w.close()
 	end)
 

@@ -2043,13 +2043,21 @@ The generator refuses a plan and does not emit a tree that breaks at runtime.
 
 `create(library: Design.Library, initial: Design.Document, parent: Compose.Node, options: Options) -> Editor`
 
-Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime`, `environment: Environment` and `stageSize: { X: number, Y: number }`. It also accepts `token`, `tokens`, `slots`, `onExport` and `link`, with the same token, slot and store protocols that `Design.render` and `Design.link` consume. `onExport(source: string)` receives the current generated source.
+Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime`, `environment: Environment` and `stageSize: { X: number, Y: number }`. It also accepts `devices`, `previews`, `token`, `tokens`, `slots`, `onExport` and `link`, with the same token, slot and store protocols that `Design.render` and `Design.link` consume. `onExport(source: string)` receives the current generated source. Each `Device` is `{ name: string, size: Point }`; its toolbar chip cycles the stage size. Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`; its toolbar chip cycles the choices and calls `select`. A library's optional `provide(content)` wraps the rendered design on the 2D stage, for example to link a theme StyleSheet.
 
 `Editor` returns `root: Compose.Node`, `session: Design.Session`, optional `stage` and `scene`, and an idempotent `dispose()`. Disposing the editor releases its owned nodes, watchers, subscriptions and source link. The supplied runtime, parent and services remain borrowed. Failed construction unwinds editor resources and raises the original failure. The runtime must provide observation, events and frames as well as rendering.
 
 A 2D `stage` exposes `surface`, `overlay`, `nodes`, `zoom`, `zoomTo(scale, around?)`, `fit()` and `dispose()`. A 3D `scene` exposes `viewport`, `world`, `camera`, `nodes`, `zoom`, `zoomTo(scale, around?)`, `fit()`, `pick(point)` and `dispose()`. Node handles are opaque `Compose.Node` values. `nodes` maps document ids to rendered nodes. Points are plain `{ X: number, Y: number }` records. A 2D zoom clamps to `[0.1, 8]`; fit resets pan, reserves 96 horizontal and 120 vertical pixels, and clamps the smaller available-room ratio to `[0.1, 1]`. `pick` returns a document id or nil and excludes scene guides and gizmos.
 
 `Environment` contains `service(name: string) -> unknown`, `invoke(node: unknown, method: string, ...unknown) -> ...unknown`, `descendants(node: unknown) -> { unknown }` and `values: Values`. `Values` supplies `vector2(x, y)`, `vector3(x, y, z)`, `udim(scale, offset)`, `udim2(xScale, xOffset, yScale, yOffset)`, `color(r, g, b)` with normalized channels, `font(family, weight)`, `enum(category, item)`, `cframe(components)` with twelve position/rotation components, and `raycastParams(include, instances)`. Each constructor returns an opaque value. `invoke` must preserve method results and failures. Service lookup supplies `UserInputService`; a source store supplies any ScriptEditorService integration separately.
+
+### `DesignEditor.kit`
+
+`kit(name: string, open: () -> Workspace) -> Kit`
+
+Makes a design kit that the Compose Design plugin can open. `Workspace` has `runtime`, `environment`, `library`, `root` (the kind of a new document's root), and optional `stageSize`, `devices`, `previews` and `dispose`. `Kit.edit(parent, name, link?)` calls `open`, creates a new document with that name, and mounts the editor. When the linked source is empty, `edit` writes the generated source of the new document first. Disposing the editor also calls `Workspace.dispose`.
+
+A package exposes its kit to the plugin through an exported `composeDesign(): Kit` function. The plugin looks for it on the ModuleScripts in `ReplicatedStorage` and in its folders. Without a package kit, it opens the built-in Roblox library.
 
 ### `DesignEditor.robloxLibrary`
 

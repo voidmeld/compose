@@ -32,6 +32,12 @@ The 2D stage supports cursor-anchored zoom, pan, fit, selection outlines, resize
 
 For a source link, pass a `Design.LinkStore` as `options.link`. The Roblox-only `studio/design/script-store.luau` adapter wraps `ScriptEditorService`; the editor itself only consumes the store protocol.
 
+## Studio plugin
+
+Build the plugin from `studio/design/plugin.project.json`. Its **Design** button opens the design module that is selected in the Explorer. If no design module is selected, it opens `ReplicatedStorage.Designs.Screen` and creates it when it is missing. Selecting another design module while the editor is open switches to it. The editor stays linked to the module through `studio/design/script-store.luau`. Edits in the editor write the source, and source edits from Rojo, an agent or the script editor update the editor.
+
+The plugin uses the first package kit that it finds (see [`DesignEditor.kit`](api.md#designeditorkit)). It loads that kit from the game's own copy of the package, so the editor and the game always use the same version. Without a package kit, the plugin opens the built-in Roblox library.
+
 ## Vendor the module tree
 
 Keep `core`, `design` and `design-editor` as siblings. Include `roblox` when using the Roblox host or its environment factory. Copying the contents of `src/` preserves these relationships: no editor require contains a `src/` prefix or reaches `studio/`. Consume the public `design-editor` entry point; its internal files are implementation modules.
