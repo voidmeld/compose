@@ -483,6 +483,21 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		return table.concat(lines, "\n")
 	end
 	local hoisted: { string } = {}
+	local function carriesRow(current: Literal): boolean
+		if type(current) ~= "table" then
+			return false
+		end
+		if current["$row"] ~= nil then
+			return true
+		end
+		for _, item in current do
+			if carriesRow(item) then
+				return true
+			end
+		end
+		return false
+	end
+	local lateHoisted: { string } = {}
 	local function hoist(node: Node, key: string, luauType: string, current: Literal): string
 		local base = string.gsub(node.name, "[^%w_]", "")
 		base = string.lower(string.sub(base, 1, 1)) .. string.sub(base, 2)
@@ -497,8 +512,23 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			name = base .. tostring(suffix)
 		end
 		rowNames[name] = true
-		local prefix = `\tlocal {name}: {luauType} = `
-		table.insert(hoisted, prefix .. layout(current, 1, #prefix + 3))
+		local typed = luauType
+		local bound = node.bind
+		if bound ~= nil then
+			local keyType = "unknown"
+			local fields: { Types.ItemField } = fieldsOf(bound.from) or {}
+			for _, field in fields do
+				if field.id == bound.key then
+					keyType = scalar(library, field.type)
+				end
+			end
+			local itemName = itemType(node, bound.from) or "unknown"
+			typed = (string.gsub(typed, "%$Item", itemName))
+			typed = (string.gsub(typed, "%$Key", keyType))
+		end
+		local prefix = `\tlocal {name}: {typed} = `
+		local late = next(Document.cellsOf(current, {})) ~= nil
+		table.insert(if late then lateHoisted else hoisted, prefix .. layout(current, 1, #prefix + 3))
 		return name
 	end
 	local function expression(property: Value, depth: number, used: number): string
@@ -633,12 +663,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				table.remove(scopes)
 			elseif current ~= nil and datatype ~= nil then
 				written = datatypeLiteral(datatype, current)
-			elseif
-				current ~= nil
-				and type(current) == "table"
-				and luauType
-				and next(Document.cellsOf(current, {})) == nil
-			then
+			elseif current ~= nil and type(current) == "table" and luauType and not carriesRow(current) then
 				local typeName: string = luauType
 				written = hoist(node, key, typeName, current)
 			end
@@ -740,6 +765,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		table.insert(lines, definition)
 	end
 	local readsState = string.find(rootSource, "state.", 1, true) ~= nil
+	for _, definition in lateHoisted do
+		readsState = readsState or string.find(definition, "state.", 1, true) ~= nil
+	end
 	for _, definition in rowDefinitions do
 		readsState = readsState or string.find(definition, "state.", 1, true) ~= nil
 	end
@@ -783,6 +811,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		table.insert(lines, "\tlocal state = { " .. table.concat(cells, ", ") .. " }")
 	end
 	for _, definition in rowDefinitions do
+		table.insert(lines, definition)
+	end
+	for _, definition in lateHoisted do
 		table.insert(lines, definition)
 	end
 	table.insert(lines, `\treturn {rootSource}`)
@@ -1076,6 +1107,7 @@ function source.parse(code: string, library: Library): Types.Document
 	end
 	local rows: { [string]: Node } = {}
 	local typedLiterals: { [string]: Literal } = {}
+	local typedCells: { [string]: { Node } } = {}
 	local namedRefs: { [string]: string } = {}
 	local node: () -> Node
 	local pendingCells: { Node } = {}
@@ -1152,6 +1184,10 @@ function source.parse(code: string, library: Library): Types.Document
 		end
 		if bare and bare.kind == "name" and typedLiterals[bare.text] ~= nil and (peek(1) == "," or peek(1) == "}") then
 			take()
+			local carried: { Node } = typedCells[bare.text] or {}
+			for _, cell in carried do
+				table.insert(pendingCells, cell)
+			end
 			return { literal = typedLiterals[bare.text] }, nil
 		end
 		if peek() == "state" and peek(1) == "." then
@@ -1600,7 +1636,11 @@ function source.parse(code: string, library: Library): Types.Document
 				take()
 			end
 			take "="
+			local outerCells = pendingCells
+			pendingCells = {}
 			typedLiterals[literalName] = plain()
+			typedCells[literalName] = pendingCells
+			pendingCells = outerCells
 		elseif peek() == "local" and peek(1) == "function" and peek(2) ~= "capture" then
 			take "local"
 			take "function"
