@@ -6,13 +6,15 @@ local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
-type Built = { kind: string, props: { [string]: Design.Resolved }, children: { unknown } }
+type Built = { kind: string, props: { [string]: Design.Resolved }, children: { unknown }, name: string }
 
 local built: { Built } = {}
 
-local function builder(kind: string): (props: { [string]: Design.Resolved }, children: { unknown }) -> unknown
-	return function(props: { [string]: Design.Resolved }, children: { unknown }): unknown
-		local record: Built = { kind = kind, props = props, children = children }
+local function builder(
+	kind: string
+): (props: { [string]: Design.Resolved }, children: { unknown }, name: string) -> unknown
+	return function(props: { [string]: Design.Resolved }, children: { unknown }, name: string): unknown
+		local record: Built = { kind = kind, props = props, children = children, name = name }
 		table.insert(built, record)
 		return record
 	end
@@ -308,6 +310,43 @@ describe("Compose Design documents", function()
 		expect(string.find(code, "local refs = { " .. label .. " = Toy.cell(nil) }", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, `capture("{label}", UI.Label "Label"`, 1, true) ~= nil):toBe(true)
 		expect(string.find(code, `target = refs.{label},`, 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+	end)
+
+	it("names built nodes and names template rows from an item field", function()
+		local value = Design.document.new("Roster", library, "Stack")
+		value = Design.document.setContract(value, library, {
+			inputs = {
+				{ id = "rows", kind = "readable", type = "list", preview = rowsPreview, fields = rowFields },
+			},
+			outputs = {},
+		})
+		local list, row
+		value, list = Design.document.insert(value, library, "n1", "List")
+		value = Design.document.bind(value, library, list, { from = "rows", key = "id" })
+		value, row = Design.document.insert(value, library, list, "Label")
+		value = Design.document.nameFrom(value, library, row, "name")
+		local named: string = row
+		local current = value
+		expect(function()
+			Design.document.nameFrom(current, library, named, "missing")
+		end):toThrow "unknown item field missing"
+		expect(function()
+			Design.document.nameFrom(current, library, "n1", "name")
+		end):toThrow "outside a collection template"
+		table.clear(built)
+		local root = Design.render(value, library) :: Built
+		expect(root.name):toBe(value.root.name)
+		local listRecord: Built? = nil
+		for _, record in built do
+			if record.kind == "List" then
+				listRecord = record
+			end
+		end
+		local template = assert(assert(listRecord).props.render.template)
+		expect((template(Core.cell(bo)) :: Built).name):toBe "Bo"
+		local code = Design.emit(value, library)
+		expect(string.find(code, "UI.Label(tostring(current:peek().name)) {", 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, library)):toEqual(value)
 	end)
 
