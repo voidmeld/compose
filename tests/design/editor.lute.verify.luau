@@ -188,6 +188,23 @@ describe("host-neutral design editor", function()
 		w.close()
 	end)
 
+	it("lets a library provide the surroundings of the staged design", function()
+		local w = Support.world()
+		local rootKind = w.library.kinds[w.document.root.kind]
+		local provided: { unknown } = {}
+		w.library.provide = function(content: unknown): unknown
+			table.insert(provided, content)
+			return rootKind.build({}, { content }, "Provided")
+		end
+		local editor = w.mount()
+		w.settle()
+		local surround = w.find(editor.root, "Provided")
+		expect(#provided):toBe(1)
+		expect(w.read(provided[1], "Parent")):toBe(surround)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("labels inspector rows and folds advanced fields until asked", function()
 		local w = Support.world()
 		local rootKind = w.library.kinds[w.document.root.kind]

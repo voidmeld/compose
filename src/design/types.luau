@@ -90,6 +90,7 @@ export type Library = {
 	keyed: string?,
 	categories: { string }?,
 	space: ("2d" | "3d")?,
+	provide: ((content: unknown) -> unknown)?,
 	kinds: { [string]: Kind },
 }
 

@@ -357,7 +357,7 @@ return function(ui: UI.UI)
 				end
 				table.clear(nodes)
 				stopDesign = runtime.mount(function(): Compose.Node
-					return Design.render(value, session.library, {
+					local content = Design.render(value, session.library, {
 						inputs = options.inputs,
 						slots = options.slots,
 						token = options.token,
@@ -368,6 +368,8 @@ return function(ui: UI.UI)
 							end
 						end,
 					})
+					local provide = session.library.provide
+					return if provide then provide(content) else content
 				end, surface)
 			end)
 			outline("DesignHover", 1, false, function(use: Compose.Use): string?
