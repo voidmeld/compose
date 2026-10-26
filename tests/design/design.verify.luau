@@ -89,6 +89,9 @@ local library: Design.Library = {
 	},
 }
 
+type Cells = { { render: (Core.ReadOnlyValue<Design.Row>) -> unknown } }
+type Actions = (Core.ReadOnlyValue<Design.Row>) -> { { onActivate: () -> () } }
+
 local function sample(): Design.Document
 	local value = Design.document.new("Scores", library, "Stack")
 	value = Design.document.setContract(value, library, {
@@ -295,6 +298,70 @@ describe("Compose Design documents", function()
 		expect(shown):toBe(1)
 		expect(innerRows):toBe(4)
 		library.show = nil
+	end)
+
+	it("renders column cells and row actions for each item of a repeated list", function()
+		local kinds = library.kinds
+		local columnsField: Design.Field = { type = "value" }
+		local actionsField: Design.Field = { type = "value", perRow = true }
+		library.kinds = table.clone(kinds)
+		library.kinds.Table = {
+			fields = { columns = columnsField, actions = actionsField },
+			children = "template",
+			source = "from",
+			key = "key",
+			call = "UI.Table",
+			build = builder "Table",
+		}
+		local alpha: Design.Row = { id = "a", label = "Alpha" }
+		local rowsPreview: Design.Row = { alpha }
+		local fields: { Design.ItemField } = { { id = "id", type = "string" }, { id = "label", type = "string" } }
+		local value = Design.document.new("Cells", library, "Stack")
+		value = Design.document.setContract(value, library, {
+			inputs = { { id = "rows", kind = "readable", type = "list", preview = rowsPreview, fields = fields } },
+			outputs = { { id = "onChoose" } },
+		})
+		local tableId, cellId
+		value, tableId = Design.document.insert(value, library, "n1", "Table")
+		value = Design.document.bind(value, library, tableId, { from = "rows", key = "id" })
+		value, cellId = Design.document.insert(value, library, tableId, "Label")
+		value = Design.document.change(value, library, cellId, "text", { item = "label" })
+		local render: Design.Row = { ["$template"] = cellId }
+		local column: Design.Row = { id = "label", render = render }
+		local columns: Design.Row = { column }
+		value = Design.document.change(value, library, tableId, "columns", { literal = columns })
+		local activate: Design.Row = { ["$output"] = "onChoose", ["$row"] = true }
+		local action: Design.Row = { id = "choose", label = "Choose", onActivate = activate }
+		local actions: Design.Row = { action }
+		value = Design.document.change(value, library, tableId, "actions", { literal = actions })
+		local code = Design.emit(value, library)
+		expect(string.find(code, "props.onChoose(current:peek())", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local chosen: { Design.Literal } = {}
+		table.clear(built)
+		Design.render(value, library, {
+			outputs = {
+				onChoose = function(args: { Design.Literal })
+					table.insert(chosen, args[1])
+				end,
+			},
+		})
+		local grid: Built? = nil
+		for _, record in built do
+			if record.kind == "Table" then
+				grid = record
+			end
+		end
+		local made = assert(grid)
+		expect(#made.children):toBe(0)
+		table.clear(built)
+		local cells = made.props.columns.value :: Cells
+		cells[1].render(Core.cell(alpha))
+		expect(built[1].kind):toBe "Label"
+		local rowActions = made.props.actions.value :: Actions
+		rowActions(Core.cell(alpha))[1].onActivate()
+		expect(chosen[1]):toBe(alpha)
+		library.kinds = kinds
 	end)
 
 	it("undoes and redoes whole edits", function()

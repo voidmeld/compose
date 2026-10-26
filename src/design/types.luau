@@ -46,6 +46,7 @@ export type Field = {
 	label: string?,
 	advanced: boolean?,
 	requires: { [string]: { Literal } }?,
+	perRow: boolean?,
 }
 
 export type Row = { [string | number]: Literal }
