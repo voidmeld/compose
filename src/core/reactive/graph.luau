@@ -261,6 +261,21 @@ local function evaluate<A, T>(consumer: Node, body: (A) -> T, argument: A): T
 	return result
 end
 
+local function runEffect(consumer: Node)
+	local previousConsumer, previousOrder = Evaluation.enter(consumer)
+	consumer.reads = 0
+	local effect = consumer.effect
+	if effect then
+		if validationState.validating then
+			userSpace.call(effect, use)
+		else
+			effect(use)
+		end
+	end
+	Evaluation.leave(previousConsumer, previousOrder)
+	trim(consumer, (consumer.reads or 0) + 1)
+end
+
 local function track(consumer: Node, invoke: (Node) -> ())
 	local previousConsumer, previousOrder = Evaluation.enter(consumer)
 	consumer.reads = 0
@@ -440,6 +455,7 @@ return {
 	refresh = refresh,
 	notANode = notANode,
 	use = use,
+	runEffect = runEffect,
 	dependenciesMoved = dependenciesMoved,
 	evaluate = evaluate,
 	track = track,

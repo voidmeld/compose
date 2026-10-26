@@ -19,7 +19,6 @@ export type Owner = {
 	reactor: Reactor.Reactor?,
 	boundary: Boundary?,
 	head: Owner?,
-	count: number?,
 	disposed: boolean?,
 	previous: Owner?,
 	following: Owner?,
@@ -27,6 +26,8 @@ export type Owner = {
 	after: Dispose?,
 	heldRelease: { (subject: unknown) -> () }?,
 	heldSubjects: { unknown }?,
+	holdRelease: ((subject: unknown) -> ())?,
+	holdSubject: unknown,
 }
 
 export type Entry = Owner
@@ -41,6 +42,8 @@ local function new(inherited: Reactor.Reactor?, parent: Owner?): Owner
 		reactor = inherited or Reactor.create(),
 	}
 end
+
+local detached: Reactor.Reactor? = nil
 
 local function noop() end
 
@@ -62,10 +65,52 @@ end
 local disposeOwner: (owner: Owner) -> ()
 
 local function reactorOf(owner: Owner): Reactor.Reactor
-	return assert(owner.reactor, "Compose: a cleanup entry is not an owner")
+	local current: Owner? = owner
+	while current ~= nil do
+		local reactor = current.reactor
+		if reactor ~= nil then
+			return reactor
+		end
+		current = current.parent
+	end
+	local fallback = detached or Reactor.create()
+	detached = fallback
+	return fallback
+end
+
+local function isOwner(candidate: unknown): boolean
+	if type(candidate) ~= "table" then
+		return false
+	end
+	local owner = candidate :: Owner
+	return owner.release == nil
+		and owner.holdRelease == nil
+		and owner.heldSubjects == nil
+		and (owner.reactor ~= nil or owner.parent ~= nil or owner.disposed ~= nil)
+end
+
+local function heldSize(entry: Entry): number
+	local subjects = entry.heldSubjects
+	if subjects ~= nil then
+		return #subjects
+	end
+	return if entry.holdRelease ~= nil then 1 else 0
 end
 
 local function releaseBatch(batch: Entry, keep: number, failures: { unknown })
+	local single = batch.holdRelease
+	if single ~= nil then
+		if keep < 1 then
+			local subject = batch.holdSubject
+			batch.holdRelease = nil
+			batch.holdSubject = nil
+			local ok, failure: unknown = pcall(single, subject)
+			if not ok then
+				table.insert(failures, failure)
+			end
+		end
+		return
+	end
 	local releases, subjects = batch.heldRelease, batch.heldSubjects
 	if releases == nil or subjects == nil then
 		return
@@ -84,8 +129,7 @@ end
 local function releaseEntry(entry: Entry, failures: { unknown })
 	local release = entry.release
 	if release == nil then
-		local subjects = entry.heldSubjects
-		if subjects ~= nil then
+		if entry.holdRelease ~= nil or entry.heldSubjects ~= nil then
 			releaseBatch(entry, 0, failures)
 			return
 		end
@@ -122,8 +166,6 @@ local function unlink(owner: Owner, entry: Entry)
 	end
 	entry.previous = nil
 	entry.following = nil
-	local subjects = entry.heldSubjects
-	owner.count = (owner.count or 1) - (if subjects ~= nil then #subjects else 1)
 end
 
 local function attach(owner: Owner, entry: Entry)
@@ -133,7 +175,6 @@ local function attach(owner: Owner, entry: Entry)
 		first.previous = entry
 	end
 	owner.head = entry
-	owner.count = (owner.count or 0) + 1
 end
 
 local function link(owner: Owner, release: Dispose, after: Dispose?): Entry
@@ -204,32 +245,43 @@ local function holdSubject(owner: Owner, releaseSubject: (subject: unknown) -> (
 		return
 	end
 	local head = owner.head
-	local releases = if head ~= nil then head.heldRelease else nil
-	local subjects = if head ~= nil then head.heldSubjects else nil
-	if releases == nil or subjects == nil then
-		attach(owner, { heldRelease = { releaseSubject }, heldSubjects = { subject } })
+	if head == nil or head.release ~= nil or head.reactor ~= nil then
+		attach(owner, { holdRelease = releaseSubject, holdSubject = subject })
 		return
 	end
-	local index = #subjects + 1
-	releases[index] = releaseSubject
-	subjects[index] = subject
-	owner.count = (owner.count or 0) + 1
+	local single = head.holdRelease
+	if single ~= nil then
+		head.heldRelease = { single, releaseSubject }
+		head.heldSubjects = { head.holdSubject, subject }
+		head.holdRelease = nil
+		head.holdSubject = nil
+	else
+		local releases, subjects = head.heldRelease, head.heldSubjects
+		if releases == nil or subjects == nil then
+			attach(owner, { holdRelease = releaseSubject, holdSubject = subject })
+			return
+		end
+		local index = #subjects + 1
+		releases[index] = releaseSubject
+		subjects[index] = subject
+	end
 end
 
 local function heldCount(owner: Owner): number
 	local head = owner.head
-	local subjects = if head ~= nil then head.heldSubjects else nil
-	return if subjects == nil then 0 else #subjects
+	return if head == nil then 0 else heldSize(head)
 end
 
 local function rollbackHeld(owner: Owner, keep: number)
 	local head = owner.head
-	local subjects = if head ~= nil then head.heldSubjects else nil
-	if head == nil or subjects == nil or #subjects <= keep then
+	if head == nil then
+		return
+	end
+	local held = heldSize(head)
+	if held <= keep then
 		return
 	end
 	local failures: { unknown } = {}
-	owner.count = (owner.count or 0) - (#subjects - keep)
 	releaseBatch(head, keep, failures)
 	raiseAll(failures)
 end
@@ -285,7 +337,6 @@ disposeOwner = function(owner: Owner)
 
 	local pending = owner.head
 	owner.head = nil
-	owner.count = 0
 	if pending == nil then
 		return
 	end
@@ -315,7 +366,14 @@ local function isDisposed(owner: Owner): boolean
 end
 
 local function size(owner: Owner): number
-	return owner.count or 0
+	local total = 0
+	local entry = owner.head
+	while entry ~= nil do
+		local held = heldSize(entry)
+		total += if held > 0 then held else 1
+		entry = entry.following
+	end
+	return total
 end
 
 local function guardWith(owner: Owner, boundary: Boundary)
@@ -323,7 +381,7 @@ local function guardWith(owner: Owner, boundary: Boundary)
 end
 
 local function createChild(owner: Owner): Owner
-	local child = new(owner.reactor, owner)
+	local child: Owner = { parent = owner }
 	if owner.disposed then
 		disposeOwner(child)
 	else
@@ -332,7 +390,10 @@ local function createChild(owner: Owner): Owner
 	if Inspect.isActive() then
 		Inspect.child(owner, child)
 	end
-	child.boundary = owner.boundary
+	local boundary = owner.boundary
+	if boundary ~= nil then
+		child.boundary = boundary
+	end
 	return child
 end
 
@@ -466,6 +527,7 @@ end
 return {
 	createOwner = createOwner,
 	reactorOf = reactorOf,
+	isOwner = isOwner,
 	raiseAll = raiseAll,
 	installActivationDepth = installActivationDepth,
 	installCurrentOwner = installCurrentOwner,

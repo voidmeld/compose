@@ -8,24 +8,11 @@ local Types = require "./types"
 local profile = require "./profile"
 local stats = require "./stats"
 local statsOn = stats.state
-local userSpace = require "./userSpace"
-local validationState = userSpace.state
 
 type Body = (use: Types.Use) -> ()
 type Node = Types.Node
 type Reactor = Types.Reactor
 type Dispose = Types.Dispose
-
-local function invoke(node: Node)
-	local effect = node.effect
-	if effect then
-		if validationState.validating then
-			userSpace.call(effect, Graph.use)
-		else
-			effect(Graph.use)
-		end
-	end
-end
 
 local function rerun(node: Node)
 	if statsOn.enabled then
@@ -33,7 +20,7 @@ local function rerun(node: Node)
 		profile.enterRun(node)
 	end
 	node.state = Graph.CLEAN
-	Graph.track(node, invoke)
+	Graph.runEffect(node)
 end
 
 local function moved(node: Node): boolean
