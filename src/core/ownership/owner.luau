@@ -25,8 +25,8 @@ export type Owner = {
 	following: Owner?,
 	release: Dispose?,
 	after: Dispose?,
-	releaseSubject: ((subject: unknown) -> ())?,
-	subject: unknown,
+	heldRelease: { (subject: unknown) -> () }?,
+	heldSubjects: { unknown }?,
 }
 
 export type Entry = Owner
@@ -65,18 +65,31 @@ local function reactorOf(owner: Owner): Reactor.Reactor
 	return assert(owner.reactor, "Compose: a cleanup entry is not an owner")
 end
 
+local function releaseBatch(batch: Entry, keep: number, failures: { unknown })
+	local releases, subjects = batch.heldRelease, batch.heldSubjects
+	if releases == nil or subjects == nil then
+		return
+	end
+	for index = #subjects, keep + 1, -1 do
+		local releaseSubject, subject = releases[index], subjects[index]
+		releases[index] = nil
+		subjects[index] = nil
+		local ok, failure: unknown = pcall(releaseSubject, subject)
+		if not ok then
+			table.insert(failures, failure)
+		end
+	end
+end
+
 local function releaseEntry(entry: Entry, failures: { unknown })
 	local release = entry.release
 	if release == nil then
-		local releaseSubject = entry.releaseSubject
-		if releaseSubject == nil then
-			disposeOwner(entry)
+		local subjects = entry.heldSubjects
+		if subjects ~= nil then
+			releaseBatch(entry, 0, failures)
 			return
 		end
-		entry.releaseSubject = nil
-		local subject = entry.subject
-		entry.subject = nil
-		releaseSubject(subject)
+		disposeOwner(entry)
 		return
 	end
 	entry.release = nil
@@ -109,7 +122,8 @@ local function unlink(owner: Owner, entry: Entry)
 	end
 	entry.previous = nil
 	entry.following = nil
-	owner.count = (owner.count or 1) - 1
+	local subjects = entry.heldSubjects
+	owner.count = (owner.count or 1) - (if subjects ~= nil then #subjects else 1)
 end
 
 local function attach(owner: Owner, entry: Entry)
@@ -189,7 +203,35 @@ local function holdSubject(owner: Owner, releaseSubject: (subject: unknown) -> (
 		releaseSubject(subject)
 		return
 	end
-	attach(owner, { releaseSubject = releaseSubject, subject = subject })
+	local head = owner.head
+	local releases = if head ~= nil then head.heldRelease else nil
+	local subjects = if head ~= nil then head.heldSubjects else nil
+	if releases == nil or subjects == nil then
+		attach(owner, { heldRelease = { releaseSubject }, heldSubjects = { subject } })
+		return
+	end
+	local index = #subjects + 1
+	releases[index] = releaseSubject
+	subjects[index] = subject
+	owner.count = (owner.count or 0) + 1
+end
+
+local function heldCount(owner: Owner): number
+	local head = owner.head
+	local subjects = if head ~= nil then head.heldSubjects else nil
+	return if subjects == nil then 0 else #subjects
+end
+
+local function rollbackHeld(owner: Owner, keep: number)
+	local head = owner.head
+	local subjects = if head ~= nil then head.heldSubjects else nil
+	if head == nil or subjects == nil or #subjects <= keep then
+		return
+	end
+	local failures: { unknown } = {}
+	owner.count = (owner.count or 0) - (#subjects - keep)
+	releaseBatch(head, keep, failures)
+	raiseAll(failures)
 end
 
 local function adopt(owner: Owner, dispose: Dispose)
@@ -447,6 +489,8 @@ return {
 	own = own,
 	adopt = adopt,
 	holdSubject = holdSubject,
+	heldCount = heldCount,
+	rollbackHeld = rollbackHeld,
 	watch = watch,
 	watchStatic = watchStatic,
 	watchTerminal = watchTerminal,

@@ -233,6 +233,7 @@ local function createRuntime(host: Host.Host): Runtime
 
 			local owner = requireOwner(operation)
 			local mark = Owner.checkpoint(owner)
+			local heldMark = Owner.heldCount(owner)
 
 			local node = render.createNode(kind)
 			Nodes.markOwned(node)
@@ -247,6 +248,7 @@ local function createRuntime(host: Host.Host): Runtime
 			local ok, err: unknown = pcall(Active.runWith, owner, applyBuild, label, props, node, owner)
 			if not ok then
 				Owner.rollbackTo(owner, mark)
+				Owner.rollbackHeld(owner, heldMark)
 				local key = inFlight
 				inFlight = savedInFlight
 				if key ~= nil then

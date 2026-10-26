@@ -555,6 +555,8 @@ end
 
 local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Owner, onKey: (string) -> ())
 	local target = propertyTarget(host)
+	local fresh = propertyBindings[node] == nil and Nodes.isDestructible(node)
+	local write = target.write
 	local length = #props
 
 	for key, value in props do
@@ -615,7 +617,11 @@ local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Own
 
 		local literal, isStatic = Keys.readStatic(value)
 		if isStatic then
-			writeOnce(target, node, owner, name, literal)
+			if fresh then
+				write(node, name, literal)
+			else
+				writeOnce(target, node, owner, name, literal)
+			end
 			continue
 		end
 
@@ -634,7 +640,11 @@ local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Own
 		end
 
 		refuseNodeValue(host, node, name, value)
-		writeOnce(target, node, owner, name, value)
+		if fresh then
+			write(node, name, value)
+		else
+			writeOnce(target, node, owner, name, value)
+		end
 	end
 end
 
