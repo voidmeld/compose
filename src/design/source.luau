@@ -124,7 +124,27 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	local header: Record = { name = value.name, contract = contractLiteral(value.contract) }
 	table.insert(lines, "local design = " .. literal(header))
 	table.insert(lines, "")
+	local referenced: { [string]: boolean } = {}
+	local referencedIds: { string } = {}
+	local function collect(node: Node)
+		for _, property in node.props do
+			local target = property.node
+			if target ~= nil and not referenced[target] then
+				referenced[target] = true
+				table.insert(referencedIds, target)
+			end
+		end
+		for _, child in node.children do
+			collect(child)
+		end
+	end
+	collect(value.root)
+	table.sort(referencedIds)
 	local function expression(property: Value): string
+		local target = property.node
+		if target ~= nil then
+			return `refs.{target}`
+		end
 		local current, input, item, output, token =
 			property.literal, property.input, property.item, property.output, property.token
 		if current ~= nil then
@@ -155,7 +175,15 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local call = assert(library.token, `{library.name} has no theme tokens`)
 		return `{call}({literal(assert(token))})`
 	end
+	local emitNode: (node: Node, depth: number) -> string
 	local function emit(node: Node, depth: number): string
+		local built = emitNode(node, depth)
+		if referenced[node.id] then
+			return `capture("{node.id}", {built})`
+		end
+		return built
+	end
+	emitNode = function(node: Node, depth: number): string
 		local kind = assert(library.kinds[node.kind])
 		local indent = string.rep("\t", depth)
 		local body = { `{kind.call} {literal(node.name)} ` .. "{" }
@@ -194,6 +222,15 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	end
 	local signature = `({library.parameter}: {library.parameterType}, props: Props): {library.returnType}`
 	table.insert(lines, if exported then `local function {exported}{signature}` else `return function{signature}`)
+	if #referencedIds > 0 then
+		local newCell = assert(library.newCell, `{library.name} cannot reference nodes; it names no cell constructor`)
+		local cells: { string } = {}
+		for _, id in referencedIds do
+			table.insert(cells, `{id} = {newCell}(nil)`)
+		end
+		table.insert(lines, "\tlocal refs = { " .. table.concat(cells, ", ") .. " }")
+		table.insert(lines, "\tlocal function capture(id, node) refs[id]:set(node) return node end")
+	end
 	table.insert(lines, `\treturn {emit(value.root, 1)}`)
 	table.insert(lines, "end")
 	if exported then
@@ -416,7 +453,11 @@ function source.parse(code: string, library: Library): Types.Document
 		return path
 	end
 	local function value(): (Value?, Node?)
-		if peek() == "props" then
+		if peek() == "refs" then
+			take "refs"
+			take "."
+			return { node = name() }, nil
+		elseif peek() == "props" then
 			take "props"
 			take "."
 			return { input = name() }, nil
@@ -505,7 +546,19 @@ function source.parse(code: string, library: Library): Types.Document
 		end
 		return { literal = plain() }, nil
 	end
+	local captured: { [string]: string } = {}
 	node = function(): Node
+		if peek() == "capture" then
+			take "capture"
+			take "("
+			local source = take()
+			assert(source.kind == "string", "A captured node names its id")
+			take ","
+			local inner = node()
+			take ")"
+			captured[unquote(source.text)] = inner.id
+			return inner
+		end
 		local call = dotted()
 		local kindName = assert(calls[call], `{call} is not a {library.name} kind`)
 		local kind = library.kinds[kindName]
@@ -568,12 +621,24 @@ function source.parse(code: string, library: Library): Types.Document
 	end
 	take()
 	take "function"
-	while peek() ~= "return" do
+	while not (peek() == "return" and peek(1) ~= "node") do
 		take()
 	end
 	take "return"
 	local root = node()
 	take "end"
+	local function remap(current: Node)
+		for _, property in current.props do
+			local target = property.node
+			if target ~= nil then
+				property.node = assert(captured[target], `refs.{target} names no captured node`)
+			end
+		end
+		for _, child in current.children do
+			remap(child)
+		end
+	end
+	remap(root)
 	return Document.validate({
 		schema = "compose-design/1",
 		name = text(header, "name"),

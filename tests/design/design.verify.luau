@@ -33,6 +33,7 @@ local library: Design.Library = {
 	returnType = "Instance",
 	readable = "Toy.Readable",
 	cell = "Toy.Cell",
+	newCell = "Toy.cell",
 	token = "UI.token",
 	kinds = {
 		Stack = {
@@ -63,6 +64,12 @@ local library: Design.Library = {
 			key = "key",
 			call = "UI.List",
 			build = builder "List",
+		},
+		Flash = {
+			fields = { target = { type = "node" } },
+			children = "none",
+			call = "UI.Flash",
+			build = builder "Flash",
 		},
 		Panel = {
 			fields = { title = { type = "string" } },
@@ -268,6 +275,39 @@ describe("Compose Design documents", function()
 		expect(picked):toEqual { "b" }
 		local code = Design.emit(value, library)
 		expect(string.find(code, "props.onPick(current:peek().id)", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+	end)
+
+	it("references another node by id through render and source", function()
+		local value = Design.document.new("Pulse", library, "Stack")
+		local label, flash
+		value, label = Design.document.insert(value, library, "n1", "Label")
+		value, flash = Design.document.insert(value, library, "n1", "Flash")
+		value = Design.document.change(value, library, flash, "target", { node = label })
+		local current = value
+		local flashId: string = flash
+		expect(function()
+			Design.document.change(current, library, flashId, "target", { node = "n99" })
+		end):toThrow "references unknown node n99"
+		expect(function()
+			Design.document.change(current, library, flashId, "target", { literal = "n2" })
+		end):toThrow "references another node"
+		table.clear(built)
+		Design.render(value, library)
+		local labelRecord: Built? = nil
+		local flashRecord: Built? = nil
+		for _, record in built do
+			if record.kind == "Label" then
+				labelRecord = record
+			elseif record.kind == "Flash" then
+				flashRecord = record
+			end
+		end
+		expect(assert(assert(flashRecord).props.target.node):peek()):toBe(labelRecord)
+		local code = Design.emit(value, library)
+		expect(string.find(code, "local refs = { " .. label .. " = Toy.cell(nil) }", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, `capture("{label}", UI.Label "Label"`, 1, true) ~= nil):toBe(true)
+		expect(string.find(code, `target = refs.{label},`, 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, library)):toEqual(value)
 	end)
 

@@ -51,9 +51,26 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			inputs[input.id] = preview
 		end
 	end
+	local references: { [string]: Core.Value<unknown> } = {}
+	local function collect(node: Types.Node)
+		for _, property in node.props do
+			local target = property.node
+			if target ~= nil and references[target] == nil then
+				references[target] = Core.cell(nil :: unknown)
+			end
+		end
+		for _, child in node.children do
+			collect(child)
+		end
+	end
+	collect(value.root)
 	local function resolve(property: Types.Value, item: ReadOnlyValue<Row>?): Resolved
 		local current, input, field, output, name =
 			property.literal, property.input, property.item, property.output, property.token
+		local target = property.node
+		if target ~= nil then
+			return { node = references[target] }
+		end
 		if current ~= nil then
 			return { literal = current }
 		elseif input then
@@ -133,6 +150,10 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			end
 		end
 		local built = kind.build(props, children)
+		local captured = references[node.id]
+		if captured ~= nil then
+			captured:set(built)
+		end
 		if decorate then
 			decorate(node, built)
 		end
