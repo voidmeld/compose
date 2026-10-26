@@ -246,6 +246,37 @@ describe("host-neutral design editor", function()
 		w.close()
 	end)
 
+	it("edits value fields as Luau literals and node fields by choosing a node", function()
+		local w = Support.world()
+		local rootKind = w.library.kinds[w.document.root.kind]
+		local valued = table.clone(rootKind.fields.width)
+		valued.type = "value"
+		rootKind.fields.width = valued
+		rootKind.fields.follow = { type = "node", group = "Layout", order = 99 }
+		local editor = w.mount()
+		w.settle()
+		local inspector = w.find(editor.root, "DesignInspector")
+		local box = assert(w.find(inspector, "width"):FindFirstChildWhichIsA("TextBox", true))
+		box.Text = "320"
+		w.fire(box, "FocusLost")
+		w.settle()
+		local root = editor.session.document:peek().root
+		expect(root.props.width.literal):toBe(320)
+		inspector = w.find(editor.root, "DesignInspector")
+		box = assert(w.find(inspector, "width"):FindFirstChildWhichIsA("TextBox", true))
+		expect(box.Text):toBe "320"
+		box.Text = "{ 1,"
+		w.fire(box, "FocusLost")
+		w.settle()
+		expect(editor.session.problem:peek() ~= nil):toBe(true)
+		expect(editor.session.document:peek().root.props.width.literal):toBe(320)
+		w.fire(w.find(w.find(inspector, "follow"), "Bind"), "Activated")
+		w.settle()
+		expect(editor.session.document:peek().root.props.follow.node):toBe "n1"
+		editor.dispose()
+		w.close()
+	end)
+
 	it("labels inspector rows and folds advanced fields until asked", function()
 		local w = Support.world()
 		local rootKind = w.library.kinds[w.document.root.kind]

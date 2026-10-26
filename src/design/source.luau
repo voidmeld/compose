@@ -731,6 +731,77 @@ local function unquote(text: string): string
 	)
 end
 
+local function readLiteral(
+	tokens: { Token },
+	start: number,
+	callback: ((at: number) -> (Literal, number))?
+): (Literal, number)
+	local at = start
+	local function peek(offset: number?): string
+		local token = tokens[at + (offset or 0)]
+		return if token then token.text else ""
+	end
+	local function take(expected: string?): Token
+		local token = assert(tokens[at], "The value ended early")
+		assert(expected == nil or token.text == expected, `Expected {expected or ""} but found {token.text}`)
+		at += 1
+		return token
+	end
+	local function read(): Literal
+		if callback ~= nil and peek() == "function" then
+			local marker, after = callback(at)
+			at = after
+			return marker
+		end
+		local token = take()
+		if token.kind == "string" then
+			return unquote(token.text)
+		elseif token.kind == "number" then
+			return assert(tonumber(token.text), "Invalid number")
+		elseif token.text == "true" or token.text == "false" then
+			return token.text == "true"
+		end
+		assert(token.text == "{", `Unexpected {token.text}`)
+		local result: Record = {}
+		local index = 0
+		while peek() ~= "}" do
+			local key: string | number
+			if peek() == "[" then
+				take "["
+				local raw = read()
+				if type(raw) == "string" or type(raw) == "number" then
+					key = raw
+				else
+					error "Table keys are text or numbers"
+				end
+				take "]"
+				take "="
+			elseif tokens[at] and tokens[at].kind == "name" and peek(1) == "=" then
+				key = take().text
+				take "="
+			else
+				index += 1
+				key = index
+			end
+			result[key] = read()
+			if peek() == "," then
+				take ","
+			end
+		end
+		take "}"
+		return result
+	end
+	local value = read()
+	return value, at
+end
+
+function source.parseLiteral(code: string): Literal
+	local tokens = tokenize(code)
+	local value, after = readLiteral(tokens, 1)
+	assert(after > #tokens, "Unexpected text after the value")
+	return value
+end
+
 local function text(record: Record, key: string): string
 	local found = record[key]
 	assert(type(found) == "string", `The design header needs text at {key}`)
@@ -874,7 +945,8 @@ function source.parse(code: string, library: Library): Types.Document
 	local typedLiterals: { [string]: Literal } = {}
 	local namedRefs: { [string]: string } = {}
 	local function plain(): Literal
-		if peek() == "function" then
+		local value, after = readLiteral(tokens, at, function(position: number): (Literal, number)
+			at = position
 			take "function"
 			take "("
 			take "..."
@@ -893,45 +965,10 @@ function source.parse(code: string, library: Library): Types.Document
 			take "end"
 			take "end"
 			local marker: Record = { ["$output"] = output }
-			return marker
-		end
-		local token = take()
-		if token.kind == "string" then
-			return unquote(token.text)
-		elseif token.kind == "number" then
-			return assert(tonumber(token.text), "Invalid number")
-		elseif token.text == "true" or token.text == "false" then
-			return token.text == "true"
-		end
-		assert(token.text == "{", `Unexpected {token.text}`)
-		local result: Record = {}
-		local index = 0
-		while peek() ~= "}" do
-			local key: string | number
-			if peek() == "[" then
-				take "["
-				local raw = plain()
-				if type(raw) == "string" or type(raw) == "number" then
-					key = raw
-				else
-					error "Table keys are text or numbers"
-				end
-				take "]"
-				take "="
-			elseif tokens[at] and tokens[at].kind == "name" and peek(1) == "=" then
-				key = name()
-				take "="
-			else
-				index += 1
-				key = index
-			end
-			result[key] = plain()
-			if peek() == "," then
-				take ","
-			end
-		end
-		take "}"
-		return result
+			return marker, at
+		end)
+		at = after
+		return value
 	end
 	local nextId = 1
 	local node: () -> Node

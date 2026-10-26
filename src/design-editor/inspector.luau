@@ -26,8 +26,10 @@ return function(ui: UI.UI)
 		if value == nil then
 			return ""
 		end
-		local input, item, output, token = value.input, value.item, value.output, value.token
-		if input then
+		local input, item, output, token, node = value.input, value.item, value.output, value.token, value.node
+		if node then
+			return "◎ " .. node
+		elseif input then
 			return input
 		elseif item then
 			return "item." .. item
@@ -56,6 +58,16 @@ return function(ui: UI.UI)
 			end
 			return list
 		end
+		if field.type == "node" then
+			local function visit(node: Design.Node)
+				table.insert(list, { node = node.id })
+				for _, child in node.children do
+					visit(child)
+				end
+			end
+			visit(value.root)
+			return list
+		end
 		for _, input in value.contract.inputs do
 			local slot = input.type == "slot"
 			if slot == (field.type == "content") then
@@ -76,6 +88,7 @@ return function(ui: UI.UI)
 			and left.output == right.output
 			and left.token == right.token
 			and left.item == right.item
+			and left.node == right.node
 	end
 
 	local function humanize(key: string): string
@@ -381,7 +394,13 @@ return function(ui: UI.UI)
 								session.change(key, nil)
 							end)
 							ui.set(pill, "Size", ui.values.udim2(1, 0, 1, 0))
-							ui.set(pill, "Text", glyphOf(property) .. "  " .. describe(property))
+							local target = property.node
+							local named = if target then Design.document.find(value.root, target) else nil
+							ui.set(
+								pill,
+								"Text",
+								glyphOf(property) .. "  " .. if named then "◎ " .. named.name else describe(property)
+							)
 							ui.set(pill, "TextColor3", color.accent)
 							ui.set(pill, "TextSize", size.small)
 							ui.set(pill, "FontFace", Theme.font.bold)
@@ -520,6 +539,25 @@ return function(ui: UI.UI)
 							local box = field(if type(literal) == "string" then literal else "", function(text: string)
 								session.change(key, if text == "" then nil else { literal = text })
 							end)
+							ui.set(box, "Size", ui.values.udim2(1, 0, 1, 0))
+							ui.set(box, "Parent", slot)
+						elseif entry.type == "value" or entry.type == "datatype" then
+							local box = field(
+								if literal ~= nil then Design.literal(literal) else "",
+								function(text: string)
+									if text == "" then
+										session.change(key, nil)
+										return
+									end
+									local parsed, result = pcall(Design.parseLiteral, text)
+									if parsed then
+										session.change(key, { literal = result })
+									else
+										session.problem:set(`{entry.label or humanize(key)}: {result}`)
+									end
+								end,
+								true
+							)
 							ui.set(box, "Size", ui.values.udim2(1, 0, 1, 0))
 							ui.set(box, "Parent", slot)
 						else

@@ -28,6 +28,8 @@ runtime:dispose()
 
 Use a GUI container with a known extent as the parent. Use `roblox3DLibrary` to open the scene stage. The returned session owns selection and edit history. Layer dragging calls `session.move`; inspector controls call session edits. Resizing and numeric scrubbing preview values during movement and commit when released. A resize commits its width, height and fill flags together, so one undo restores the previous size.
 
+The inspector has an editor for each field type. It edits `value` and `datatype` fields as Luau literals, such as `{ top = 8, bottom = 8 }` or `{ 0, 10, 0, 20 }`. It edits `node` fields by choosing a node of the design. `Design.literal(value)` writes a literal as Luau and `Design.parseLiteral(text)` reads it back; an invalid literal sets `session.problem` and keeps the old value.
+
 The 2D stage supports cursor-anchored zoom, pan, fit, selection outlines, resize grips and a size badge. The scene stage supports orbit, pan, filtered raycast picking and axis translation. Fit runs once on the next host frame and can also be requested through the stage or scene API.
 
 For a source link, pass a `Design.LinkStore` as `options.link`. The Roblox-only `studio/design/script-store.luau` adapter wraps `ScriptEditorService`; the editor itself only consumes the store protocol.

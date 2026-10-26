@@ -149,6 +149,26 @@ describe("Compose Design documents", function()
 		end)):toBe(false)
 	end)
 
+	it("reads back every literal it writes", function()
+		local values: { Design.Literal } = {
+			-4.5,
+			"line\n\"quoted\"",
+			false,
+			{ 0, 10, 0, -20 },
+			{ top = 4, ["two words"] = { "a", { nested = true } } },
+		}
+		for _, value in values do
+			local text = Design.literal(value)
+			expect(Design.literal(Design.parseLiteral(text))):toBe(text)
+		end
+		expect(function()
+			Design.parseLiteral "{ 1, 2"
+		end):toThrow()
+		expect(function()
+			Design.parseLiteral "1 2"
+		end):toThrow()
+	end)
+
 	it("undoes and redoes whole edits", function()
 		local first = sample()
 		local history = Design.history(first)
