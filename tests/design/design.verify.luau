@@ -236,8 +236,16 @@ describe("Compose Design documents", function()
 		value = Design.document.bind(value, library, list, { from = "rows", key = "id" })
 		value, row = Design.document.insert(value, library, list, "Button")
 		value = Design.document.change(value, library, row, "onActivate", { output = "onPick", fields = { "id" } })
+		local picker: string = row
+		local current = value
 		expect(function()
-			Design.document.change(value, library, row, "onActivate", { output = "onPick", fields = { "missing" } })
+			Design.document.change(
+				current,
+				library,
+				picker,
+				"onActivate",
+				{ output = "onPick", fields = { "missing" } }
+			)
 		end):toThrow "unknown item field missing"
 		local picked: { Design.Literal } = {}
 		table.clear(built)

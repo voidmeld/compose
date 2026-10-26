@@ -432,6 +432,27 @@ describe("host-neutral design editor", function()
 		editor.dispose()
 		w.close()
 	end)
+
+	it("builds lights, surface images, material variants and meshes on a 3D part", function()
+		local w = Support.world "3d"
+		local editor = w.mount()
+		editor.session.select(w.first)
+		editor.session.change("materialVariant", { literal = "Moss" })
+		editor.session.change("meshId", { literal = "rbxassetid://1" })
+		expect(editor.session.insert "PointLight"):toBe(true)
+		editor.session.change("brightness", { literal = 2 })
+		editor.session.select(w.first)
+		expect(editor.session.insert "Decal"):toBe(true)
+		editor.session.change("image", { literal = "rbxassetid://2" })
+		w.settle()
+		local part = Support.instance(assert(editor.scene).nodes[w.first])
+		expect(part.MaterialVariant):toBe "Moss"
+		expect(assert(part:FindFirstChildWhichIsA "SpecialMesh").MeshId):toBe "rbxassetid://1"
+		expect(assert(part:FindFirstChildWhichIsA "PointLight").Brightness):toBe(2)
+		expect(assert(part:FindFirstChildWhichIsA "Decal").Texture):toBe "rbxassetid://2"
+		editor.dispose()
+		w.close()
+	end)
 end)
 
 return nil
