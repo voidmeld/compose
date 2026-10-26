@@ -952,6 +952,33 @@ local function memory(text: string): Memory
 	}
 end
 
+describe("Compose Design insert placement", function()
+	it("inserts beside a leaf and after the selected control", function()
+		Core.withRootOwner(function()
+			local session = Design.session(library, Design.document.new("Leaves", library, "Stack"))
+			expect(session.insert "Stack"):toBe(true)
+			local inner = session.selected:peek()
+			session.select "n1"
+			expect(session.insert "Label"):toBe(true)
+			local last = session.selected:peek()
+			session.select(inner)
+			library.kinds.Stack.leaf = true
+			expect(session.insert "Button"):toBe(true)
+			library.kinds.Stack.leaf = nil
+			local root = session.document:peek().root
+			expect(#root.children):toBe(3)
+			expect(root.children[1].id):toBe(inner)
+			expect(root.children[2].kind):toBe "Button"
+			expect(root.children[3].id):toBe(last)
+			expect(#root.children[1].children):toBe(0)
+			session.select(root.children[2].id)
+			expect(session.insert "Label"):toBe(true)
+			expect(session.document:peek().root.children[3].kind):toBe "Label"
+			expect(#session.document:peek().root.children):toBe(4)
+		end)
+	end)
+end)
+
 describe("Compose Design source link", function()
 	it("imports linked source and writes visual edits back", function()
 		Core.withRootOwner(function()

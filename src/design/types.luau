@@ -74,6 +74,7 @@ export type Kind = {
 	defaults: { [string]: Literal }?,
 	seeds: { Seed }?,
 	children: Children,
+	leaf: boolean?,
 	template: string?,
 	slot: string?,
 	category: string?,
