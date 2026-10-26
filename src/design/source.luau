@@ -331,8 +331,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		return `function(...)\n{tabs(depth + 1)}if props.{output} then\n{tabs(depth + 2)}props.{output}({list})\n`
 			.. `{tabs(depth + 1)}end\n{tabs(depth)}end`
 	end
-	local function returning(params: string, body: string, depth: number): string
-		return `function({params})\n{tabs(depth + 1)}return {body}\n{tabs(depth)}end`
+	local function returning(params: string, body: string, depth: number, returnType: string?): string
+		local annotated = if returnType then `: {returnType}` else ""
+		return `function({params}){annotated}\n{tabs(depth + 1)}return {body}\n{tabs(depth)}end`
 	end
 	local rowTypeLines: { string } = {}
 	local rowItemTypes: { [string]: string } = {}
@@ -671,7 +672,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				local typed = itemType(node, bound.from)
 				local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
 				table.insert(scopes, { fields = fieldsOf(bound.from) })
-				written = returning(parameter, layout(current, depth + 2, 0), depth + 1)
+				written = returning(parameter, layout(current, depth + 2, 0), depth + 1, luauType)
 				table.remove(scopes)
 			elseif current ~= nil and datatype ~= nil then
 				written = datatypeLiteral(datatype, current)

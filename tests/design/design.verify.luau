@@ -303,7 +303,7 @@ describe("Compose Design documents", function()
 	it("renders column cells and row actions for each item of a repeated list", function()
 		local kinds = library.kinds
 		local columnsField: Design.Field = { type = "value", luauType = "{ Toy.Column<$Item, $Key> }" }
-		local actionsField: Design.Field = { type = "value", perRow = true }
+		local actionsField: Design.Field = { type = "value", perRow = true, luauType = "Toy.Actions" }
 		library.kinds = table.clone(kinds)
 		library.kinds.Table = {
 			fields = { columns = columnsField, actions = actionsField },
@@ -348,6 +348,9 @@ describe("Compose Design documents", function()
 		expect(string.find(code, "tostring(use(current).score)", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "Columns: { Toy.Column<RowsItem, string> } = {", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "onChoose: ((RowsItem) -> ())?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "actions = function(current: Toy.Readable<RowsItem>): Toy.Actions", 1, true) ~= nil):toBe(
+			true
+		)
 		local _, itemTypes = string.gsub(code, "type %w+Item = ", "")
 		expect(itemTypes):toBe(1)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
