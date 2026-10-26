@@ -188,7 +188,7 @@ Before calibration, the worker primes each member with one unmeasured complete s
 
 Paired execution splits those 32 CPU samples and 16 warmup batches across the first three rounds. It also splits each member's timing sample count across those rounds. A 31-sample scene uses 11, 10 and 10 samples. The six-round confirmation repeats that budget. Diagnostic count passes and fixture priming run in every round, so process startup and priming add some overhead.
 
-Each timing collection permits one calibration-only retry through Verify. A yardstick drift or spread rejection can retry only when its workloads completed without failures or other invalid measurements. Both attempts remain in `calibration-attempts.tsv`. A second calibration rejection still fails. Valid measurements, workload failures and paired regressions do not trigger this retry. The ceiling is unchanged by the retry.
+Each timing collection permits two calibration-only retries through Verify. A yardstick drift or spread rejection can retry only when its workloads completed without failures or other invalid measurements. Every attempt remains in `calibration-attempts.tsv`. A third calibration rejection still fails. Valid measurements, workload failures and paired regressions do not trigger a retry. The ceiling is unchanged by the retries.
 
 Scene and entity members use 31 complete measured samples. The shared suite owns that budget;
 individual scenarios own their inputs and warmup. This spans multiple allocation/collection cycles

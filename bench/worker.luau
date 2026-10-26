@@ -63,7 +63,7 @@ Lute.worker {
 							local collection = if round
 								then Paired.collection(entry.collection, round)
 								else entry.collection
-							collection.calibrationAttempts = 2
+							collection.calibrationAttempts = 3
 							local definition = Benchmark.collection(collection)
 							local run = assert(definition.run)
 							definition.run = function(context)
