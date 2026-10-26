@@ -133,6 +133,29 @@ describe("host-neutral design editor", function()
 		w.close()
 	end)
 
+	it("lists library kinds by category, filters them by search and inserts the activated kind", function()
+		local w = Support.world()
+		local editor = w.mount()
+		local panel = w.find(editor.root, "DesignLibrary")
+		local kinds = w.find(panel, "Kinds")
+		local before = #editor.session.document:peek().root.children
+		local search = w.find(panel, "Search")
+		search.Text = "butt"
+		w.settle()
+		expect(w.find(kinds, "Button").Visible):toBe(true)
+		expect(w.find(kinds, "Text").Visible):toBe(false)
+		w.fire(w.find(kinds, "Button"), "Activated")
+		w.settle()
+		local root = editor.session.document:peek().root
+		expect(#root.children):toBe(before + 1)
+		expect(root.children[#root.children].kind):toBe "Button"
+		search.Text = ""
+		w.settle()
+		expect(w.find(kinds, "Text").Visible):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("commits inspector text, numeric, toggle, segmented and colour controls", function()
 		local w = Support.world()
 		local editor = w.mount()
