@@ -2,12 +2,235 @@
 
 local Design = require "../../src/design"
 local DesignEditor = require "../../src/design-editor"
+local Compose = require "../../src/core"
 local Support = require "./editor-support"
 local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("opens a kit with its native live tokens, token choices and preview slots", function()
+		local w = Support.world()
+		local tint = Compose.cell(w.values.Color3.new(0.2, 0.4, 0.6))
+		local library = Design.extend(w.library, {
+			kinds = {
+				Surface = {
+					fields = { tint = { type = "value", tokens = true }, content = { type = "content" } },
+					children = "none",
+					call = "UI.Surface",
+					build = function(
+						props: { [string]: Design.Resolved },
+						_children: { unknown },
+						name: string
+					): unknown
+						local color = props.tint
+						local content = props.content
+						local slot = if content then content.slot else nil
+						return w.runtime.create "Frame" {
+							Name = name,
+							BackgroundColor3 = if color then color.value else nil,
+							if slot then slot() else nil,
+						}
+					end,
+				},
+			},
+		})
+		local value = Design.document.setContract(Design.document.new("Preview", library, "Surface"), library, {
+			inputs = { { id = "content", kind = "value", type = "slot" } },
+			outputs = {},
+		})
+		value = Design.document.change(value, library, "n1", "tint", { token = "surface" })
+		value = Design.document.change(value, library, "n1", "content", { input = "content" })
+		value = Design.document.rename(value, library, "n1", "TokenSurface")
+		local source = Design.emit(value, library)
+		local kit = DesignEditor.kit("Cards", function(): DesignEditor.Workspace
+			return {
+				runtime = w.runtime,
+				environment = w.environment,
+				library = library,
+				root = "Surface",
+				tokens = { "surface" },
+				resolveToken = function(name: string): Design.Resolved
+					expect(name):toBe "surface"
+					return { value = tint }
+				end,
+				slots = {
+					content = function(): unknown
+						return w.runtime.constructors.TextLabel "PreviewSlot" { Text = "Slot" }
+					end,
+				},
+			}
+		end)
+		local stopped = false
+		local editor = kit.edit(w.screen, "Preview", {
+			read = function(): string
+				return source
+			end,
+			write = function(_expected: string, generated: string): boolean
+				source = generated
+				return true
+			end,
+			watch = function(_changed: () -> ()): () -> ()
+				return function()
+					stopped = true
+				end
+			end,
+		})
+		w.settle()
+		local surface = w.find(w.screen, "TokenSurface")
+		expect(w.find(surface, "PreviewSlot")):toBeOk()
+		expect(w.read(surface, "BackgroundColor3")):toBe(tint:peek())
+		tint:set(w.values.Color3.new(0.6, 0.4, 0.2))
+		w.settle()
+		expect(w.read(surface, "BackgroundColor3")):toBe(tint:peek())
+		editor.dispose()
+		expect(stopped):toBe(true)
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+	it("renders live card bindings, keyed input, opaque geometry, attributes and owned slots", function()
+		local w = Support.world()
+		local function build(kind: string)
+			return function(props: { [string]: Design.Resolved }, children: { unknown }, name: string): unknown
+				local fields: { [unknown]: unknown } = {}
+				for key, prop in props do
+					fields[key] = prop.value or prop.readable or prop.callback or prop.literal
+					if prop.slot then
+						fields[#fields + 1] = prop.slot()
+						fields[key] = nil
+					end
+				end
+				for _, child in children do
+					fields[#fields + 1] = child
+				end
+				fields.Name = name
+				return w.runtime.create(kind)(fields)
+			end
+		end
+		local library: Design.Library = {
+			name = "Cards",
+			parameter = "UI",
+			parameterType = "Controls",
+			prelude = {},
+			returnType = "GuiObject",
+			readable = "Compose.ReadOnlyValue",
+			cell = "Compose.Cell",
+			show = "Compose.show",
+			keyed = "Compose.keyed",
+			kinds = {
+				Card = {
+					fields = {
+						Size = { type = "datatype", datatype = "UDim2" },
+						Attributes = { type = "value" },
+						content = { type = "content" },
+					},
+					children = "list",
+					call = "UI.Card",
+					build = build "Frame",
+				},
+				Choice = {
+					fields = { Text = { type = "string" }, Activated = { type = "event" } },
+					children = "none",
+					call = "UI.Choice",
+					build = build "TextButton",
+				},
+			},
+		}
+		local itemFields: { Design.ItemField } = {
+			{ id = "id", type = "string" },
+			{ id = "label", type = "string" },
+			{ id = "index", type = "number" },
+		}
+		local args: { Design.InputType } = { "number" }
+		local value = Design.document.setContract(Design.document.new("Card", library, "Card"), library, {
+			inputs = {
+				{ id = "size", kind = "readable", type = "record", luauType = "UDim2" },
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					fields = itemFields,
+				},
+				{ id = "hint", kind = "readable", type = "boolean" },
+				{ id = "overlay", kind = "value", type = "slot" },
+			},
+			outputs = { { id = "onSelect", args = args } },
+		})
+		value = Design.document.change(value, library, "n1", "Size", { input = "size" })
+		local attributes: { [string | number]: Design.Literal } = { Occluder = true }
+		value = Design.document.change(value, library, "n1", "Attributes", { literal = attributes })
+		value = Design.document.change(value, library, "n1", "content", { input = "overlay" })
+		local row, hint
+		value, row = Design.document.insert(value, library, "n1", "Choice")
+		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id", row = row })
+		value = Design.document.nameFrom(value, library, row, "id")
+		value = Design.document.change(value, library, row, "Text", { item = "label" })
+		value = Design.document.change(value, library, row, "Activated", { output = "onSelect", fields = { "index" } })
+		value, hint = Design.document.insert(value, library, "n1", "Choice")
+		value = Design.document.rename(value, library, hint, "Hint")
+		value = Design.document.showWhen(value, library, hint, "hint")
+		local rows = Compose.cell({ { id = "a", label = "First", index = 1 } } :: { Design.Row })
+		local shown = Compose.cell(true :: Design.Literal?)
+		local width = Compose.cell(200)
+		local selected: Design.Literal? = nil
+		local function render(): unknown
+			return Design.render(value, library, {
+				bindings = {
+					size = {
+						value = function(use: Compose.Use): unknown
+							return w.values.UDim2.fromOffset(use(width), 120)
+						end,
+					},
+					rows = { rows = rows },
+					hint = { readable = shown },
+				},
+				slots = {
+					overlay = function(): unknown
+						return w.runtime.constructors.Frame "Overlay" {}
+					end,
+				},
+				outputs = {
+					onSelect = function(args: { Design.Literal })
+						selected = args[1]
+					end,
+				},
+			})
+		end
+		local dispose, root = w.runtime.mount(render, w.screen)
+		w.settle()
+		local first = w.find(root, "a")
+		expect(w.read(first, "Text")):toBe "First"
+		expect(Support.instance(root):GetAttribute "Occluder"):toBe(true)
+		expect(w.point(root, "AbsoluteSize").X):toBe(200)
+		rows:set { { id = "a", label = "Changed", index = 3 }, { id = "b", label = "Second", index = 2 } }
+		width:set(300)
+		shown:set(false)
+		w.settle()
+		expect(w.find(root, "a")):toBe(first)
+		expect(w.read(first, "Text")):toBe "Changed"
+		expect(w.find(root, "b")):toBeOk()
+		expect(Support.instance(root):FindFirstChild "Hint"):toBeNil()
+		expect(w.point(root, "AbsoluteSize").X):toBe(300)
+		w.fire(first, "Activated")
+		expect(selected):toBe(3)
+		rows:set { { id = "b", label = "Only", index = 1 } }
+		shown:set(true)
+		w.settle()
+		expect(w.env.isAlive(first)):toBe(false)
+		expect(w.find(root, "Hint")):toBeOk()
+		dispose()
+		dispose()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.emulator.failNext "setAttribute"
+		expect(function()
+			w.runtime.mount(render, w.screen)
+		end):toThrow()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
 	it("unwinds failed Host construction after the stage and layers have mounted", function()
 		local w = Support.world()
 		local write = w.emulator.render.setProperty

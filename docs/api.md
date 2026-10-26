@@ -14,6 +14,8 @@ This page owns the public signatures, the return values and the failure behavior
 | Test without an engine | [Test hosts](#srctest-scene) |
 | Use Roblox | [Roblox adapter](#srcroblox) |
 | Generate build artifacts | [Authoring](#authoring-project-trees) |
+| Author visual documents | [Design](#design) |
+| Mount a visual editor | [Design editor](#design-editor) |
 
 The examples assume this setup:
 
@@ -2037,13 +2039,75 @@ The generator refuses a plan and does not emit a tree that breaks at runtime.
 
 `manifest.digest` is 16 lowercase hex characters over the manifest. It is change detection, not cryptography.
 
+## Design
+
+Require `src/design`. A `Library` supplies `name`, `parameter`, `parameterType`, `prelude`, `returnType`, `readable`, `cell` and `kinds`. Each kind declares `fields`, `children`, a source `call` and `build(props, children, name) -> unknown`. Builders use the supplied runtime under the caller's active owner. They own subscriptions and created nodes; inputs, token tables and mount targets remain borrowed.
+
+### `Design.document`
+
+`new(name, library, rootKind) -> Document` creates a document. Edits return validated copies: `insert(value, library, parentId, kind) -> (Document, id)`, `change(value, library, id, key, Value?)`, `rename(value, library, id, name)`, `move(value, library, id, parentId, before?)`, `remove(value, library, id)`, `setContract(value, library, contract)`, `bind(value, library, id, Bind?)` and `showWhen(value, library, id, inputOrItemField?)`. `content(value, library, id, key, kind)` adds an authored content subtree. `validate(value, library)` refuses invalid fields, bindings, references and structure. Documents contain only plain data, at most 500 nodes and 32 levels.
+
+A field's `type` is `string`, `number`, `boolean`, `choice`, `color`, `vector3`, `value`, `event`, `content`, `node` or `datatype`. `value` accepts plain tables, including attribute maps. `datatype` supplies a `datatype` name, such as `UDim2` or `Enum.AutomaticSize`; literals become constructor calls in emitted source. Kind builders interpret literal representations when rendering a document directly. `tokens = true` permits token bindings. `luauType` on a field annotates emitted table literals; `perRow` makes a literal a row function. `requires` controls dependent fields. `seeds` provides children on insertion.
+
+A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can supply fixed `args` and current item `fields`. A `content` field binds a slot input or an authored subtree. `Bind` is `{ from, key, row? }`: `from` names a list input or an enclosing row's list field, `key` names its stable key, and `row` chooses the template child. Other children remain beside the repeated content. Kinds with `children = "template"` receive `rows` and `template` values through the properties named by `source` and `template`.
+
+### Design contracts and types
+
+`Contract` is `{ inputs: { Input }, outputs: { Output } }`. An input has `id`, `kind` (`value`, `readable` or `cell`), `type`, optional plain-data `preview`, `required`, `fields` and `luauType`. Input types are `string`, `number`, `boolean`, `color`, `image`, `list`, `record` and `slot`. List and record `fields` recursively declare `{ id, type, fields?, luauType? }`. Emitted list items and nested records retain these shapes.
+
+`luauType` on an input or item field overrides its emitted base type with an identifier or qualified type name, such as `UDim2` or `Controls.Geometry`. `kind` still wraps that type in the library's readable or cell type. The library prelude supplies any named imports. This annotation does not convert previews or runtime values. Slot inputs require `kind = "value"`, use `() -> <library.returnType>` and refuse `luauType` overrides. Invalid type paths refuse validation.
+
+An output has `id`, optional `args: { InputType }` or `row` naming a list input with fields. Outputs emit optional typed callbacks; a row output receives the exported list item type. An output marker inside a literal is `{ ["$output"] = "onPick", ["$row"] = true }` to pass the current row. Slots and outputs keep behavior in the consumer while the document owns structure.
+
+### `Design.emit`
+
+`emit(document, library, options?) -> string` writes a typed Luau component and its plain-data contract header. `parse(source, library) -> Document` reads that source without executing it. Supported edits round trip through both. `literal(value) -> string` and `parseLiteral(text) -> Literal` convert plain data. Invalid source or literals raise.
+
+`EmitOptions` accepts `name`, `rowFunctions`, `localControls`, `controls`, `propsType` and `prelude`. The generated component accepts the library controls parameter and typed `Props`. Readable inputs pass directly to controls. `library.show` and `library.keyed` name structural functions in generated source. A `library.token` ending in `.` writes token paths (`Tokens.font.title`); other token names become resolver calls. Token tables belong to the consumer and may contain host datatypes and reactive values. Attributes use an ordinary `value` field forwarded by the kind to the runtime's reserved `Attributes` property; Design adds no host attribute policy.
+
+### `Design.parse`
+
+`parse(source, library) -> Document` reads an emitted component and validates its contract without executing source.
+
+### `Design.literal`
+
+`literal(value: Literal) -> string` writes plain data as a deterministic Luau literal.
+
+### `Design.parseLiteral`
+
+`parseLiteral(text: string) -> Literal` reads a plain-data Luau literal and raises on invalid input.
+
+### `Design.render`
+
+`render(document, library, context?) -> unknown` builds through the library. `RenderContext` accepts `inputs` (plain snapshot values), `bindings: { [string]: Resolved }`, `outputs` (handlers receiving an argument array), `slots` (owned content factories), `token(name) -> Literal`, `resolveToken(name) -> Resolved`, `decorate(node, built)` and `players(players)`. `resolveToken` takes precedence over `token` and supplies native or reactive tokens directly to kind builders without a second token representation.
+
+`Resolved` supplies `literal`, opaque `value`, `readable`, `callback`, `slot`, `rows`, `template`, `node` and `key`. A binding takes precedence over snapshot inputs and previews and reaches the kind builder without conversion. Use `readable` for live plain values, `rows` for a live row collection, and `value` for an opaque host value or formula that the builder understands. Bindings do not transfer ownership of sources. Builders must consume the appropriate resolved member and pass structural children to runtime constructors.
+
+Supplying `bindings`, including an empty table, enables live conditional children and keyed repeated children through Compose structural directives. Template kinds receive reactive row formulas, including nested item lists. Replacing a keyed row updates its item bindings and event arguments; removing it disposes its owned subtree. Without `bindings`, rendering uses snapshots for list structure and conditions, as an editor preview does. Mount live designs under an owner and dispose their mount normally. Failed mounts unwind slots, nodes and subscriptions through the runtime.
+
+### `Design.extend`
+
+`extend(library, { kinds, prelude? }) -> Library` adds kinds and deduplicates prelude lines; duplicate kinds refuse.
+
+### `Design.session`
+
+`session(library, initial) -> Session` owns document, selection and edit history. Edit methods return success and put refusals in `problem` without replacing the current document.
+
+### `Design.history`
+
+`history(initial) -> History` supplies `current`, `commit`, `undo`, `redo`, `canUndo` and `canRedo`, retaining at most 100 past documents. Treat committed documents as immutable.
+
+### `Design.link`
+
+`link(session, store) -> Link` supplies reactive `status`, `import() -> boolean` and `dispose()`. Source conflicts and custom code preserve the document until an explicit import succeeds.
+
 ## Design editor
 
 ### `DesignEditor.create`
 
 `create(library: Design.Library, initial: Design.Document, parent: Compose.Node, options: Options) -> Editor`
 
-Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime`, `environment: Environment` and `stageSize: { X: number, Y: number }`. It also accepts `devices`, `previews`, `token`, `tokens`, `slots`, `onExport` and `link`, with the same token, slot and store protocols that `Design.render` and `Design.link` consume. `onExport(source: string)` receives the current generated source. Each `Device` is `{ name: string, size: Point }`; its toolbar chip cycles the stage size. Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`; its toolbar chip cycles the choices and calls `select`. A library's optional `provide(content)` wraps the rendered design on the 2D stage, for example to link a theme StyleSheet.
+Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime`, `environment: Environment` and `stageSize: { X: number, Y: number }`. It also accepts `devices`, `previews`, `token`, `resolveToken`, `tokens`, `slots`, `onExport` and `link`, with the same token, slot and store protocols that `Design.render` and `Design.link` consume. `tokens` lists token paths offered by the inspector. `onExport(source: string)` receives the current generated source. Each `Device` is `{ name: string, size: Point }`; its toolbar chip cycles the stage size. Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`; its toolbar chip cycles the choices and calls `select`. A library's optional `provide(content)` wraps the rendered design on the 2D stage, for example to link a theme StyleSheet.
 
 `Editor` returns `root: Compose.Node`, `session: Design.Session`, optional `stage` and `scene`, and an idempotent `dispose()`. Disposing the editor releases its owned nodes, watchers, subscriptions and source link. The supplied runtime, parent and services remain borrowed. Failed construction unwinds editor resources and raises the original failure. The runtime must provide observation, events and frames as well as rendering.
 
@@ -2055,7 +2119,7 @@ A 2D `stage` exposes `surface`, `overlay`, `nodes`, `zoom`, `zoomTo(scale, aroun
 
 `kit(name: string, open: () -> Workspace) -> Kit`
 
-Makes a design kit that the Compose Design plugin can open. `Workspace` has `runtime`, `environment`, `library`, `root` (the kind of a new document's root), and optional `stageSize`, `devices`, `previews` and `dispose`. `Kit.edit(parent, name, link?)` calls `open`, creates a new document with that name, and mounts the editor. When the linked source is empty, `edit` writes the generated source of the new document first. Disposing the editor also calls `Workspace.dispose`.
+Makes a design kit that the Compose Design plugin can open. `Workspace` has `runtime`, `environment`, `library`, `root` (the kind of a new document's root), and optional `stageSize`, `devices`, `previews`, `token`, `resolveToken`, `tokens`, `slots` and `dispose`. Token resolvers, inspector token paths and preview slots are forwarded to the editor and both stage types. `Kit.edit(parent, name, link?)` calls `open`, creates a new document with that name, and mounts the editor. When the linked source is empty, `edit` writes the generated source of the new document first. Disposing the editor also calls `Workspace.dispose`.
 
 A package exposes its kit to the plugin through an exported `composeDesign(): Kit` function. The plugin looks for it on the ModuleScripts in `ReplicatedStorage` and in its folders. Without a package kit, it opens the built-in Roblox library.
 

@@ -2,7 +2,7 @@
 
 local Core = require "../core"
 
-type ReadOnlyValue<T> = Core.Value<T>
+type ReadOnlyValue<T> = Core.ReadOnlyValue<T>
 
 export type Literal = string | number | boolean | { [string | number]: Literal }
 
@@ -135,7 +135,7 @@ export type Library = {
 export type InputKind = "value" | "readable" | "cell"
 export type InputType = "string" | "number" | "boolean" | "color" | "image" | "list" | "record" | "slot"
 
-export type ItemField = { id: string, type: InputType, fields: { ItemField }? }
+export type ItemField = { id: string, type: InputType, fields: { ItemField }?, luauType: string? }
 
 export type Input = {
 	id: string,
@@ -144,6 +144,7 @@ export type Input = {
 	preview: Literal?,
 	fields: { ItemField }?,
 	required: boolean?,
+	luauType: string?,
 }
 
 export type Output = { id: string, args: { InputType }?, row: string? }
@@ -189,9 +190,11 @@ export type EmitOptions = {
 
 export type RenderContext = {
 	inputs: { [string]: Literal }?,
+	bindings: { [string]: Resolved }?,
 	outputs: { [string]: (args: { Literal }) -> () }?,
 	slots: { [string]: () -> unknown }?,
 	token: ((name: string) -> Literal)?,
+	resolveToken: ((name: string) -> Resolved)?,
 	decorate: ((node: Node, built: unknown) -> ())?,
 	players: ((players: { [string]: Player }) -> ())?,
 }

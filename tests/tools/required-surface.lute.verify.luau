@@ -12,7 +12,16 @@ local function fixture(body: (string) -> number): number
 	return TemporaryDirectory.run(TemporaryDirectory.root(), "compose-required-surface", function(root)
 		fs.writeStringToFile(root .. "/rokit.toml", fs.readFileToString "rokit.toml")
 		for _, directory in
-			{ "tools", "docs", "src/core", "src/test-scene", "src/roblox", "src/design-editor", "authoring" }
+			{
+				"tools",
+				"docs",
+				"src/core",
+				"src/test-scene",
+				"src/roblox",
+				"src/design",
+				"src/design-editor",
+				"authoring",
+			}
 		do
 			fs.createDirectory(root .. "/" .. directory, { makeParents = true })
 		end
@@ -30,6 +39,7 @@ local function fixture(body: (string) -> number): number
 				"src/core/init",
 				"src/test-scene/init",
 				"src/roblox/init",
+				"src/design/init",
 				"src/design-editor/init",
 				"src/test-scene/roblox",
 				"authoring/init",
@@ -38,7 +48,9 @@ local function fixture(body: (string) -> number): number
 			fs.writeStringToFile(root .. "/" .. path .. ".luau", "return { sample = true }")
 		end
 		local docs: { string } = {}
-		for _, prefix in { "Compose", "TestScene", "ComposeRoblox", "DesignEditor", "RobloxEmulator", "Author" } do
+		for _, prefix in
+			{ "Compose", "TestScene", "ComposeRoblox", "Design", "DesignEditor", "RobloxEmulator", "Author" }
+		do
 			table.insert(docs, "### `" .. prefix .. ".sample`")
 		end
 		fs.writeStringToFile(root .. "/docs/api.md", table.concat(docs, "\n"))

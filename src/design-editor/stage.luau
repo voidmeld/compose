@@ -22,6 +22,7 @@ export type Options = {
 	size: UI.Point,
 	accent: unknown?,
 	token: ((name: string) -> Design.Literal)?,
+	resolveToken: ((name: string) -> Design.Resolved)?,
 	inputs: { [string]: Design.Literal }?,
 	slots: { [string]: () -> Compose.Node }?,
 }
@@ -365,6 +366,7 @@ return function(ui: UI.UI)
 							inputs = options.inputs,
 							slots = options.slots,
 							token = options.token,
+							resolveToken = options.resolveToken,
 							players = function(made: { [string]: Design.Player })
 								players = made
 							end,

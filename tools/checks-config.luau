@@ -100,6 +100,13 @@ local config: {
 					end,
 				},
 				{
+					prefix = "Design",
+					entry = "src/design/init.luau",
+					load = function(): unknown
+						return require "../src/design"
+					end,
+				},
+				{
 					prefix = "DesignEditor",
 					entry = "src/design-editor/init.luau",
 					load = function(): unknown

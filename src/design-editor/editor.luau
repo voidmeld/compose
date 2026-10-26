@@ -27,6 +27,7 @@ export type Options = {
 	devices: { Device }?,
 	previews: { Preview }?,
 	token: ((name: string) -> Design.Literal)?,
+	resolveToken: ((name: string) -> Design.Resolved)?,
 	tokens: { string }?,
 	slots: { [string]: () -> unknown }?,
 	onExport: ((source: string) -> ())?,
@@ -204,6 +205,7 @@ return function(ui: UI.UI)
 			local built = Stage3D(ui)(session, center, {
 				accent = color.accent,
 				token = options.token,
+				resolveToken = options.resolveToken,
 				slots = options.slots,
 			})
 			scene = built
@@ -213,6 +215,7 @@ return function(ui: UI.UI)
 				size = options.stageSize,
 				accent = color.accent,
 				token = options.token,
+				resolveToken = options.resolveToken,
 				slots = options.slots,
 			})
 			stage = built

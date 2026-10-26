@@ -127,6 +127,65 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("passes live rows to template kinds without snapshotting them", function()
+		local rows = Core.cell({ ada } :: { Design.Row })
+		local value = sample()
+		table.clear(built)
+		Design.render(value, library, {
+			bindings = { rows = { rows = rows } },
+			token = function(_name: string): Design.Literal
+				return 8
+			end,
+		})
+		local list: Built? = nil
+		for _, record in built do
+			if record.kind == "List" then
+				list = record
+			end
+		end
+		local source = assert(assert(list).props.from.rows)
+		expect(#source:peek()):toBe(1)
+		rows:set { bo, ada }
+		expect(#source:peek()):toBe(2)
+		expect(source:peek()[1].name):toBe "Bo"
+	end)
+	it("round trips host input types and nested row shapes with typed outputs and slots", function()
+		local nested: { Design.ItemField } = { { id = "label", type = "string" } }
+		local fields: { Design.ItemField } = {
+			{ id = "id", type = "string" },
+			{ id = "name", type = "string" },
+			{ id = "size", type = "record", luauType = "Vector2" },
+			{ id = "children", type = "list", fields = nested },
+		}
+		local args: { Design.InputType } = { "number" }
+		local value = Design.document.setContract(sample(), library, {
+			inputs = {
+				{ id = "title", kind = "readable", type = "string", luauType = "UI.Caption" },
+				{ id = "showClose", kind = "value", type = "boolean" },
+				{ id = "geometry", kind = "readable", type = "record", luauType = "UDim2" },
+				{ id = "overlay", kind = "value", type = "slot" },
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					fields = fields,
+				},
+			},
+			outputs = { { id = "onClose", args = args }, { id = "onPick", row = "rows" } },
+		})
+		local code = Design.emit(value, library)
+		expect(string.find(code, "title: Toy.Readable<UI.Caption>?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "geometry: Toy.Readable<UDim2>?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "overlay: (() -> Instance)?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "size: Vector2, children: { { label: string } }", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "onPick: ((RowsItem) -> ())?", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local bad = Design.document.copy(value)
+		bad.contract.inputs[1].luauType = "UI..Caption"
+		expect(function()
+			Design.document.validate(bad, library)
+		end):toThrow()
+	end)
 	it("rejects values the kind and contract do not declare", function()
 		local value = sample()
 		expect(refused(function()
@@ -239,7 +298,10 @@ describe("Compose Design documents", function()
 		library.motion = {
 			call = "UI.follow",
 			roles = { "move", "fade" },
-			animate = function(source: Core.Value<Design.Literal?>, role: string): Core.Value<Design.Literal?>
+			animate = function(
+				source: Core.ReadOnlyValue<Design.Literal?>,
+				role: string
+			): Core.ReadOnlyValue<Design.Literal?>
 				table.insert(moved, role)
 				return source
 			end,
