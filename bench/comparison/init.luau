@@ -2,7 +2,6 @@
 
 local Roact = require "@self/roact"
 local Seam = require "@self/seam"
-local Iris = require "@self/iris"
 local Signals = require "@self/signals"
 local ReactReflex = require "@self/react-reflex"
 local FusionCharm = require "@self/fusion-charm"
@@ -70,13 +69,6 @@ return {
 		what = "seam public APIs",
 		workCounters = false,
 		load = Workloads.include("seam", Seam.create, Seam.unsupported),
-	},
-	{
-		name = "iris",
-		version = version "iris",
-		what = "iris public APIs",
-		workCounters = false,
-		load = Workloads.include("iris", Iris.create, Iris.unsupported),
 	},
 	{
 		name = "signals",

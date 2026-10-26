@@ -77,7 +77,7 @@ Blend uses one exact NevermoreEngine revision. Its package version is in the loc
 Roact and Seam use their latest release tags. Charm uses its latest package release tag; Reflex uses its latest release tag.
 The second React lane uses the upstream Roblox tag with its own polyfill, symbol and promise dependencies.
 Reflex uses its declared Promise dependency separately.
-Iris and Roblox signals have no upstream release or tag. Their pins use exact default-branch commits and the package versions marked `unreleased`.
+Roblox signals has no upstream release or tag. Its pin uses an exact default-branch commit and the package version marked `unreleased`.
 The summary prints the exact source identities for all these dependencies.
 
 ### Support
@@ -115,7 +115,6 @@ The additional lanes classify the same 24 workloads:
 | --- | --- | --- | --- |
 | Roact | 19 | 5 | `ordered-window-scroll`: no matching ordered window primitive. `update-repeated`: no public binding batch transaction. `animate-many`: no spring. `unwind`: failed-render rollback is not guaranteed by the public mount handle. `scene-3d`: Roact sets names from reconciliation keys; named dictionary children do not preserve the required mounting order. |
 | Seam | 22 | 2 | `ordered-window-scroll`: no matching ordered window primitive. `status-panel`: the native computed-property type guard rejects the workload's synthetic `Frame.Text`, whose initial type is nil. |
-| Iris | 0 | 24 | Every workload: Iris emits its own immediate-mode widget hierarchy rather than arbitrary retained Instance trees. Its widgets cannot match these observable trees and retained identity contracts. No widget timings are substituted for these runtime workloads. |
 | signals | 12 | 12 | All eight `keyed-*` workloads and `status-panel`: no native keyed Instance collection or row lifetime primitive. `branch-swap`: no conditional Instance ownership primitive. `animate-many`: no spring. `ordered-window-scroll`: no matching ordered window primitive. |
 | React + Reflex | 21 | 3 | `ordered-window-scroll`, `animate-many`, `unwind`: the same rendering limitations as the existing React lane. |
 | Fusion + Charm | 19 | 5 | `ordered-window-scroll` and the same four shrinking keyed workloads as Fusion. Charm batching supports `update-repeated`. |

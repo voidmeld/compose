@@ -118,7 +118,6 @@ Test.it("optional comparison lanes classify every runtime workload and pin bench
 	local names: { [string]: string } = {
 		roact = "roact",
 		seam = "seam",
-		iris = "iris",
 		signals = "signals",
 		["react-reflex"] = "reflex",
 		["fusion-charm"] = "charm",

@@ -168,18 +168,6 @@ return table.freeze {
 			},
 		},
 		table.freeze {
-			name = "iris",
-			version = "2.5.1-unreleased",
-			repository = "https://github.com/Michael-48/Iris.git",
-			commit = "bcb23d3c0f0ce79a40b0933ba4e0054764d6e7e3",
-			tree = "35a0c5f8406d14a874d97b55c664f093452245bf",
-			rights = "MIT",
-			notices = { "LICENSE.txt" },
-			surfaces = {
-				{ root = "lib", role = "benchmark" },
-			},
-		},
-		table.freeze {
 			name = "signals",
 			version = "0.9.0-unreleased",
 			repository = "https://github.com/Roblox/signals.git",

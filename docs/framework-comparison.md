@@ -21,7 +21,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | cold-mount-100 | 1 | blend | 1276.014 | 1.65x | 709.000 | 1.25x | 16.000 | 803 | 101 | 0 | 0 |
 | cold-mount-100 | 1 | roact | 802.810 | 1.04x | 670.000 | 1.18x | 17.000 | 201 | 101 | 0 | 0 |
 | cold-mount-100 | 1 | seam | 641.093 | 0.83x | 593.000 | 1.04x | 25.000 | 100 | 101 | 1 | 0 |
-| cold-mount-100 | 1 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | cold-mount-100 | 1 | signals | 402.537 | 0.52x | 585.000 | 1.03x | 19.000 | 100 | 101 | 0 | 0 |
 | cold-mount-100 | 1 | react-reflex | 34128.796 | 44.03x | 877.000 | 1.54x | 280.000 | 200 | 101 | 0 | 1 |
 | cold-mount-100 | 1 | fusion-charm | 831.639 | 1.07x | 572.000 | 1.01x | 9.000 | 803 | 101 | 0 | 0 |
@@ -34,7 +33,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | cold-mount-1000 | 1 | blend | 13897.434 | 2.22x | 6953.000 | 1.23x | 129.000 | 8003 | 1001 | 0 | 0 |
 | cold-mount-1000 | 1 | roact | 9428.358 | 1.51x | 6573.000 | 1.17x | 128.000 | 2001 | 1001 | 0 | 0 |
 | cold-mount-1000 | 1 | seam | 8013.820 | 1.28x | 5682.000 | 1.01x | 128.000 | 1000 | 1001 | 1 | 0 |
-| cold-mount-1000 | 1 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | cold-mount-1000 | 1 | signals | 6186.140 | 0.99x | 5661.000 | 1.00x | 144.000 | 1000 | 1001 | 0 | 0 |
 | cold-mount-1000 | 1 | react-reflex | 45924.450 | 7.34x | 6832.000 | 1.21x | 855.000 | 2000 | 1001 | 0 | 1 |
 | cold-mount-1000 | 1 | fusion-charm | 9648.085 | 1.54x | 5663.000 | 1.01x | 128.000 | 8003 | 1001 | 0 | 0 |
@@ -47,7 +45,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | cold-mount-10000 | 1 | blend | 181827.235 | 1.77x | 70441.000 | 1.23x | 2050.000 | 80003 | 10001 | 0 | 0 |
 | cold-mount-10000 | 1 | roact | 119345.366 | 1.16x | 66767.000 | 1.16x | 2049.000 | 20001 | 10001 | 0 | 0 |
 | cold-mount-10000 | 1 | seam | 88424.312 | 0.86x | 58022.000 | 1.01x | 2050.000 | 10000 | 10001 | 1 | 0 |
-| cold-mount-10000 | 1 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | cold-mount-10000 | 1 | signals | 83346.055 | 0.81x | 57582.000 | 1.00x | 2305.000 | 10000 | 10001 | 0 | 0 |
 | cold-mount-10000 | 1 | react-reflex | 172408.091 | 1.68x | 67750.000 | 1.18x | 7923.000 | 20000 | 10001 | 0 | 1 |
 | cold-mount-10000 | 1 | fusion-charm | 124008.098 | 1.21x | 57755.000 | 1.01x | 2050.000 | 80003 | 10001 | 0 | 0 |
@@ -60,7 +57,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | mount-dispose | 5 | blend | 17971.187 | 2.28x | 129.000 | 0.99x | 129.000 | 8015 | 1005 | 0 | 0 |
 | mount-dispose | 5 | roact | 10021.382 | 1.27x | 129.000 | 0.99x | 128.000 | 2005 | 1005 | 0 | 0 |
 | mount-dispose | 5 | seam | 8693.182 | 1.10x | 129.000 | 0.99x | 129.000 | 1000 | 1005 | 5 | 0 |
-| mount-dispose | 5 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | mount-dispose | 5 | signals | 6772.244 | 0.86x | 134.000 | 1.03x | 133.000 | 1000 | 1005 | 0 | 0 |
 | mount-dispose | 5 | react-reflex | 48176.169 | 6.11x | 441.000 | 3.39x | 440.000 | 2000 | 1005 | 0 | 1 |
 | mount-dispose | 5 | fusion-charm | 11528.487 | 1.46x | 129.000 | 0.99x | 129.000 | 8015 | 1005 | 0 | 0 |
@@ -73,7 +69,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | update-leaf | 50 | blend | 90.615 | 2.24x | 3485.000 | 1.24x | 64.000 | 50 | 0 | 0 | 0 |
 | update-leaf | 50 | roact | 51.591 | 1.27x | 3294.000 | 1.17x | 64.000 | 50 | 0 | 0 | 0 |
 | update-leaf | 50 | seam | 148.613 | 3.67x | 2849.000 | 1.01x | 64.000 | 50 | 0 | 0 | 0 |
-| update-leaf | 50 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | update-leaf | 50 | signals | 95.979 | 2.37x | 2834.000 | 1.00x | 73.000 | 50 | 0 | 0 | 0 |
 | update-leaf | 50 | react-reflex | 133.525 | 3.29x | 3531.000 | 1.25x | 527.000 | 50 | 0 | 50 | 0 |
 | update-leaf | 50 | fusion-charm | 330.363 | 8.15x | 2838.000 | 1.01x | 65.000 | 50 | 0 | 0 | 0 |
@@ -86,7 +81,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | update-fanout | 20 | blend | 5065.179 | 2.67x | 2296.000 | 1.23x | 64.000 | 6000 | 0 | 0 | 0 |
 | update-fanout | 20 | roact | 3055.122 | 1.61x | 2126.000 | 1.14x | 57.000 | 6000 | 0 | 0 | 0 |
 | update-fanout | 20 | seam | 4398.233 | 2.32x | 2205.000 | 1.18x | 80.000 | 6000 | 0 | 0 | 0 |
-| update-fanout | 20 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | update-fanout | 20 | signals | 5729.081 | 3.02x | 2003.000 | 1.07x | 88.000 | 6000 | 0 | 0 | 0 |
 | update-fanout | 20 | react-reflex | 2275.608 | 1.20x | 2396.000 | 1.28x | 461.000 | 6000 | 0 | 20 | 0 |
 | update-fanout | 20 | fusion-charm | 11451.638 | 6.04x | 1984.000 | 1.06x | 97.000 | 6000 | 0 | 0 | 0 |
@@ -99,7 +93,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | update-batched | 20 | blend | 8241.344 | 2.67x | 2568.000 | 1.33x | 65.000 | 6000 | 0 | 0 | 0 |
 | update-batched | 20 | roact | 5199.433 | 1.69x | 2582.000 | 1.34x | 64.000 | 6000 | 0 | 0 | 0 |
 | update-batched | 20 | seam | 9046.465 | 2.94x | 2992.000 | 1.55x | 104.000 | 6000 | 0 | 0 | 0 |
-| update-batched | 20 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | update-batched | 20 | signals | 8157.085 | 2.65x | 2351.000 | 1.22x | 104.000 | 6000 | 0 | 0 | 0 |
 | update-batched | 20 | react-reflex | 23972.170 | 7.78x | 3778.000 | 1.95x | 726.000 | 6000 | 0 | 6000 | 0 |
 | update-batched | 20 | fusion-charm | 29191.071 | 9.47x | 2838.000 | 1.47x | 128.000 | 6000 | 0 | 0 | 0 |
@@ -112,7 +105,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | update-repeated | 10 | blend | 5040.410 | 13.05x | 28.000 | 1.04x | 8.000 | 10 | 0 | 0 | 10 |
 | update-repeated | 10 | roact | unsupported: Roact has no public batch transaction that coalesces 500 binding writes into one host property write. | — | — | — | — | — | — | — | — |
 | update-repeated | 10 | seam | 2157.352 | 5.58x | 35.000 | 1.30x | 6.000 | 10 | 0 | 0 | 0 |
-| update-repeated | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | update-repeated | 10 | signals | 1374.145 | 3.56x | 17.000 | 0.63x | 1.000 | 10 | 0 | 0 | 0 |
 | update-repeated | 10 | react-reflex | 461.868 | 1.20x | 230.000 | 8.52x | 204.000 | 10 | 0 | 10 | 0 |
 | update-repeated | 10 | fusion-charm | 2907.164 | 7.52x | 12.000 | 0.44x | 1.000 | 10 | 0 | 0 | 0 |
@@ -125,7 +117,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | branch-swap | 20 | blend | 9884.998 | 2.23x | 158.000 | 1.09x | 121.000 | 4030 | 510 | 0 | 0 |
 | branch-swap | 20 | roact | 5340.425 | 1.21x | 155.000 | 1.07x | 128.000 | 1010 | 510 | 0 | 0 |
 | branch-swap | 20 | seam | 4822.353 | 1.09x | 3011.000 | 20.77x | 149.000 | 500 | 510 | 10 | 0 |
-| branch-swap | 20 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | branch-swap | 20 | signals | unsupported: Signals has no native conditional Instance ownership primitive; adding a scene reconciler would change this state-only lane. | — | — | — | — | — | — | — | — |
 | branch-swap | 20 | react-reflex | 8553.258 | 1.93x | 704.000 | 4.86x | 350.000 | 1010 | 510 | 20 | 0 |
 | branch-swap | 20 | fusion-charm | 5762.143 | 1.30x | 146.000 | 1.01x | 129.000 | 4030 | 510 | 0 | 0 |
@@ -138,7 +129,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | ordered-window-scroll | 50 | blend | unsupported: No native ordered window collection with the workload's retained range and geometry contract. | — | — | — | — | — | — | — | — |
 | ordered-window-scroll | 50 | roact | unsupported: No native ordered window collection with the workload's retained range and geometry contract. | — | — | — | — | — | — | — | — |
 | ordered-window-scroll | 50 | seam | unsupported: No native ordered window collection with the workload's retained range and geometry contract. | — | — | — | — | — | — | — | — |
-| ordered-window-scroll | 50 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | ordered-window-scroll | 50 | signals | unsupported: No native ordered window collection with the workload's retained range and geometry contract. | — | — | — | — | — | — | — | — |
 | ordered-window-scroll | 50 | react-reflex | unsupported: No native ordered window collection with the workload's retained range and geometry contract. | — | — | — | — | — | — | — | — |
 | ordered-window-scroll | 50 | fusion-charm | unsupported: No native ordered window collection with the workload's retained range and geometry contract. | — | — | — | — | — | — | — | — |
@@ -151,7 +141,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-append | 10 | blend | 4501.265 | 2.42x | 3099.000 | 1.37x | 72.000 | 3500 | 50 | 0 | 0 |
 | keyed-append | 10 | roact | 6641.806 | 3.56x | 2052.000 | 0.91x | 64.000 | 150 | 50 | 0 | 0 |
 | keyed-append | 10 | seam | 12382.498 | 6.64x | 3506.000 | 1.55x | 142.000 | 350 | 50 | 100 | 50 |
-| keyed-append | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-append | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-append | 10 | react-reflex | 14253.277 | 7.65x | 2851.000 | 1.26x | 347.000 | 150 | 50 | 10 | 0 |
 | keyed-append | 10 | fusion-charm | unsupported: The pinned native ForPairs mapper can reassign a removed key's scope to a retained key. The shrink step fails retained-node identity. | — | — | — | — | — | — | — | — |
@@ -164,7 +153,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-prepend | 10 | blend | 4341.254 | 0.79x | 3107.000 | 1.33x | 73.000 | 3500 | 50 | 0 | 0 |
 | keyed-prepend | 10 | roact | 8653.253 | 1.57x | 2059.000 | 0.88x | 64.000 | 3150 | 50 | 0 | 0 |
 | keyed-prepend | 10 | seam | 13910.583 | 2.53x | 3512.000 | 1.50x | 141.000 | 3350 | 50 | 100 | 50 |
-| keyed-prepend | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-prepend | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-prepend | 10 | react-reflex | 20356.227 | 3.70x | 2799.000 | 1.20x | 339.000 | 3150 | 50 | 10 | 0 |
 | keyed-prepend | 10 | fusion-charm | unsupported: The pinned native ForPairs mapper can reassign a removed key's scope to a retained key. The shrink step fails retained-node identity. | — | — | — | — | — | — | — | — |
@@ -177,7 +165,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-insert | 10 | blend | 4319.118 | 1.18x | 3107.000 | 1.35x | 73.000 | 3500 | 50 | 0 | 0 |
 | keyed-insert | 10 | roact | 7827.518 | 2.13x | 2060.000 | 0.90x | 64.000 | 1650 | 50 | 0 | 0 |
 | keyed-insert | 10 | seam | 13438.428 | 3.66x | 3505.000 | 1.53x | 141.000 | 1850 | 50 | 100 | 50 |
-| keyed-insert | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-insert | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-insert | 10 | react-reflex | 17629.467 | 4.81x | 2824.000 | 1.23x | 339.000 | 1650 | 50 | 10 | 0 |
 | keyed-insert | 10 | fusion-charm | unsupported: The pinned native ForPairs mapper can reassign a removed key's scope to a retained key. The shrink step fails retained-node identity. | — | — | — | — | — | — | — | — |
@@ -190,7 +177,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-remove | 10 | blend | 4328.923 | 1.24x | 3098.000 | 1.35x | 65.000 | 3400 | 50 | 0 | 0 |
 | keyed-remove | 10 | roact | 7662.511 | 2.20x | 2051.000 | 0.89x | 64.000 | 1560 | 50 | 0 | 0 |
 | keyed-remove | 10 | seam | 12729.665 | 3.66x | 3512.000 | 1.53x | 141.000 | 1810 | 50 | 100 | 50 |
-| keyed-remove | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-remove | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-remove | 10 | react-reflex | 17610.451 | 5.06x | 2742.000 | 1.19x | 339.000 | 1560 | 50 | 10 | 0 |
 | keyed-remove | 10 | fusion-charm | unsupported: The pinned native ForPairs mapper can reassign a removed key's scope to a retained key. The shrink step fails retained-node identity. | — | — | — | — | — | — | — | — |
@@ -203,7 +189,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-replace | 10 | blend | 129760.741 | 2.17x | 5925.000 | 2.40x | 265.000 | 30000 | 3000 | 0 | 0 |
 | keyed-replace | 10 | roact | 38529.974 | 0.65x | 2266.000 | 0.92x | 264.000 | 9000 | 3000 | 0 | 0 |
 | keyed-replace | 10 | seam | 127393.532 | 2.13x | 31576.000 | 12.80x | 725.000 | 22500 | 3000 | 6000 | 3000 |
-| keyed-replace | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-replace | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-replace | 10 | react-reflex | 94291.685 | 1.58x | 4753.000 | 1.93x | 821.000 | 9000 | 3000 | 10 | 0 |
 | keyed-replace | 10 | fusion-charm | 112506.823 | 1.88x | 4036.000 | 1.64x | 1025.000 | 27300 | 3000 | 0 | 0 |
@@ -216,7 +201,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-reverse | 10 | blend | 2312.273 | 0.58x | 3065.000 | 1.31x | 72.000 | 3000 | 0 | 0 | 0 |
 | keyed-reverse | 10 | roact | 7797.589 | 1.94x | 2051.000 | 0.88x | 64.000 | 3000 | 0 | 0 | 0 |
 | keyed-reverse | 10 | seam | 11829.477 | 2.95x | 3044.000 | 1.30x | 140.000 | 3000 | 0 | 0 | 0 |
-| keyed-reverse | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-reverse | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-reverse | 10 | react-reflex | 58925.498 | 14.67x | 2735.000 | 1.17x | 337.000 | 3000 | 0 | 10 | 0 |
 | keyed-reverse | 10 | fusion-charm | 23070.172 | 5.74x | 3172.000 | 1.36x | 192.000 | 3000 | 0 | 0 | 0 |
@@ -229,7 +213,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-rotate | 10 | blend | 2135.171 | 0.57x | 3057.000 | 1.31x | 73.000 | 3000 | 0 | 0 | 0 |
 | keyed-rotate | 10 | roact | 7212.553 | 1.91x | 2051.000 | 0.88x | 57.000 | 3000 | 0 | 0 | 0 |
 | keyed-rotate | 10 | seam | 11420.117 | 3.02x | 3045.000 | 1.31x | 140.000 | 3000 | 0 | 0 | 0 |
-| keyed-rotate | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-rotate | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-rotate | 10 | react-reflex | 37496.096 | 9.93x | 2735.000 | 1.17x | 337.000 | 3000 | 0 | 10 | 0 |
 | keyed-rotate | 10 | fusion-charm | 20909.013 | 5.54x | 3172.000 | 1.36x | 193.000 | 3000 | 0 | 0 | 0 |
@@ -242,7 +225,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | keyed-shuffle | 10 | blend | 2363.467 | 0.59x | 3057.000 | 1.31x | 65.000 | 3000 | 0 | 0 | 0 |
 | keyed-shuffle | 10 | roact | 7965.056 | 1.98x | 2051.000 | 0.88x | 65.000 | 2990 | 0 | 0 | 0 |
 | keyed-shuffle | 10 | seam | 12182.108 | 3.03x | 3053.000 | 1.31x | 141.000 | 2990 | 0 | 0 | 0 |
-| keyed-shuffle | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | keyed-shuffle | 10 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | keyed-shuffle | 10 | react-reflex | 36207.140 | 9.00x | 2736.000 | 1.17x | 338.000 | 2990 | 0 | 10 | 0 |
 | keyed-shuffle | 10 | fusion-charm | 23319.023 | 5.79x | 3173.000 | 1.36x | 193.000 | 2990 | 0 | 0 | 0 |
@@ -255,7 +237,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | events | 5 | blend | 26103.444 | 1.88x | 129.000 | 0.93x | 128.000 | 9015 | 1005 | 1000 | 0 |
 | events | 5 | roact | 15427.662 | 1.11x | 121.000 | 0.88x | 129.000 | 2005 | 1005 | 1000 | 0 |
 | events | 5 | seam | 13845.983 | 1.00x | 129.000 | 0.93x | 136.000 | 1000 | 1005 | 1005 | 0 |
-| events | 5 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | events | 5 | signals | 11208.913 | 0.81x | 146.000 | 1.06x | 152.000 | 1000 | 1005 | 1000 | 0 |
 | events | 5 | react-reflex | 52167.030 | 3.75x | 478.000 | 3.46x | 469.000 | 2000 | 1005 | 1000 | 1 |
 | events | 5 | fusion-charm | 16393.463 | 1.18x | 122.000 | 0.88x | 129.000 | 9015 | 1005 | 1000 | 0 |
@@ -268,7 +249,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | animate-many | 1 | blend | 12790.245 | 1.42x | 2735.000 | 1.11x | 96.000 | 6200 | 0 | 200 | 0 |
 | animate-many | 1 | roact | unsupported: Roact has no native spring primitive. | — | — | — | — | — | — | — | — |
 | animate-many | 1 | seam | 27641.120 | 3.06x | 3602.000 | 1.47x | 68.000 | 3600 | 0 | 0 | 0 |
-| animate-many | 1 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | animate-many | 1 | signals | unsupported: Signals has no native spring primitive. | — | — | — | — | — | — | — | — |
 | animate-many | 1 | react-reflex | unsupported: React and ReactRoblox have no native spring primitive. Adding another animation library would change the comparison. | — | — | — | — | — | — | — | — |
 | animate-many | 1 | fusion-charm | 140640.379 | 15.58x | 2756.000 | 1.12x | 157.000 | 3600 | 0 | 0 | 0 |
@@ -281,7 +261,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | status-panel | 20 | blend | 924.823 | 1.79x | 250.000 | 1.43x | 10.000 | 438 | 21 | 0 | 0 |
 | status-panel | 20 | roact | 768.311 | 1.49x | 186.000 | 1.06x | 10.000 | 103 | 21 | 0 | 0 |
 | status-panel | 20 | seam | unsupported: Seam's native computed-property type guard rejects the workload's synthetic Frame.Text property, whose default type is nil. | — | — | — | — | — | — | — | — |
-| status-panel | 20 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | status-panel | 20 | signals | unsupported: Signals supplies state and effects, with no native keyed Instance collection or row lifetime primitive. | — | — | — | — | — | — | — | — |
 | status-panel | 20 | react-reflex | 2904.954 | 5.62x | 433.000 | 2.47x | 223.000 | 103 | 21 | 60 | 0 |
 | status-panel | 20 | fusion-charm | 3055.855 | 5.91x | 255.000 | 1.46x | 7.000 | 229 | 21 | 0 | 0 |
@@ -294,7 +273,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | mount-cycles | 1 | blend | 47280.787 | 1.87x | 65.000 | 0.50x | 72.000 | 16290 | 1830 | 1800 | 0 |
 | mount-cycles | 1 | roact | 27709.759 | 1.10x | 129.000 | 0.99x | 137.000 | 3630 | 1830 | 1800 | 0 |
 | mount-cycles | 1 | seam | 24167.943 | 0.96x | 129.000 | 0.99x | 128.000 | 1800 | 1830 | 1830 | 0 |
-| mount-cycles | 1 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | mount-cycles | 1 | signals | 18339.510 | 0.73x | 253.000 | 1.95x | 260.000 | 1800 | 1830 | 1800 | 0 |
 | mount-cycles | 1 | react-reflex | 70265.943 | 2.78x | 518.000 | 3.98x | 517.000 | 3600 | 1830 | 1800 | 1 |
 | mount-cycles | 1 | fusion-charm | 29605.837 | 1.17x | 138.000 | 1.06x | 137.000 | 16290 | 1830 | 1800 | 0 |
@@ -307,7 +285,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | scene-3d | 20 | blend | 9495.322 | 1.24x | 1598.000 | 1.26x | 32.000 | 6000 | 0 | 0 | 0 |
 | scene-3d | 20 | roact | unsupported: Roact assigns Instance.Name from reconciliation keys. Named children use dictionary keys, whose mounting order cannot satisfy this workload's ordered named-tree contract. | — | — | — | — | — | — | — | — |
 | scene-3d | 20 | seam | 20685.007 | 2.71x | 2265.000 | 1.79x | 54.000 | 6000 | 0 | 0 | 0 |
-| scene-3d | 20 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | scene-3d | 20 | signals | 14881.013 | 1.95x | 1809.000 | 1.43x | 64.000 | 6000 | 0 | 0 | 0 |
 | scene-3d | 20 | react-reflex | 6765.988 | 0.89x | 1766.000 | 1.39x | 517.000 | 6000 | 0 | 40 | 0 |
 | scene-3d | 20 | fusion-charm | 82615.955 | 10.81x | 1675.000 | 1.32x | 104.000 | 6000 | 0 | 0 | 0 |
@@ -320,7 +297,6 @@ Headless cost-model samples. Time is per complete workload sample, including its
 | unwind | 10 | blend | unsupported: An error during native observable subscription leaves the partially created cost-model nodes without a returned cleanup resource. It does not satisfy failed-build rollback. | — | — | — | — | — | — | — | — |
 | unwind | 10 | roact | unsupported: Roact's public mount API returns its cleanup handle only after a successful mount; failed render rollback is not guaranteed. | — | — | — | — | — | — | — | — |
 | unwind | 10 | seam | 3869.753 | 0.85x | 129.000 | 1.00x | 129.000 | 590 | 590 | 0 | 0 |
-| unwind | 10 | iris | unsupported: Iris emits its own immediate-mode widget hierarchy, not arbitrary retained Instance trees. Its widgets cannot match this workload's observable tree or retained identity contract. | — | — | — | — | — | — | — | — |
 | unwind | 10 | signals | 3799.498 | 0.83x | 130.000 | 1.01x | 129.000 | 590 | 590 | 0 | 0 |
 | unwind | 10 | react-reflex | unsupported: A failed native render, including an error boundary, leaves abandoned cost-model host nodes after root unmount. It does not satisfy the partial-build rollback contract. | — | — | — | — | — | — | — | — |
 | unwind | 10 | fusion-charm | 5800.728 | 1.27x | 129.000 | 1.00x | 129.000 | 5310 | 590 | 0 | 0 |
@@ -341,7 +317,6 @@ Compose revision: `ed40b1034d0cb14cdf442e1f6129ea6cb12bcc52`. Full source state,
 | blend | 12.51.1 | `75c7ed8f4f6a1b04c6885b7980451153b17222b4` | `2009d55e28e2b20153bba3d986db4d8e7eb5df18` | MIT |
 | roact | v1.4.4 | `956891b70fdc5410e44e9664719cd0a9f7e6fabd` | `e2b1b9bdf99349d27b8f43b92b3b684a921edc8a` | MIT |
 | seam | v1.1.0 | `bc45faa36e2f059ca6fe25f7f7896c16a163abf6` | `44606c00e1f0301f9574b437c322d12042aa9b33` | MIT |
-| iris | 2.5.1-unreleased | `bcb23d3c0f0ce79a40b0933ba4e0054764d6e7e3` | `35a0c5f8406d14a874d97b55c664f093452245bf` | MIT |
 | signals | 0.9.0-unreleased | `25b9a8335e1d5da7b917576356b9ae4c890bcb17` | `2b883aca6fac60b2af44c5deffd739e510e9619a` | MIT |
 | reflex | v4.3.1 | `fa0cc3c1ebaafdc70ced5bfc0fa8b2300b8694b2` | `7bec758e4cb240c4e13a8b788de876e7b58f5f01` | MIT |
 | charm | charm-v0.11.1 | `af4eb5262d640cf89c56217ab7feb403e939cbd2` | `c1383c7832d8ba663eb68b21b9b7341c874a7007` | MIT |
