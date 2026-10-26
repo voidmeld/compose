@@ -1,15 +1,15 @@
 # Framework comparison
 
-Compose against other Roblox UI libraries on the same 24 runtime workloads.
+This page records measurements of Compose and other Roblox UI libraries on the same 24 runtime workloads.
 
 - Compose commit: `ed40b10` (main, 2026-10-26)
 - Run: [Framework comparison #40327417921](https://github.com/voidmeld/compose/actions/runs/40327417921) on the GitHub-hosted Ubuntu runner
 - Verdict: release. Only passed measurements appear in the table.
 - Method: [Manual framework comparison](benchmarks.md#manual-framework-comparison). The workflow runs the parity checks before timing, and both are headless cost-model measurements. They do not measure Roblox engine rendering.
 
-Ratios divide by Compose, so a value below 1.00x is smaller than Compose. Rerun the workflow and replace this page to update it.
+Each ratio divides a measurement by the Compose measurement. A value below 1.00x is smaller. To update this record, run the workflow again. Then replace this page with its results.
 
-Headless cost-model samples. Time is per complete workload sample, including its iteration count. Ratios divide by Compose; lower is smaller. Heap is the mounted retained Luau estimate. Writes, Created, Connections and Deferred count the engine property writes, instances, signal connections and deferred tasks of the timed iterations. A zero heap baseline has no ratio. These results do not measure Roblox engine performance.
+These samples use a headless cost model. Time covers one complete workload sample, including all its iterations. Lower ratios mean smaller measurements. Heap estimates retained Luau memory while mounted. Writes, Created, Connections and Deferred count property writes, instances, signal connections and deferred tasks during timed iterations. A zero heap baseline has no ratio. These results do not measure Roblox engine performance.
 
 | Workload | Iterations | Framework | Median time (us) | / Compose | Median heap (KiB) | / Compose | Teardown (KiB) | Writes | Created | Connections | Deferred |
 | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

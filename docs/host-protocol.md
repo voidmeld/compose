@@ -1,21 +1,20 @@
 # Writing a host adapter
 
-This guide defines the operations and guarantees that a host adapter must provide. It also describes the optional capabilities.
-For the component API, see [`api.md`](api.md).
+A host adapter implements node operations for a runtime.
+Pass it to `Compose.createRuntime(adapter)`.
+Core uses these operations for all node access.
+The [API reference](api.md) gives the component calls.
 
-`src/core` never accesses a node directly. It asks a host to create nodes, set properties, parent nodes and destroy nodes.
-
-The adapter is the object that you pass to `Compose.createRuntime(adapter)`.
-Component examples call `runtime.constructors` the `Host` namespace. Those constructors delegate node operations to the adapter.
-`TestScene.create()` supplies a fake scene and exposes its adapter as `test.adapter`.
+`runtime.constructors` supplies the `Host` constructors used by components.
+`TestScene.create()` supplies a test scene with an `adapter`.
 
 ## `Node` is `unknown`, and that is the enforcement
 
-Core cannot index an `unknown`. Strict type checking therefore rejects direct access to the node representation of a host.
-The test adapter also enforces this at runtime. Its nodes are `table.freeze({})`, with no fields or methods.
-The adapter keeps node data in private side tables.
-
-Core must work without engine-shaped nodes. The gate must detect any dependency on the node representation of an engine.
+Core treats each host node as `unknown`.
+Strict type checking rejects direct access to the node representation.
+The test host uses frozen empty tables for nodes.
+It stores node data in private tables.
+The gate checks that core has no dependency on an engine's node representation.
 
 ## Required and optional capabilities
 
@@ -31,10 +30,9 @@ export type Host = {
     typeNameOf: ((value) -> string)?,
 }
 ```
-
-Omit the capabilities that the host does not support.
-`Compose.createRuntime` validates each supplied capability once, when it creates the runtime.
-A missing required method fails at that boundary.
+Omit capabilities that the host cannot provide.
+`Compose.createRuntime` checks supplied capabilities once, during runtime creation.
+It rejects a missing required method at that boundary.
 
 ### `render`, required
 
@@ -48,16 +46,16 @@ moveChild(parent, child, position) -> ()      -- optional; see "Hosts that canno
 removeChild(parent, child) -> ()
 destroyNode(node) -> ()
 ```
-
 ### `events`, optional
 
 ```luau
 connectEvent(node, event, handler) -> Unsubscribe
 classifyKey(node, key)? -> "property" | "event"
 ```
-
-- Implement `classifyKey` when the distinction between a property and an event is discoverable at runtime. Then a user can write `Activated = handler` and the key subscribes.
-- Omit `classifyKey` when the distinction is not discoverable. Then keys are properties, unless the user wraps them in `Compose.event(name)`, which is unambiguous everywhere.
+Implement `classifyKey` if the host can distinguish events from properties.
+Then an event key such as `Activated = handler` creates a subscription.
+Otherwise, keys select properties.
+Use `Compose.event(name)` to select an event explicitly on either host.
 
 ### `observation`, optional
 
@@ -67,9 +65,13 @@ observeProperty(node, key, listener) -> Unsubscribe
 readStyledProperty(node, key)? -> unknown
 observeStyledProperty(node, key, listener)? -> Unsubscribe
 ```
-
-Implement `observation` to notice when something other than Compose changed a property.
-Supply both styled methods, or neither. A styled reader returns the effective value, including explicit overrides. Its subscription must notify after either raw or style changes that can affect that value. `runtime.observe(..., { styled = true })` refuses a missing styled capability rather than substituting raw reads. Subscriptions borrow their node and must release their native resources when unsubscribed.
+Implement observation to detect property changes from outside Compose.
+Supply both styled methods, or neither method.
+A styled read returns the effective value, including explicit overrides.
+Its subscription reports raw and style changes that can affect that value.
+`runtime.observe(..., { styled = true })` rejects a host without styled observation.
+It does not substitute a raw read.
+Subscriptions borrow their node and release native resources on unsubscribe.
 
 ### `frames`, optional
 
@@ -77,77 +79,77 @@ Supply both styled methods, or neither. A styled reader returns the effective va
 onFrame(listener) -> Unsubscribe
 now() -> number
 ```
-
-Animation requires `frames`. An animation call fails if the host does not provide this capability.
+Animation requires this capability.
+An animation call fails if the host has no frame capability.
 
 ### `naming`, optional
 
-`naming = { setName(node, label) }` applies the string label in constructor calls such as `Host.Frame "Summary" { ... }`.
-Omit it when nodes have no names.
+`naming = { setName(node, label) }` applies constructor labels such as `Host.Frame "Summary" { ... }`.
+Omit it if nodes have no names.
 
 ### `typeNameOf`, optional
 
-`typeNameOf` supplies the type name of a value for codec lookup. The default is `typeof`.
-Supply this function when the host represents its datatypes as plain tables.
+`typeNameOf(value)` returns the datatype name for codec selection.
+The default is `typeof`.
+Supply this method if the host represents datatypes as plain tables.
 
 ### Hosts with an attribute store
 
-`setAttribute` is optional. **If the host has no attribute store, omit it.**
-Then the `Attributes` prop raises `host/no-attributes` without writing values.
-
-`setAttribute` is also the one verb that does **not** raise on a rejected value.
+Omit `setAttribute` if the host has no attribute store.
+Then the `Attributes` property raises `host/no-attributes` before it writes values.
 
 ```luau
 setAttribute(node, "Tier", 3)        -> true
 setAttribute(node, "Tier", { ... })  -> false, "this store holds scalars, not a table"
 setAttribute(node, "Tier", nil)      -> true      -- nil clears the attribute
 ```
-
-The attribute store decides which values it accepts.
-For a rejected value, return `false` and a reason. Compose reports `props/attribute-value` with the node, the attribute and the reason.
-This exception covers value rejection only. Raise other host failures, so that Compose can release the resources of the failed operation.
-
-If the value is `nil`, the host must clear the attribute.
-No separate clear verb exists. A binding on a borrowed node uses that clear to undo itself on disposal.
+For a rejected value, return `false` and a reason.
+Compose reports `props/attribute-value` with the node, attribute and reason.
+The host determines which attribute values it accepts.
+Raise all other host failures so Compose can release the failed operation's resources.
+A nil value clears the attribute.
+A binding uses this operation to clear attributes from a borrowed node on disposal.
 
 ## Positions
 
-Every position is a **1-based index into the child list of the parent**.
-Every position describes the state that Compose wants after the call.
+Each position is a 1-based index in the parent's child list.
+It describes the required state after the call.
+A position beyond the list length appends the child.
 
 ```luau
 insertChild(parent, child, 2)     -- child ends up second
 insertChild(parent, child, nil)   -- child ends up last
 moveChild(parent, child, 1)       -- child ends up first, others shift right
 ```
-
-A position beyond the current length appends the child.
-Do not renumber, remove duplicates or reorder children independently. Compose computes exact positions. Tests compare host operations with those positions.
+Do not independently remove duplicates or change child order.
+Compose calculates positions. Tests compare host operations with those positions.
 
 ### Hosts that cannot order children
 
-`moveChild` is optional. **If you omit it, you declare that the host has no child-ordering API at all.**
-Then attaching a child appends it, nothing reorders, and order is expressed some other way.
-Order is usually a property that the host reads to lay out children. Roblox is such a host. See [`roblox.md`](roblox.md#sibling-order).
+Omit `moveChild` only if the host has no child-order operation.
+The host then appends children and supplies order through another mechanism.
+For Roblox, see [sibling order](roblox.md#sibling-order).
+Do not supply a `moveChild` method that does nothing.
 
 Without `moveChild`, keyed collections skip node arrangement.
-They do not compute a longest increasing subsequence and do not maintain a live position map.
-They still update row values and reactive indices.
-To measure the cost on your host, use the [benchmark procedure](benchmarks.md).
-
-Do not supply a `moveChild` function that does nothing. Compose would compute arrangements that the host cannot perform.
-A host without `moveChild` still receives `insertChild` positions and can ignore them.
-
-Rows stay keyed, stay reused across updates and still receive a reactive index.
-On a host with no ordering, that index is the only order, and it stays exact.
+They do not calculate a longest increasing subsequence or keep a live position map.
+They still reuse rows and update row values and reactive indices.
+The reactive index stays exact.
+The host still receives `insertChild` positions, but can ignore them.
+Use the [benchmark procedure](benchmarks.md) to measure the cost on your host.
 
 ## What a host must guarantee
 
-1. `createNode` returns a distinct node on every call. The node is a table or userdata. Numbers and strings cannot carry custody and cannot be held weakly. Functions are excluded, because a child list distinguishes a node from a directive by asking whether it is callable.
-2. Operations are synchronous. When `setProperty` returns, the property is set.
-3. `destroyNode` releases the node and its descendants. It is idempotent.
-4. An unsubscribe is idempotent. It never fires its listener afterwards, including for an event already in flight.
-5. **Raise failures.** Compose uses the error to trigger cleanup. For an unsupported attribute value only, `setAttribute` returns a refusal instead.
+1. Return a distinct table or userdata from each `createNode` call.
+2. Complete each operation before it returns.
+3. Make `destroyNode` release the node and its descendants.
+4. Make repeated destruction safe.
+5. Make repeated unsubscribe calls safe.
+6. Stop listener calls after unsubscribe, including events already in progress.
+7. Raise failures except for attribute-value rejection.
+
+Numbers and strings cannot carry custody or weak references.
+Functions cannot be nodes because child lists identify directives by their callable type.
 
 ## A minimal host
 
@@ -187,12 +189,11 @@ local host: Compose.Host = {
     },
 }
 ```
-
-This example illustrates the method shapes of the renderer.
-A complete adapter must also meet the guarantees above, including descendant destruction and idempotent cleanup.
+This example shows the renderer's method shapes.
+A complete host must also release descendants and support repeated cleanup safely.
 
 ## Testing a host
 
-Use `src/test-scene/` as the reference adapter.
-The tests in `tests/runtime/` and `tests/lifecycle/` check the host protocol. Adapt them to your host.
-Start with failure injection. `test.failNext(operation)` shows how to check error reporting and cleanup.
+Use [`src/test-scene`](../src/test-scene) as a reference.
+Adapt the [runtime tests](../tests/runtime) and [lifecycle tests](../tests/lifecycle) to your host.
+Start with failures. `test.failNext(operation)` shows how to test error reporting and cleanup.

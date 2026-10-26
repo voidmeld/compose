@@ -1,30 +1,24 @@
 # Scenes
 
-A scene can hold nodes that `runtime.mount` did not create. This page covers three cases:
-
-- You take over a node that the engine already made.
-- You build a 3D tree of parts and lights.
-- You test either case with no engine.
-
-Read [`api.md`](api.md) for the full signatures. Read [`ownership.md`](ownership.md) for the custody rules. This page uses those rules and does not repeat them.
+This guide covers existing nodes, 3D scene trees and tests without an engine.
+The [API reference](api.md) gives signatures.
+The [ownership guide](ownership.md) defines custody and disposal order.
 
 ## Decorating what already exists
 
-A mount target, a model or a layer that another system owns arrives already built. Compose did not make it.
-Three verbs work with such a node:
+A mount target, model or external layer can exist before Compose sees it.
+Use these operations for existing nodes:
 
 ```luau
 runtime.decorate(node, props)
 runtime.adopt(node)
 runtime.borrow(node)
 ```
-
-`decorate` applies properties, attributes and event subscriptions to an existing node.
-
-- `decorate` cannot add children. If the array part of the props table has any entry, `decorate` raises `props/decorate-has-children`.
-- The bindings and the subscriptions belong to the active owner. Compose releases them when that owner disposes.
-- Compose does not otherwise touch the node. A property or an event that the props table does not name keeps its current behavior.
-- On a borrowed node, Compose clears every property that `decorate` wrote back to the class default.
+`decorate` applies properties, attributes and event subscriptions.
+It rejects children with `props/decorate-has-children` if the props array has any entry.
+Bindings and subscriptions belong to the active owner.
+Properties and events absent from the props table keep their current behavior.
+On a borrowed node, disposal resets written properties to class defaults.
 
 ```luau
 local function Marker(part)
@@ -38,12 +32,11 @@ local function Marker(part)
     return Host.BillboardGui { ... }
 end
 ```
+Compose did not create `part`, so it borrows the node by default.
+Disposal releases the binding and `Touched` connection.
+It preserves `part` and leaves `Transparency` at its class default.
 
-This component did not build `part`, so `part` is borrowed by default. Compose never destroys a borrowed node.
-When the component that called `decorate` disposes, Compose releases the binding and the `Touched` connection.
-It leaves `part.Transparency` at its class default.
-
-`adopt` states the opposite decision. It states that this tree must destroy a node that Compose did not build.
+Use `adopt` when the Compose tree must destroy an existing node:
 
 ```luau
 local model = template:Clone()
@@ -53,20 +46,17 @@ local dispose = runtime.mount(function()
     return model
 end, playerGui)
 ```
-
-A node has exactly one owner, so `adopt` refuses a node that Compose already owns.
-`borrow` is already the default for every node that Compose has not seen. Call `borrow` in two cases only:
-
-- The explicit statement helps a reader.
-- A node passed through code that can adopt it, and its custody must return to borrowed.
-
-[Ownership](ownership.md#a-mount-target-keeps-the-custody-it-has) defines mount-target custody and disposal order.
+Each node has one owner. `adopt` rejects a node that Compose already owns.
+Use `borrow` to make external custody clear or to restore borrowed custody after code that can adopt the node.
+The [mount-target rules](ownership.md#a-mount-target-keeps-the-custody-it-has) define target lifetime and disposal order.
 
 ## Building a 3D scene
 
-`runtime.constructors` builds any Roblox class by name. It holds no fixed list.
-`Host.Part`, `Host.Model`, `Host.PointLight` and `Host.WeldConstraint` all use the same mechanism: a lazily cached constructor that calls `Instance.new` with that class name.
-A nested constructor call nests the instance. A plain string after the class name becomes the `Name` of the instance.
+`runtime.constructors` builds Roblox classes by name without a fixed class list.
+`Host.Part`, `Host.Model`, `Host.PointLight` and `Host.WeldConstraint` use the same constructor mechanism.
+The runtime caches each constructor and calls `Instance.new` with that class name.
+A nested constructor creates a child.
+A string after the class name supplies the Instance name.
 
 ```luau
 local Host = runtime.constructors
@@ -101,37 +91,37 @@ local function Assembly(position, lit, tint)
     }
 end
 ```
+`CFrame` follows a spring in this example.
+`Color` follows a cell or formula.
+A function value binds a property.
+Spring and tween results can also bind properties directly.
 
-`CFrame` follows a spring here, and `Color` follows a cell or a formula.
-Both bind the way every reactive property binds. A function value is a binding. `runtime.spring` and `runtime.tween` return sources that you can pass in directly.
-`Brightness` holds a plain Luau `number`, which the core `number` codec animates. It needs nothing from `ComposeRoblox`.
-`CFrame` and `Color3` use the codecs that `src/roblox/codecs.luau` registers.
+The core number codec animates `Brightness`.
+The Roblox codecs animate `CFrame` and `Color3`.
+For rotation limits, see [animatable types](roblox.md#what-is-animatable).
 
-For the `CFrame` rotation limitation and the constant-angular-speed alternative, see [animatable types](roblox.md#what-is-animatable).
-
-`WeldConstraint` and `Weld` get no special treatment. Generic construction builds them.
-
-- `Part0` and `Part1` need `Compose.static(...)`, not a bare `base` or `top`.
-- This tree built `base` and `top`. A property value that is an owned node raises `props/child-under-string-key`.
-- That diagnostic stops Compose from destroying one node twice: once as a child, and once where the node was also assigned.
-- `static` marks the value as a literal. Compose writes the value once and never reads it as a binding.
-- Build the weld after both parts exist, as the example above does. Compose does not sequence that for you.
+Welds use normal constructors.
+Wrap `Part0` and `Part1` with `Compose.static(...)` to write the owned node as a literal property value.
+A bare owned node under a string key raises `props/child-under-string-key`.
+This diagnostic prevents a node from receiving two destruction registrations.
+`static` writes once and prevents reactive interpretation.
+Build the weld after both parts exist.
+Compose does not choose that construction order.
 
 ## Testing a scene with no engine
 
-`RobloxEmulator.create(environment, Verify.environmentEngine(environment))`, from `src/test-scene/roblox.luau`, runs the real Roblox adapter over the simulated engine of Verify.
-The environment supplies Instances with per-class defaults, methods, signals, an `IsA` chain and virtual time. It needs no Roblox engine.
-It is the supported way to test an instance tree, or a 3D scene that you build through `runtime.constructors`, with no engine.
+`RobloxEmulator.create(environment, Verify.environmentEngine(environment))` runs the real Roblox adapter against Verify's simulation.
+It provides class defaults, methods, signals, `IsA` relationships and virtual time.
+It can test Instance trees and 3D constructor scenes without Roblox.
+Follow the [emulator setup](api.md#robloxemulatorcreate) for the environment and runtime.
 
-To create the environment and the runtime, follow [the emulator setup](api.md#robloxemulatorcreate).
+The emulator adds operation logging and failure injection to the real adapter.
+The [emulator API](api.md#robloxemulatorcreate) gives its full surface.
+The [simulation limits](roblox.md#what-the-simulation-cannot-check) identify claims that need an engine.
 
-`emulator.adapter` exercises the real Roblox adapter with operation logging and injected failures.
-For its complete surface, use [the emulator API](api.md#robloxemulatorcreate).
-For claims that need the engine, see the [simulation limits](roblox.md#what-the-simulation-cannot-check).
-
-`environment.step(delta)` advances virtual time and fires the `Heartbeat` signal.
-`runtime.spring`, `runtime.tween` and `runtime.timeline` all subscribe to that signal.
-To drive an animation frame by frame with no engine and no wall clock, step the emulator by hand:
+`environment.step(delta)` advances virtual time and fires `Heartbeat`.
+Springs, tweens and timelines use that signal through the host frame capability.
+Step it manually to test animation without a wall clock:
 
 ```luau
 local dispose, assembly = runtime.mount(function()
@@ -144,5 +134,4 @@ environment.step(1 / 60)
 local base = assembly:FindFirstChild("Base")
 local cframe = environment.propertyOf(base, "CFrame")
 ```
-
-See [roblox-emulator.luau](../examples/roblox-emulator.luau) for a complete runnable scene test.
+[roblox-emulator.luau](../examples/roblox-emulator.luau) is a complete runnable scene test.

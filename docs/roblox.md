@@ -1,7 +1,8 @@
 # The Roblox adapter
 
-This adapter connects a Compose runtime to Roblox Instances. Core remains host-neutral.
-For composition behavior, use the core API reference.
+The adapter connects a Compose runtime to Roblox Instances.
+Core uses the host protocol and has no engine dependency.
+The [API reference](api.md#srcroblox) gives public calls.
 
 ```luau
 local Compose = require(ReplicatedStorage.compose.core)
@@ -12,14 +13,14 @@ local Host = runtime.constructors
 
 local dispose = runtime.mount(Overlay, playerGui)
 ```
-
-Native engine access lives in `src/roblox`.
-`src/core` never names an engine object, a service or a datatype. `tools/check-boundary.luau` fails the gate if it starts to.
+Native engine access belongs in `src/roblox`.
+Core must not name engine objects, services or datatypes.
+[The boundary check](../tools/check-boundary.luau) enforces this rule.
 
 ## Ownership
 
-To decide whether a scene creates, adopts or borrows an Instance, use [ownership](ownership.md).
-The adapter follows the same lifetime rules as every Compose host.
+Use the [ownership guide](ownership.md) to decide whether to create, adopt or borrow an Instance.
+The Roblox adapter follows the same lifetime rules as other hosts.
 
 ## Events are discovered, not declared
 
@@ -29,28 +30,23 @@ Host.TextButton {
     Activated = function() ... end,   -- subscribes
 }
 ```
-
-The adapter reads the member and finds something that it can connect to.
-When the difference matters, be explicit:
+The adapter reads a member to determine whether it supports event connections.
+Use explicit keys when that distinction matters:
 
 ```luau
 [Compose.event("Activated")] = handler          -- always an event
 [Compose.property("Changed")] = binding         -- always a property
 ```
-
-An event key that names something that does not exist raises `host/not-an-event` with the class name and the key.
+An invalid event name raises `host/not-an-event` with the class name and key.
 
 ## Sibling order
 
-**Roblox has no child-ordering API.** `Instance.Parent` appends, `GetChildren` returns insertion order and nothing reorders.
-The adapter `insertChild` therefore parents the node. The adapter **omits `moveChild` entirely**.
-Omission is how the host protocol declares that a host cannot order children.
-See [`host-protocol.md`](host-protocol.md#hosts-that-cannot-order-children).
-
+Roblox has no child-order operation.
+`Instance.Parent` appends a child. `GetChildren` reports insertion order.
+The adapter's `insertChild` parents the node and omits `moveChild`.
+This omission declares the host's limitation in the [host protocol](host-protocol.md#hosts-that-cannot-order-children).
 The adapter does not reparent later siblings to simulate insertion.
-That would rebuild their render state and would not give the layout order that the engine uses.
-
-Roblox reads order from properties, so use properties:
+That operation would rebuild render state without supplying the engine's layout order.
 
 ```luau
 keyed {
@@ -61,116 +57,118 @@ keyed {
     end,
 }
 ```
-
-Use `LayoutOrder` for `UIListLayout` and `UIGridLayout`. Use `ZIndex` for overlap.
-The keyed and indexed collections of Compose give `render` a reactive index for exactly this purpose.
+Use `LayoutOrder` with `UIListLayout` and `UIGridLayout`.
+Use `ZIndex` for overlap order.
+Keyed and indexed collections provide a reactive index for these properties.
 
 ## Clearing a property
 
-Roblox has no verb that resets a property.
-The first time that Compose must clear property `P` on class `C`, it builds one throwaway `C`, reads `P`, caches the value and destroys the throwaway.
-Clearing then writes that default.
-The cost is one extra Instance for each pair of class and property, for the lifetime of the process.
-
-This path applies only to properties that Compose wrote on a **borrowed** object.
-It restores class defaults, not the previous property values of the object.
-Compose destroys owned objects. It does not clear their properties.
+Compose resets borrowed properties to sampled class defaults.
+For the first reset of property `P` on class `C`, it creates one temporary `C`.
+It reads `P`, caches that value and destroys the temporary instance.
+Later resets write the cached value.
+The cost is one extra Instance for each class/property pair during the process lifetime.
+This restores the class default, not the object's previous value.
+Compose destroys owned nodes instead of resetting their properties.
 
 ## Attributes
 
-`Attributes = { ... }` on a node writes each entry with `Instance:SetAttribute`. A nil value clears the attribute.
-For the prop itself, see [`api.md`](api.md#attributes).
+The [Attributes property](api.md#attributes) writes each entry through `Instance:SetAttribute`.
+A nil value clears the attribute.
+`SetAttribute` raises for invalid names and unsupported datatypes.
+The adapter converts this error into `false` and the engine's reason.
+Compose reports `props/attribute-value` with the node, attribute and reason.
 
-`SetAttribute` **raises** for a name that the engine does not accept and for a datatype that it cannot serialize.
-The adapter turns that raise into the reported `false` and reason that the host protocol asks for.
-The refusal therefore arrives as `props/attribute-value`, with the node, the attribute and the engine message.
-It does not arrive as a raw engine error from inside a watch.
-
-The attribute store of the engine accepts fewer types than its property system, and the engine defines the valid attribute names.
-The simulated engine refuses a name that is empty, that holds a character other than a letter, a digit or an underscore, that begins with `RBX` or that exceeds 100 characters.
-It refuses a table, a function and a buffer. `TestScene` stores only a string, a number, a boolean and `nil`, and it checks no names.
-To verify the exact set of attribute datatypes, use [native checks](../verification/roblox/README.md).
+The engine determines valid names and datatypes.
+The simulation rejects empty names, names longer than 100 characters and names that start with `RBX`.
+Names can contain only letters, digits and underscores.
+It rejects table, function and buffer values.
+The basic `TestScene` accepts only strings, numbers, booleans and nil, without name checks.
+Use [native checks](../verification/roblox/README.md) for the engine's exact attribute datatype rules.
 
 ## Cleanup
 
-To register connection, thread or Instance cleanup with the active owner, use [ComposeRoblox.cleanup](api.md#composerobloxcleanup).
-If you pass an Instance, you transfer the responsibility to destroy it.
+Use [ComposeRoblox.cleanup](api.md#composerobloxcleanup) for connections, threads and Instances.
+An Instance argument transfers responsibility for its destruction to the active owner.
 
 ## What is animatable
 
 Compose animates `number`, `Vector2`, `Vector3`, `Color3`, `UDim`, `UDim2` and `CFrame`.
-`ComposeRoblox.animatableTypes()` lists what the running engine supports.
+`ComposeRoblox.animatableTypes()` lists the running engine's supported types.
 
-`CFrame` carries rotation as a quaternion. Compose renormalizes it before decoding and matches its sign to the current leg, so that a small turn never takes the long way round.
-Componentwise interpolation followed by renormalization is **not** slerp. The angular rate varies across the arc.
-If you need constant angular speed, animate an angle and construct the `CFrame` from it.
+`CFrame` represents rotation as a quaternion.
+Compose normalizes it before decoding and matches its sign to the current animation leg.
+This prevents a small turn from taking the longer rotation path.
+The interpolation is componentwise with normalization. It is not slerp.
+For constant angular speed, animate an angle and construct the `CFrame` from it.
 
-Three shapes are deliberately absent:
+These shapes have no Compose animation codec:
 
-- Enums, which are not continuous. Use `show` or `switch`.
-- `NumberSequence` and `ColorSequence`. Their keypoint counts can differ, so the halfway point is a design decision.
-- Skeletal animation, which belongs to the engine `Animator`.
+- Enums: use `show` or `switch` for discrete values.
+- `NumberSequence` and `ColorSequence`: different keypoint counts need application decisions.
+- Skeletal animation: use the engine's `Animator`.
 
 ## How the adapter is verified
 
-The adapter receives an **injected engine table**, defined in `src/roblox/engine.luau`.
-It provides `Instance.new`, Heartbeat, `typeof` and the datatype constructors. Tests can therefore execute the actual adapter outside the engine.
-
-[`tests/roblox/`](../tests/roblox) runs the adapter against [`src/test-scene/roblox.luau`](../src/test-scene/roblox.luau).
-That file connects the simulated engine of Verify to the adapter. See [the simulated engine](#the-simulated-engine).
-The actual adapter branches execute there. They include these branches:
-
-- the probe that decides whether a key is an event or a property
-- the default sampling behind `clearProperty`
-- connection release
-- animation on the frame loop
+[`src/roblox/engine.luau`](../src/roblox/engine.luau) defines an injected engine table.
+It provides instance construction, frame signals, `typeof` and datatype constructors.
+Tests can run the real adapter without Roblox.
+[The Roblox tests](../tests/roblox) connect it through [`src/test-scene/roblox.luau`](../src/test-scene/roblox.luau).
+They check event classification, default sampling, connection release and frame animation.
 
 ## The simulated engine
 
-[Verify](https://github.com/voidmeld/verify/blob/main/docs/api.md) owns the simulated Roblox engine: Instances, classes, signals, virtual time and disposal accounting.
-Use it when a component reads Instance properties or calls methods through a ref, for example `instance:SetAttribute(...)` or `instance.Parent`.
-The opaque nodes in `src/test-scene` cannot support those operations.
+[Verify](https://github.com/voidmeld/verify/blob/main/docs/api.md) provides Instances, classes, signals, virtual time and disposal counts.
+Use it for components that access Instance properties or methods through refs.
+The basic test host's opaque nodes cannot support those operations.
+Follow the [emulator setup](api.md#robloxemulatorcreate) to create the environment and runtime.
 
-To create the environment and the runtime, follow [the emulator setup](api.md#robloxemulatorcreate).
-
-`emulator.adapter` is `ComposeRoblox.createHost(emulator.engine)`.
-`emulator.render` is the renderer of that adapter. Compose wraps it only to log operations and inject failures.
-The tests use the real adapter rules. `moveChild` is absent here because it is absent there.
-[The runnable example](../examples/roblox-emulator.luau) shows a component that uses Instance methods.
+`emulator.adapter` uses `ComposeRoblox.createHost(emulator.engine)`.
+`emulator.render` adds operation logging and failure injection to that adapter.
+It has no `moveChild`, just like the native adapter.
+The [emulator example](../examples/roblox-emulator.luau) runs an Instance-based component without Roblox.
 
 ### What the simulation cannot check
 
-`RobloxEmulator.create` uses the environment that you pass. The default environment, `Verify.testEnvironment()`, has a small set of built-in classes and no property validation.
-An environment that `Verify.reflection.create` builds from a reflection database adds every class of the database, its defaults and its property types.
+`RobloxEmulator.create` uses the supplied environment.
+The default `Verify.testEnvironment()` has a small class set and no property validation.
+`Verify.reflection.create` adds classes, defaults and property types from its reflection database.
+The engine remains the authority.
 
-- **Property validation with the default environment.** It accepts a string that you write to a `Color3` property. The reflection environment rejects a wrong datatype and a write to a read-only property. The engine remains the authority.
-- **Classes outside the environment.** The default environment knows the built-in classes (instances, folders, models, parts, GUI objects, `Humanoid` and the animation classes). It takes more through `defineClass`. A reflection environment knows the classes of its database only.
-- **`WaitForChild`.** The environment does not provide it. It models `Destroy` (the destroyed instance locks its parent, destroys its descendants and disconnects its signals), `Clone`, `Archivable`, the `FindFirst` family and `IsA`.
-- **Signal timing.** The environment models `GetPropertyChangedSignal`, `Changed`, `AttributeChanged`, `ChildAdded`, `ChildRemoved`, `Destroying`, `DescendantAdded`, `DescendantRemoving` and `AncestryChanged`. It dispatches each signal immediately. The engine can defer a signal and show different callback timing.
-- **Layout.** The environment has no layout engine. No test there can show `LayoutOrder` reordering a `UIListLayout`.
-- **Physics, replication, streaming and services.** None of them exist here. Instances carry tags, but the `CollectionService` service does not exist. `Enum` is permissive and carries no engine values.
-- **Animation.** A track records that something told it to play, stop or change speed. Nothing advances, blends, weights or fires markers, and no track has a `Length`.
-- **Real `Heartbeat` timing** under a variable frame rate. `step(delta)` is a manual clock.
-- **Memory that a real collector releases after disposal.**
-- **Attribute datatypes.** The environment refuses a short list of types and a set of invalid names. It does not prove the exact set that the engine accepts.
-- **`typeof`.** Environment nodes are Lua tables with a metatable. Engine nodes are userdata that `typeof` identifies as `Instance`. The engine seam reports `"Instance"` for both, and that seam is the only thing that Compose may ask. Native checks must verify the engine classification.
+| Area | Limit |
+| --- | --- |
+| Property validation | The default environment accepts incorrect property datatypes. A reflected environment rejects wrong types and writes to read-only properties. |
+| Classes | The default supports built-in instance, folder, model, part, GUI, Humanoid and animation classes. Use `defineClass` to add classes. Reflection supports only its database classes. |
+| Methods | `WaitForChild` is absent. The environment models `Destroy`, `Clone`, `Archivable`, `FindFirst` methods and `IsA`. |
+| Destruction | It locks the destroyed node's parent, destroys descendants and disconnects signals. |
+| Signals | Property, attribute, child, destruction, descendant and ancestry signals run immediately. Native signals can run later. |
+| Layout | There is no native layout engine to prove `LayoutOrder` behavior. |
+| Services | Physics, replication, streaming and services are absent. Nodes carry tags, but there is no `CollectionService`. |
+| Enums | The simulation accepts enum shapes without native values. |
+| Animation | Tracks record play, stop and speed calls. They do not advance, blend or fire markers, and have no `Length`. |
+| Frames | `step(delta)` drives a manual clock. It does not model variable native frame timing. |
+| Memory | Simulated disposal does not prove native collection after disposal. |
+| Attributes | Rejected names and types do not prove the engine's exact accepted datatype set. |
+| Node types | Simulated nodes are tables. Native nodes are userdata. The engine interface reports `Instance` for both. |
+
+The simulation models `GetPropertyChangedSignal`, `Changed`, `AttributeChanged`, `ChildAdded` and `ChildRemoved`.
+It also models `Destroying`, `DescendantAdded`, `DescendantRemoving` and `AncestryChanged`.
 
 ### Engine checks
 
-Core uses the language `type` primitive for reference values. The engine-specific `typeof` belongs at the host boundary.
-A passing emulated host cannot establish native Instance classification, class defaults, layout, Heartbeat or rendering behavior.
-
-[The engine verification guide](../verification/roblox/README.md) builds the local plugin or the module-preserving Rojo check project.
-Record the exact source and runtime observations outside this source tree. The CPU gate does not claim that these checks ran.
+Core uses `type` for reference values. Engine-specific `typeof` stays at the host boundary.
+Simulation cannot prove native classification, defaults, layout, frame timing or rendering.
+Use the [engine verification guide](../verification/roblox/README.md) to run those checks.
+Keep source identity and runtime evidence outside the active source tree.
+The CPU gate does not claim an engine run.
 
 ## Deploying
 
-`default.project.json` maps `src/core`, `src/roblox`, `src/design` and `src/design-editor` into a `compose` folder.
-It excludes `src/test-scene`, which keeps the test adapter out of the production artifact.
+`default.project.json` maps `core`, `roblox`, `design` and `design-editor` into a `compose` folder.
+It excludes the test host from the production artifact.
 
 ```bash
 rojo serve default.project.json
 ```
-
-Compose uses string requires throughout, written as `require("./sibling")` and `require("@self/child")`.
-It needs no aliases and no particular position in the DataModel.
+Compose uses string requires such as `require("./sibling")` and `require("@self/child")`.
+It requires no aliases or fixed DataModel position.

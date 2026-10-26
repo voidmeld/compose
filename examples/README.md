@@ -1,10 +1,10 @@
 # Examples
 
-These programs demonstrate Compose through its public packages.
+These programs use the public Compose packages.
 For constructor syntax and the first component, start with the [quickstart](../docs/quickstart.md).
 
 The programs appear in the order that [`init.luau`](init.luau) lists them.
-Each program runs and asserts its claim. The producer `tests` of the gate runs each program as one case.
+Each program checks its result. The gate's `tests` producer runs each program as one case.
 
 ```bash
 lute run tools/gate.luau --file tests/examples/examples.verify.luau
@@ -36,4 +36,4 @@ local runtime = Compose.createRuntime(TestScene.create().adapter)   -- here
 local runtime = ComposeRoblox.createRuntime()                    -- in Roblox
 ```
 
-Start with the [quickstart](../docs/quickstart.md), and then `store-scene.luau`.
+Run [quickstart.luau](quickstart.luau) first. Then run [store-scene.luau](store-scene.luau).
