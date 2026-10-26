@@ -152,7 +152,8 @@ return function(ui: UI.UI)
 			for _, grip in selectionGrips do
 				local frame = grip.frame
 				if
-					ui.get(frame, "Parent")
+					ui.get(frame, "Visible")
+					and ui.get(frame, "Parent")
 					and ui.isA(ui.get(frame, "Parent"), "GuiObject")
 					and ui.get(ui.get(frame, "Parent"), "Visible")
 				then
@@ -165,6 +166,22 @@ return function(ui: UI.UI)
 			end
 			return nil
 		end
+		local function resizable(id: string?): ("fields" | "size")?
+			local node = if id then Design.document.find(session.document:peek().root, id) else nil
+			local kind = if node then session.library.kinds[node.kind] else nil
+			if kind == nil then
+				return nil
+			end
+			local fields = kind.fields
+			if fields.width ~= nil and fields.height ~= nil then
+				return "fields"
+			end
+			local native = fields.Size
+			if native ~= nil and native.type == "datatype" and native.datatype == "UDim2" then
+				return "size"
+			end
+			return nil
+		end
 		local function startResize(corner: UI.Point, from: UI.Point)
 			local id = session.selected:peek()
 			local instance: Compose.Node? = nodes[id]
@@ -172,8 +189,7 @@ return function(ui: UI.UI)
 			if instance == nil or node == nil then
 				return
 			end
-			local fields = session.library.kinds[node.kind].fields
-			if fields.width == nil or fields.height == nil then
+			if resizable(id) == nil then
 				return
 			end
 			resizing = {
@@ -221,6 +237,10 @@ return function(ui: UI.UI)
 				return
 			end
 			local fields = session.library.kinds[node.kind].fields
+			if resizable(id) == "size" then
+				session.change("Size", { literal = { 0, result.X, 0, result.Y } })
+				return
+			end
 			local changes: { [string]: Design.Value } = {
 				width = { literal = result.X },
 				height = { literal = result.Y },
@@ -339,6 +359,10 @@ return function(ui: UI.UI)
 				release()
 				local id = target(use)
 				shown = if id then nodes[id] else nil
+				local canResize = resizable(id) ~= nil
+				for _, grip in grips do
+					ui.set(grip, "Visible", canResize)
+				end
 				local instance = shown
 				if instance then
 					table.insert(connections, ui.changed(instance, "AbsolutePosition", place))
