@@ -46,6 +46,19 @@ local function literal(value: Literal): string
 end
 source.literal = literal
 
+local function datatypeLiteral(datatype: string, value: Literal): string
+	if string.sub(datatype, 1, 5) == "Enum." then
+		return `{datatype}.{tostring(value)}`
+	end
+	local parts: { string } = {}
+	if type(value) == "table" then
+		for _, component in value do
+			table.insert(parts, literal(component))
+		end
+	end
+	return `{datatype}.new({table.concat(parts, ", ")})`
+end
+
 local function contractLiteral(contract: Types.Contract): Literal
 	local inputs: Record = {}
 	for _, input in contract.inputs do
@@ -284,7 +297,15 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		table.sort(keys)
 		for _, key in keys do
-			table.insert(body, `{indent}\t{key} = {expression(node.props[key])},`)
+			local property = node.props[key]
+			local field = kind.fields[key]
+			local current = property.literal
+			local datatype: string? = if field then field.datatype else nil
+			local written = expression(property)
+			if current ~= nil and datatype ~= nil then
+				written = datatypeLiteral(datatype, current)
+			end
+			table.insert(body, `{indent}\t{key} = {written},`)
 		end
 		local bind, template = node.bind, node.children[1]
 		if kind.children == "slot" then
@@ -690,6 +711,26 @@ function source.parse(code: string, library: Library): Types.Document
 			take "end"
 			take "end"
 			return { output = id, args = args, fields = passed }, nil
+		end
+		if tokens[at] and tokens[at].kind == "name" and peek(1) == "." then
+			local start = at
+			local path = dotted()
+			local item = string.match(path, "^Enum%.[%w_]+%.([%w_]+)$")
+			if item ~= nil then
+				return { literal = item }, nil
+			elseif string.match(path, "^[%w_]+%.new$") and peek() == "(" then
+				take "("
+				local components: Record = {}
+				while peek() ~= ")" do
+					components[#components + 1] = plain()
+					if peek() == "," then
+						take ","
+					end
+				end
+				take ")"
+				return { literal = components }, nil
+			end
+			at = start
 		end
 		local tokenCall = library.token
 		if tokenCall and tokens[at] and tokens[at].kind == "name" then

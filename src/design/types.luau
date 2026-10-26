@@ -29,6 +29,7 @@ export type FieldType =
 	| "event"
 	| "content"
 	| "node"
+	| "datatype"
 
 export type Field = {
 	type: FieldType,
@@ -37,6 +38,7 @@ export type Field = {
 	group: string?,
 	order: number?,
 	default: Literal?,
+	datatype: string?,
 }
 
 export type Row = { [string | number]: Literal }

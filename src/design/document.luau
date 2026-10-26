@@ -12,6 +12,8 @@ local MAX_NODES = 500
 local MAX_DEPTH = 32
 local IDENTIFIER = "^%l[%w]*$"
 local OUTPUT = "^on%u[%w]*$"
+local DATATYPE_ARITY: { [string]: number } =
+	{ UDim2 = 4, UDim = 2, Vector2 = 2, Vector3 = 3, Rect = 4, NumberRange = 2 }
 
 local document = {}
 
@@ -265,6 +267,20 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 					and type(current[3]) == "number",
 				`{key} must be three numbers`
 			)
+		elseif field.type == "datatype" then
+			local datatype = assert(field.datatype, `{key} names no datatype`)
+			if string.sub(datatype, 1, 5) == "Enum." then
+				assert(type(current) == "string", `{key} must name an item of {datatype}`)
+			else
+				local arity = DATATYPE_ARITY[datatype]
+				local valid = type(current) == "table" and (arity == nil or #current == arity)
+				if valid and type(current) == "table" then
+					for _, component in current do
+						valid = valid and type(component) == "number"
+					end
+				end
+				assert(valid, `{key} must be {arity or "some"} numbers for {datatype}`)
+			end
 		else
 			assert(field.type == "value", `{key} must be bound`)
 		end

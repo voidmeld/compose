@@ -609,6 +609,28 @@ describe("Compose Design views as code", function()
 		expect(visible ~= nil and visible:peek()):toBe(true)
 	end)
 
+	it("writes Roblox datatype literals as constructors and reads them back", function()
+		local toy = viewLibrary()
+		local boxFields: { [string]: Design.Field } = {
+			Size = { type = "datatype", datatype = "UDim2" },
+			AutomaticSize = { type = "datatype", datatype = "Enum.AutomaticSize" },
+		}
+		toy.kinds = table.clone(toy.kinds)
+		toy.kinds.Box = { fields = boxFields, children = "none", call = "UI.Box", build = builder "Box" }
+		local value, box = Design.document.insert(Design.document.new("Sized", toy, "Stack"), toy, "n1", "Box")
+		local size: Design.Literal = { 1, 0, 0, 48 }
+		value = Design.document.change(value, toy, box, "Size", { literal = size })
+		value = Design.document.change(value, toy, box, "AutomaticSize", { literal = "Y" })
+		local code = Design.emit(value, toy)
+		expect(string.find(code, "Size = UDim2.new(1, 0, 0, 48)", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "AutomaticSize = Enum.AutomaticSize.Y", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
+		local short: Design.Literal = { 1, 0 }
+		expect(refused(function()
+			Design.document.change(value, toy, box, "Size", { literal = short })
+		end)):toBe(true)
+	end)
+
 	it("refuses conditions, names and state the contract cannot back", function()
 		local value, toy = view()
 		expect(refused(function()
