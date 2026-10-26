@@ -156,6 +156,59 @@ describe("host-neutral design editor", function()
 		w.close()
 	end)
 
+	it("switches devices and previews from the toolbar and folds advanced fields", function()
+		local w = Support.world()
+		local chosen: { string } = {}
+		local editor = w.mount {
+			devices = {
+				{ name = "Phone", size = { X = 390, Y = 844 } },
+				{ name = "Tablet", size = { X = 820, Y = 1180 } },
+			},
+			previews = {
+				{
+					name = "Theme",
+					choices = { "Light", "Dark" },
+					select = function(choice: string)
+						table.insert(chosen, choice)
+					end,
+				},
+			},
+		}
+		w.settle()
+		local device = w.find(editor.root, "Device")
+		expect(device.Text):toBe "Phone"
+		w.fire(device, "Activated")
+		w.settle()
+		expect(device.Text):toBe "Tablet"
+		expect(w.find(editor.root, "ArtboardSize").Text):toBe "820 × 1180"
+		w.fire(w.find(editor.root, "Theme"), "Activated")
+		w.settle()
+		expect(chosen[1]):toBe "Dark"
+		editor.dispose()
+		w.close()
+	end)
+
+	it("labels inspector rows and folds advanced fields until asked", function()
+		local w = Support.world()
+		local rootKind = w.library.kinds[w.document.root.kind]
+		local labelled = table.clone(rootKind.fields.width)
+		labelled.label = "Box width"
+		local folded = table.clone(rootKind.fields.Visible)
+		folded.advanced = true
+		rootKind.fields.width = labelled
+		rootKind.fields.Visible = folded
+		local editor = w.mount()
+		w.settle()
+		local inspector = w.find(editor.root, "DesignInspector")
+		expect(w.find(w.find(inspector, "width"), "Label").Text):toBe "Box width"
+		expect(inspector:FindFirstChild("Visible", true)):toBe(nil)
+		w.fire(w.find(inspector, "Advanced"), "Activated")
+		w.settle()
+		expect(inspector:FindFirstChild("Visible", true) ~= nil):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("commits inspector text, numeric, toggle, segmented and colour controls", function()
 		local w = Support.world()
 		local editor = w.mount()

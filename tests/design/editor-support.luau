@@ -112,13 +112,21 @@ local function world(space: string?)
 	end
 	local objectsBefore = env.liveObjects()
 	local connectionsBefore = env.liveConnections()
-	local function mount(options: { link: Design.LinkStore?, onExport: ((string) -> ())? }?): Editor.Editor
+	type MountOptions = {
+		link: Design.LinkStore?,
+		onExport: ((string) -> ())?,
+		devices: { Editor.Device }?,
+		previews: { Editor.Preview }?,
+	}
+	local function mount(options: MountOptions?): Editor.Editor
 		return Editor.create(library, document, screen, {
 			runtime = runtime,
 			environment = environment,
 			stageSize = { X = 480, Y = 320 },
 			link = if options then options.link else nil,
 			onExport = if options then options.onExport else nil,
+			devices = if options then options.devices else nil,
+			previews = if options then options.previews else nil,
 		})
 	end
 	local function settle()

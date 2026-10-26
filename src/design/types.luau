@@ -41,6 +41,8 @@ export type Field = {
 	datatype: string?,
 	also: { string }?,
 	luauType: string?,
+	label: string?,
+	advanced: boolean?,
 }
 
 export type Row = { [string | number]: Literal }
@@ -84,6 +86,7 @@ export type Library = {
 	token: string?,
 	show: string?,
 	keyed: string?,
+	categories: { string }?,
 	space: ("2d" | "3d")?,
 	kinds: { [string]: Kind },
 }

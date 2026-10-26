@@ -12,6 +12,8 @@ export type Environment = Environment.Environment
 export type Values = Environment.Values
 export type Point = UI.Point
 export type Editor = Editor.Editor
+export type Device = Editor.Device
+export type Preview = Editor.Preview
 export type Options = Editor.Options & { environment: Environment.Environment }
 
 local function create(

@@ -13,6 +13,7 @@ export type Stage = {
 	zoom: Compose.Value<number>,
 	fit: () -> (),
 	zoomTo: (scale: number, around: UI.Point?) -> (),
+	resize: (size: UI.Point) -> (),
 	dispose: () -> (),
 }
 
@@ -88,11 +89,13 @@ return function(ui: UI.UI)
 		ui.set(camera, "Parent", holder)
 		local zoom = Compose.cell(1)
 		local pan: UI.Point = { X = 0, Y = 0 }
+		local framed: { { instance: Compose.Node, grow: number } } = {}
 		local function centered(name: string, grow: number): Compose.Node
 			local created = frame(name)
 			ui.set(created, "AnchorPoint", ui.values.vector2(0.5, 0.5))
 			ui.set(created, "Position", ui.values.udim2(0.5, 0, 0.5, 0))
 			ui.set(created, "Size", ui.values.udim2(0, width + grow, 0, height + grow))
+			table.insert(framed, { instance = created, grow = grow })
 			return created
 		end
 		for depth, spread in { 24, 12, 4 } do
@@ -486,6 +489,14 @@ return function(ui: UI.UI)
 		local left = ui.connect(overlay, "MouseLeave", function()
 			session.hovered:set(nil)
 		end)
+		local function resize(next: UI.Point)
+			width, height = next.X, next.Y
+			for _, entry in framed do
+				ui.set(entry.instance, "Size", ui.values.udim2(0, width + entry.grow, 0, height + entry.grow))
+			end
+			ui.set(dimensions, "Text", `{width} × {height}`)
+			fit()
+		end
 		return {
 			surface = surface,
 			overlay = overlay,
@@ -493,6 +504,7 @@ return function(ui: UI.UI)
 			zoom = zoom,
 			fit = fit,
 			zoomTo = zoomTo,
+			resize = resize,
 			dispose = function()
 				for _, connection in surfaceInput do
 					connection:Disconnect()
