@@ -742,7 +742,7 @@ Measure the actual workload with the [benchmark protocol](benchmarks.md). CPU re
 - A name that the host classifies as an event raises `props/group-names-an-event`.
 - A body that returns the wrong number of values raises `props/group-arity`.
 
-### `Attributes`
+### Attributes
 
 `Attributes = { name = value | source | use -> value }`
 

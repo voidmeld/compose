@@ -3,7 +3,8 @@
 local fs = require "@std/fs"
 local process = require "@lute/process"
 local Test = require "../harness"
-local TemporaryDirectory = require "../../tools/lib/temporary-directory"
+local TemporaryDirectory = require "../../.lute/dependencies/verify/src/checks/temporary-directory"
+local Walk = require "../../.lute/dependencies/verify/src/checks/walk"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
@@ -15,8 +16,14 @@ local function fixture(body: (string) -> number): number
 		do
 			fs.createDirectory(root .. "/" .. directory, { makeParents = true })
 		end
-		for _, tool in { "check-public-surface", "gate" } do
+		for _, tool in { "check-public-surface", "checks-config", "checks-policy", "lib/check-result", "gate" } do
+			fs.createDirectory(root .. "/tools/lib", { makeParents = true })
 			fs.writeStringToFile(root .. "/tools/" .. tool .. ".luau", fs.readFileToString("tools/" .. tool .. ".luau"))
+		end
+		local dependency = ".lute/dependencies/verify/src"
+		for _, path in Walk.paths(dependency, { ".luau" }) do
+			fs.createDirectory(root .. "/" .. (string.match(path, "^(.*)/") :: string), { makeParents = true })
+			fs.writeStringToFile(root .. "/" .. path, fs.readFileToString(path))
 		end
 		for _, path in
 			{
@@ -52,7 +59,7 @@ describe("required repository surface", function()
 				error(output, 0)
 			end
 			expect(ok):toBe(true)
-			expect(output):toContain "6 exports"
+			expect(output):toContain "check-public-surface: ok"
 			return 0
 		end)
 	end)
@@ -62,7 +69,7 @@ describe("required repository surface", function()
 			fs.remove(root .. "/docs/api.md")
 			local ok, output = check(root)
 			expect(ok):toBe(false)
-			expect(output):toContain "required docs/api.md is absent"
+			expect(output):toContain "docs/api.md"
 			return 0
 		end)
 	end)
@@ -74,7 +81,7 @@ describe("required repository surface", function()
 			fs.writeStringToFile(root .. "/docs/api.md", (string.gsub(docs, "### `Compose%.sample`\n", "")))
 			local ok, output = check(root)
 			expect(ok):toBe(false)
-			expect(output):toContain "src/core/init.luau is required but absent"
+			expect(output):toContain "src/core/init.luau is absent"
 			return 0
 		end)
 	end)

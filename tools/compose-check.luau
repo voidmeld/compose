@@ -5,7 +5,7 @@ local process = require "@lute/process"
 
 local consumerRules = require "./lib/consumer-rules"
 local readableRules = require "./lib/readable-rules"
-local walk = require "./lib/walk"
+local walk = require "../.lute/dependencies/verify/src/checks/walk"
 
 local function requireString(value: unknown): string
 	assert(type(value) == "string")

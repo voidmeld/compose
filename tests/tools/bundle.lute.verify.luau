@@ -7,8 +7,8 @@ local TestScene = require "../../src/test-scene"
 local fs = require "@std/fs"
 local luau = require "@lute/luau"
 local process = require "@lute/process"
-local TemporaryDirectory = require "../../tools/lib/temporary-directory"
-local Walk = require "../../tools/lib/walk"
+local TemporaryDirectory = require "../../.lute/dependencies/verify/src/checks/temporary-directory"
+local Walk = require "../../.lute/dependencies/verify/src/checks/walk"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 

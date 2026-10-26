@@ -4,7 +4,7 @@ local fs = require "@std/fs"
 local process = require "@lute/process"
 
 local Consumer = require "../.lute/dependencies/verify/src/consumer"
-local walk = require "./lib/walk"
+local walk = require "../.lute/dependencies/verify/src/checks/walk"
 
 local OUT = "build/production"
 local PROJECT = "default.project.json"

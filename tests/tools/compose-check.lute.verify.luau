@@ -6,7 +6,7 @@ local process = require "@lute/process"
 local readableRules = require "../../tools/lib/readable-rules"
 local consumerRules = require "../../tools/lib/consumer-rules"
 local Author = require "../../authoring"
-local Walk = require "../../tools/lib/walk"
+local Walk = require "../../.lute/dependencies/verify/src/checks/walk"
 
 local function numberValue(value: unknown, ...: unknown): number
 	assert(type(value) == "number")

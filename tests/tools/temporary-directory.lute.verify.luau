@@ -2,7 +2,7 @@
 
 local fs = require "@std/fs"
 local Test = require "../harness"
-local TemporaryDirectory = require "../../tools/lib/temporary-directory"
+local TemporaryDirectory = require "../../.lute/dependencies/verify/src/checks/temporary-directory"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 local PARENT = TemporaryDirectory.root()
