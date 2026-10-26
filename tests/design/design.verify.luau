@@ -696,6 +696,43 @@ describe("Compose Design views as code", function()
 		end)):toBe(true)
 	end)
 
+	it("types table literals, creates controls per call and calls cells without parentheses", function()
+		local toy = viewLibrary()
+		local pickerFields: { [string]: Design.Field } = {
+			options = { type = "value", also = { "table" }, luauType = "{ Toy.Option<string> }" },
+		}
+		toy.kinds = table.clone(toy.kinds)
+		toy.kinds.Picker = { fields = pickerFields, children = "none", call = "UI.Picker", build = builder "Picker" }
+		local value, picker = Design.document.insert(Design.document.new("Settings", toy, "Stack"), toy, "n1", "Picker")
+		value = Design.document.rename(value, toy, picker, "Difficulty")
+		local first: { [string | number]: Design.Literal } = { value = "Medium", label = "Standard" }
+		local choices: Design.Literal = { first }
+		value = Design.document.change(value, toy, picker, "options", { literal = choices })
+		local detent: Design.State = { id = "detent", type = "string", initial = "hug" }
+		value = Design.document.setState(value, toy, { detent })
+		value = Design.document.change(value, toy, "n1", "gap", { literal = 4 })
+		value = Design.document.change(value, toy, picker, "options", { literal = choices })
+		local options: Design.EmitOptions =
+			{ name = "Settings", controls = "local UI = Toy.controls()", localControls = true }
+		local code = Design.emit(value, toy, options)
+		local signature = "local function Settings(props: Props): Instance\n\tlocal UI = Toy.controls()\n"
+		expect(string.find(code, signature, 1, true) ~= nil):toBe(true)
+		expect(
+			string.find(
+				code,
+				'local difficultyOptions: { Toy.Option<string> } = { { label = "Standard", value = "Medium" } }',
+				1,
+				true
+			) ~= nil
+		):toBe(true)
+		expect(string.find(code, "options = difficultyOptions,", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy, options)):toBe(code)
+		local stateful, label = Design.document.insert(value, toy, "n1", "Label")
+		stateful = Design.document.change(stateful, toy, label, "text", { state = "detent" })
+		local withState = Design.emit(stateful, toy, options)
+		expect(string.find(withState, 'local state = { detent = Toy.cell "hug" }', 1, true) ~= nil):toBe(true)
+	end)
+
 	it("refuses conditions, names and state the contract cannot back", function()
 		local value, toy = view()
 		expect(refused(function()
