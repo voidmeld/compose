@@ -76,7 +76,7 @@ Three habits keep consumer code checking under both solvers:
 
 - Annotate `use` in a body that you pass where a `Source` or `Value` is expected. The new solver does not infer a function parameter from a union that also holds a readable.
 - Assert the type of a cell whose initial value is a function. A function argument also matches a function-valued `T`.
-- Annotate a table literal whose type the call cannot infer, such as an empty `initial` or a `layout` that you pass to a union-typed option.
+- Annotate a table literal when the call cannot infer its type. Examples include an empty `initial` table and a `layout` passed to a union-typed option.
 
 ```luau
 Compose.show(function(use: Compose.Use)
@@ -139,7 +139,7 @@ Diagnostics identify it as a cell. `Compose.cell` remains valid at module scope.
 
 `formula(body, equals?) -> Formula`
 
-A cached derivation. `body` receives `use` and must read every dependency through it.
+Creates a cached formula. `body` receives `use` and must read every dependency through it.
 
 ```luau
 local percent = Compose.formula(function(use)
@@ -613,7 +613,7 @@ Compose.watch(function(use) print(math.ceil(use(remaining))) end)
 
 `runtime.sequence { steps, reducedMotion?, autoplay? } -> Sequence` requires an active owner and host frames.
 It returns `running` and `completed` readables and `play()`, `cancel()` and `finish()` controls. Autoplay defaults to true; `play` restarts from the beginning.
-A step accepts `wait` seconds, `run` (a callback at its start), `onComplete`, `tween = { seconds, ease? }`, `timeline` options, `sample(progress)`, a serial `steps` list, or a `parallel` list of steps.
+A step accepts `wait` seconds, `run`, `onComplete`, `tween = { seconds, ease? }`, `timeline`, `sample(progress)`, `steps` or `parallel`. `run` is a callback at the step's start. `steps` runs children in order. `parallel` starts them together.
 Tween samples receive eased normalized progress; use it to write cells or interpolate the values your scene needs. Timeline samples use the existing timeline repeat, direction, delay and scale behavior.
 Parallel groups start together and the next step waits for their longest child. Durations must be finite; zero-length waits, tweens and callbacks run synchronously in order. A large frame delivers crossed events by due time, then declaration order. Callback failure cancels playback before reporting the failure.
 `finish` advances an active sequence to its end. `cancel` stops it and clears completion without running later steps. Owner disposal cancels it, including from inside a callback.
@@ -629,7 +629,7 @@ local cue = runtime.sequence { steps = {
 } }
 ```
 
-All runtime frame work (motion, timelines, scheduling, collection admission, settled sampling and clocks) shares one native subscription while active, and none when all work is idle.
+Active runtime frame work shares one native subscription. This includes motion, timelines, scheduling, collection admission, settled sampling and clocks. Idle work keeps no subscription.
 
 Bind `local Host = runtime.constructors` once and use the host-kind fields directly.
 Reading a field lazily caches its constructor. Calling it builds through the host and the ownership rules of this runtime:
@@ -768,7 +768,7 @@ Three differences apply:
 
 - **`nil` clears.** Setting an attribute to nil removes it. This is also how Compose undoes a binding on a borrowed node when its owner disposes.
 - **Writes deduplicate.** A recompute that produces the value that Compose already wrote reaches no host. `Compose.group` does this for properties. A plain property binding does not.
-- **Names are checked first.** Compose validates every name in the table before it writes any of them, so a bad name leaves the node exactly as it was. The write order is the sorted name order, not the iteration order of the table.
+- **Names are checked first.** Compose checks all attribute names before the first write. An invalid name leaves the node unchanged. Writes follow sorted name order.
 
 These failures apply:
 
@@ -803,7 +803,7 @@ This section also describes the focus, pool and cache helpers.
 
 `show(condition, builder, fallback?) -> directive`
 
-One subtree, present while `condition` is truthy.
+Displays one subtree while `condition` is truthy.
 
 ```luau
 Screen {
@@ -863,7 +863,7 @@ A broken exit must not become a leak.
 
 `switch(source, branches, fallback?) -> directive`
 
-One of several subtrees, chosen by key. A key with no branch mounts `fallback`, or nothing.
+Selects one subtree by key. A key without a branch mounts `fallback`, or nothing.
 This is deliberately not an error. A key space that grows at runtime must degrade to empty and must not crash a frame.
 
 ```luau
@@ -972,7 +972,7 @@ Population changes do not switch the retention policy.
 
 Pass `recycle` instead of `render` to reuse mounted rows.
 `recycle` receives the value, the placement and the key as readables.
-When a key leaves the window and another key enters it, Compose gives the departing row to the arriving key and updates its readables instead of disposing one row and building another.
+When a key leaves the window, Compose can reuse its row for an arriving key. It updates the row's readables instead of destroying and rebuilding the row.
 A key that stays in the window keeps its row.
 Use `recycle` only when the row reads its key and value through these readables and keeps no state that belongs to one key.
 Pass exactly one of `render` and `recycle`.
@@ -1055,7 +1055,7 @@ end
 `follow = "end"` keeps the view at the newest item. It disengages when the reader scrolls away. It stays active when new content arrives.
 
 Scrolling costs the retained slice, not the population. The range is a division for uniform rows and a tree descent otherwise.
-Work that is proportional to the whole list happens when the list changes, which Compose detects by identity, or when it rebuilds measured geometry for changed layout values.
+Work on the whole list occurs when list identity changes or changed layout values require new measured geometry.
 An equivalent layout table does not rebuild geometry.
 
 A change to the measured size of one row is incremental.
@@ -1218,7 +1218,7 @@ An adapter watches `current` and applies native focus, so noninteractive collect
 Returns the index that the rectangle ranking policy of Compose selects for a move from `from`, or `nil` when no candidate lies ahead.
 Rectangles are `FocusRect = { x, y, width, height }`. `direction` is a `FocusDirection`.
 
-- A candidate is ahead when its near edge is past the center of `from` and, unless it overlaps `from` on the cross axis, it ends past the leading edge of `from`.
+- A candidate is ahead if its near edge is past the center of `from`. Without cross-axis overlap, it must also end past the leading edge of `from`.
 - Candidates that overlap `from` on the cross axis rank first, by gap and then by center offset.
 - Next come the candidates whose center lies within 45 degrees of the move, measured from the middle of the leading edge of `from`. They rank by center offset plus 0.028 times their distance along the move.
 - The rest rank last, by center offset divided by `max(distanceAlongMove, 1)^0.15`.
@@ -1270,7 +1270,7 @@ Cache values are not leases. A consumer holds references only while the cache re
 If you add a newer key, the cache can evict a value that a consumer still references.
 
 This is the primitive for expensive, identity-keyed builds that a host must not repeat on every use.
-For example, build one mesh for each distinct item and reuse it for every instance of that item, instead of building it again for each use.
+For example, build one mesh for each distinct item. Reuse that mesh for every instance of the item.
 
 ### `Compose.geometry`
 
@@ -1322,7 +1322,7 @@ Its lifetime is unchanged. If you dispose the component that wrote the portal, C
 
 `boundary(builder, fallback) -> directive`
 
-A subtree that can fail without taking the screen with it.
+Contains subtree failures while the rest of the screen continues to run.
 `fallback(failure, retry)` renders the failure.
 The builder and fallback can return a node or a structural directive.
 Use a directive to group children without a native wrapper.
@@ -1388,7 +1388,7 @@ Disposal clears the values stored on an owner and its link to its parent.
 
 `createSharedResource(factory) -> acquire`
 
-One expensive thing for many consumers. Compose releases it when the last consumer goes.
+Creates a resource that several consumers share. Compose releases it after the last consumer leaves.
 
 ```luau
 local useCatalogue = Compose.createSharedResource(function()
@@ -1415,7 +1415,7 @@ Calling that release twice is safe. If you forget it, the resource stays held fo
 
 ### `Compose.easing`
 
-A frozen table of easing functions: `linear`, and the `in`, `out` and `inOut` variants of `Quad`, `Cubic`, `Quart`, `Quint`, `Sine`, `Expo`, `Circ`, `Back`, `Elastic` and `Bounce`.
+The frozen table contains `linear`. It also contains `in`, `out` and `inOut` variants of `Quad`, `Cubic`, `Quart`, `Quint`, `Sine`, `Expo`, `Circ`, `Back`, `Elastic` and `Bounce`.
 Each takes normalized progress in `[0, 1]`.
 The `Back` and `Elastic` variants can return values outside that range to produce overshoot.
 
@@ -1447,7 +1447,7 @@ Read the preference in your application and write it into a cell.
 
 `registerCodec(typeName, codec) -> ()`
 
-Teaches Compose to animate a type without core ever naming it.
+Registers a datatype codec for animation without a core dependency on that type.
 A codec has `arity`, `encode(value, out)`, `decode(components)` and an optional `normalise(components)`.
 
 ```luau
@@ -1490,7 +1490,7 @@ It clamps a very large delta and does not simulate it. It returns the seconds th
 `springAtRest(state, target, reference, tolerance) -> boolean`
 
 Reports whether the spring has settled close enough to stop simulating.
-"Close enough" is relative to the distance that the spring set out to travel, so a spring that moves a pixel and a spring that moves a thousand settle at the same perceived moment.
+The tolerance is relative to the initial travel distance. Springs with different travel distances can thus settle at the same relative point in their motion.
 
 ### `Compose.springCoefficients`
 
@@ -1556,7 +1556,7 @@ Compose.readWorkCounters().watchRuns   --> 1
 
 `resetWorkCounters() -> ()`
 
-Zeroes every counter.
+Resets every counter to zero.
 
 ### `Compose.setYieldChecking`
 
@@ -1720,7 +1720,7 @@ test.liveNodes()
 test.serialize(test.root)
 ```
 
-The full surface is `adapter`, `root`, `makeNode`, `kindOf`, `propertyOf`, `attributeOf`, `nameOf`, `childrenOf`, `parentOf`, `isAlive`, `handlerCount`, `declareEvent`, `dispatch`, `poke`, `step`, `now`, `failNext`, `clearFailures`, `counts`, `resetCounts`, `liveNodes`, `liveSubscriptions`, `leaked` and `serialize`.
+The scene exposes these members: `adapter`, `root`, `makeNode`, `kindOf`, `propertyOf`, `attributeOf`, `nameOf`, `childrenOf`, `parentOf`, `isAlive` and `handlerCount`. It also exposes `declareEvent`, `dispatch`, `poke`, `step`, `now`, `failNext`, `clearFailures`, `counts`, `resetCounts`, `liveNodes`, `liveSubscriptions`, `leaked` and `serialize`.
 
 It stores attributes for `string`, `number`, `boolean` and `nil`. It refuses anything else with a reason.
 `failNext("setAttribute")` is the exception to the usual meaning of `failNext`.
@@ -1823,7 +1823,7 @@ Read readiness when the difference matters, to hold a first layout or a fade-in.
 
 `usableViewportSize(size, minimumSide?) -> boolean`
 
-The rule that `createViewport` holds to, on its own, for an application that owns its own observation wiring.
+Checks viewport size without creating an observation subscription.
 It is true when `size` is a pair of finite numbers at or above `minimumSide` on both axes. The default is `100`.
 
 ### `ComposeRoblox.preferredInput`
@@ -1838,7 +1838,7 @@ The optional arguments make adapter tests explicit. For ordinary Roblox use, cal
 
 `preferredInputSpec(preferred) -> PreferredInputSpec`
 
-The pure counterpart for style selection.
+Returns style-selection data without an engine dependency.
 It maps a `PreferredInput` enum value to its input class and its stable token: `touch`, `keyboard-and-mouse` or `gamepad`.
 
 ---
@@ -1978,7 +1978,7 @@ Missing required constraint fields and undersized ID lists raise `placement/bad-
 
 `projectTree(plan) -> { documents, order, manifest }`
 
-Turns one declarative mount plan into a Rojo project tree document for each target, plus a manifest of the mounted paths and a digest of that manifest.
+Generates a Rojo project tree document for each target in one mount plan. It also returns a manifest of mounted paths and its digest.
 The function is pure. It reads no files, so the consumer supplies the source facts as data and gets the same result for the same plan.
 
 ```luau
@@ -2020,7 +2020,7 @@ The tagged-table shape names a Rojo type, so `{ Enum = 2 }`, `{ Color3 = { 1, 0,
 A table with two or more keys, or a non-finite number anywhere in the shape, is refused.
 
 A `Target` names the document to write and can take a `variant` and an `identity`.
-Two targets share one mount plan and still differ in their stamped identity, so a build identity is an injected value and not a second generator.
+Two targets can share a mount plan and have different identity values. The caller supplies each build identity to the same generator.
 
 A `Variant` is data:
 
@@ -2028,40 +2028,40 @@ A `Variant` is data:
 - `mounts` adds mounts.
 - `properties` merges properties into a named tree location.
 - `excludeAt` drops a mount by its tree location, `at` plus `name`, and every mount nested under that location. This reaches a mount that carries a class and no path.
-- A mount in `mounts` can set `replace` to overwrite the base mount that already stands at its `at` plus `name` location, instead of raising a duplicate. It refuses when no base mount stands there.
+- A mount in `mounts` can set `replace` to overwrite a base mount at the same `at` plus `name` location. It rejects replacement if no base mount exists there.
 - The base plan never changes, so one target that takes a variant leaves the others alone.
 
 The generator refuses a plan and does not emit a tree that breaks at runtime.
 
-- **Sibling closure.** A mount that declares `siblings` needs every one of those source paths mounted under the same parent, because a mounted module reaches the siblings of its script parent at runtime.
-- **Bare relative requires.** Under the default `requirePolicy` of `alias-only`, the generator refuses a declared request that begins with `./` or `../`, because a relative request breaks when the tree places the module somewhere else. To allow them, set `requirePolicy` to `any`.
-- **Collisions.** The generator refuses each of these cases: two mounts at one tree location, two targets with one name, an identity that lands on an occupied location, an unknown variant, a mount with neither path nor className, and a value that cannot become a property.
+- **Sibling closure.** A mount that declares `siblings` requires all those source paths under the same parent. The mounted module uses those sibling paths at runtime.
+- **Bare relative requires.** The default `requirePolicy` is `alias-only`. It rejects requests that start with `./` or `../`. Relative requests can break when a module moves. Set `requirePolicy` to `any` to allow them.
+- **Collisions.** The generator rejects duplicate mount locations, duplicate target names and identity records at occupied locations. It also rejects unknown variants, mounts without a path or class name, and invalid property values.
 
 `manifest.digest` is 16 lowercase hex characters over the manifest. It is change detection, not cryptography.
 
 ## Design
 
-Require `src/design`. A `Library` supplies `name`, `parameter`, `parameterType`, `prelude`, `returnType`, `readable`, `cell` and `kinds`. Each kind declares `fields`, `children`, a source `call` and `build(props, children, name) -> unknown`. Builders use the supplied runtime under the caller's active owner. They own subscriptions and created nodes; inputs, token tables and mount targets remain borrowed.
+Require `src/design`. A `Library` provides `name`, `parameter`, `parameterType`, `prelude`, `returnType`, `readable`, `cell` and `kinds`. Each kind declares `fields`, `children`, a source `call` and `build(props, children, name) -> unknown`. Builders use the supplied runtime under the active owner. They own subscriptions and created nodes. Inputs, token tables and mount targets stay borrowed.
 
 ### `Design.document`
 
-`new(name, library, rootKind) -> Document` creates a document. Edits return validated copies: `insert(value, library, parentId, kind) -> (Document, id)`, `change(value, library, id, key, Value?)`, `rename(value, library, id, name)`, `move(value, library, id, parentId, before?)`, `remove(value, library, id)`, `setContract(value, library, contract)`, `bind(value, library, id, Bind?)` and `showWhen(value, library, id, inputOrItemField?)`. `content(value, library, id, key, kind)` adds an authored content subtree. `validate(value, library)` refuses invalid fields, bindings, references and structure. Documents contain only plain data, at most 500 nodes and 32 levels.
+`new(name, library, rootKind) -> Document` creates a document. Edits return copies that pass validation. The edit calls are `insert(value, library, parentId, kind) -> (Document, id)`, `change(value, library, id, key, Value?)` and `rename(value, library, id, name)`. They also include `move(value, library, id, parentId, before?)`, `remove(value, library, id)`, `setContract(value, library, contract)` and `bind(value, library, id, Bind?)`. `showWhen(value, library, id, inputOrItemField?)` sets the display condition. `content(value, library, id, key, kind)` adds a content subtree. `validate(value, library)` rejects invalid fields, bindings, references and structure. Documents contain plain data only, with at most 500 nodes and 32 levels. `copy(value)` copies a document. Literal copying, literal validation and sequence lookup remain private implementation helpers.
 
-A field's `type` is `string`, `number`, `boolean`, `choice`, `color`, `vector3`, `value`, `event`, `content`, `node` or `datatype`. `value` accepts plain tables, including attribute maps. `datatype` supplies a `datatype` name, such as `UDim2` or `Enum.AutomaticSize`; literals become constructor calls in emitted source. Kind builders interpret literal representations when rendering a document directly. `tokens = true` permits token bindings. `luauType` on a field annotates emitted table literals; `perRow` makes a literal a row function. `requires` controls dependent fields. `seeds` provides children on insertion.
+A field's `type` is `string`, `number`, `boolean`, `choice`, `color`, `vector3`, `value`, `event`, `content`, `node` or `datatype`. `value` accepts plain tables, including attribute maps. `datatype` supplies a name such as `UDim2` or `Enum.AutomaticSize`. The source writer converts these literals into constructor calls. Kind builders interpret literals during direct rendering. `tokens = true` permits token bindings. `luauType` annotates emitted table literals. `perRow` makes a literal a row function. `requires` controls dependent fields. `seeds` provides children on insertion.
 
-A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can supply fixed `args` and current item `fields`. A `content` field binds a slot input or an authored subtree. `Bind` is `{ from, key, row? }`: `from` names a list input or an enclosing row's list field, `key` names its stable key, and `row` chooses the template child. Other children remain beside the repeated content. Kinds with `children = "template"` receive `rows` and `template` values through the properties named by `source` and `template`.
+A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can provide fixed `args` and current item `fields`. A `content` field binds a slot input or a content subtree. `Bind` is `{ from, key, row? }`. `from` names a list input or the enclosing row's list field. `key` names its stable key. `row` selects the template child. Other children stay beside the repeated content. Template kinds receive `rows` and `template` values through the properties named by `source` and `template`.
 
 ### Design contracts and types
 
 `Contract` is `{ inputs: { Input }, outputs: { Output } }`. An input has `id`, `kind` (`value`, `readable` or `cell`), `type`, optional plain-data `preview`, `required`, `fields` and `luauType`. Input types are `string`, `number`, `boolean`, `color`, `image`, `list`, `record` and `slot`. List and record `fields` recursively declare `{ id, type, fields?, luauType? }`. Emitted list items and nested records retain these shapes.
 
-`luauType` on an input or item field overrides its emitted base type with an identifier or qualified type name, such as `UDim2` or `Controls.Geometry`. `kind` still wraps that type in the library's readable or cell type. The library prelude supplies any named imports. This annotation does not convert previews or runtime values. Slot inputs require `kind = "value"`, use `() -> <library.returnType>` and refuse `luauType` overrides. Invalid type paths refuse validation.
+`luauType` overrides the emitted base type of an input or item field. It accepts identifiers and qualified type names, such as `UDim2` and `Controls.Geometry`. `kind` still wraps that type in the library's readable or cell type. The library prelude provides named imports. This annotation does not convert previews or runtime values. Slot inputs require `kind = "value"` and use `() -> <library.returnType>`. They reject `luauType` overrides. Validation rejects invalid type paths.
 
 An output has `id`, optional `args: { InputType }` or `row` naming a list input with fields. Outputs emit optional typed callbacks; a row output receives the exported list item type. An output marker inside a literal is `{ ["$output"] = "onPick", ["$row"] = true }` to pass the current row. Slots and outputs keep behavior in the consumer while the document owns structure.
 
 ### `Design.emit`
 
-`emit(document, library, options?) -> string` writes a typed Luau component and its plain-data contract header. `parse(source, library) -> Document` reads that source without executing it. Supported edits round trip through both. `literal(value) -> string` and `parseLiteral(text) -> Literal` convert plain data. Invalid source or literals raise.
+`emit(document, library, options?) -> string` writes a typed Luau component and its plain-data contract header. The parser reads it without execution. Supported edits keep the same result after writing and reading. The literal functions convert plain data. Invalid source or literals raise an error.
 
 `EmitOptions` accepts `name`, `rowFunctions`, `localControls`, `controls`, `propsType` and `prelude`. The generated component accepts the library controls parameter and typed `Props`. Readable inputs pass directly to controls. `library.show` and `library.keyed` name structural functions in generated source. A `library.token` ending in `.` writes token paths (`Tokens.font.title`); other token names become resolver calls. Token tables belong to the consumer and may contain host datatypes and reactive values. Attributes use an ordinary `value` field forwarded by the kind to the runtime's reserved `Attributes` property; Design adds no host attribute policy.
 

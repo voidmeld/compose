@@ -1,8 +1,9 @@
 # Build-time authoring
 
-The `authoring` package of Compose validates content tables and generates build artifacts. These include source modules, layout sheets and Rojo project trees.
-Use it from build tools, outside the application runtime.
-The application supplies entries with semantic IDs. The package checks and transforms those declarations.
+The `authoring` package checks content tables and generates files.
+Its outputs include source modules, layout sheets and Rojo project trees.
+Use it in build tools, outside the application runtime.
+The application provides entries with semantic IDs.
 
 ```luau
 local Author = require "./path/to/authoring"
@@ -22,8 +23,8 @@ local ok, violations = Author.validate(props, {
 })
 assert(ok, tostring(#violations) .. " content violations")
 ```
-
-Run the script with `lute run yourscript.luau`. Requires resolve relative to that script.
+Run your script with `lute run yourscript.luau`.
+Requires resolve relative to that script.
 
 ## Choose an operation
 
@@ -38,36 +39,39 @@ Run the script with `lute run yourscript.luau`. Requires resolve relative to tha
 | Render a plan for inspection | [Layout sheets](#layout-sheets) |
 | Generate runtime data or attribute application | [Registry modules](#the-generated-registry-module) and [data modules](#the-generated-data-module) |
 
-This guide owns the bake output formats and the build-time boundaries. The API reference owns the other public calls.
-The application verifies generated output through its build and runtime tests.
+This guide defines bake output formats and build-time boundaries.
+The API reference defines the other public calls.
+The application must check generated output with build and runtime tests.
 
 ## Compile a layout
 
-1. Pass the authored placement rules to `Author.placement.resolve`.
-2. Check the resulting positions with `Author.placement.check`.
-3. Emit the data that the application consumes.
+1. Pass placement rules to `Author.placement.resolve`.
+2. Check the positions with `Author.placement.check`.
+3. Emit the data for the application.
 
-A layout sheet provides a 2D view for inspection.
-The application supplies content, distances and constraints. Compose resolves generic geometry without engine state or application rules.
-
-[The placement API](../docs/api.md#authorplacement) owns the rule schema, the coordinate spaces and the refusals.
-Keep one authored plan and regenerate its outputs. Do not edit the outputs separately.
+The application provides content, distances and constraints.
+Compose resolves geometry without engine state or application rules.
+The [placement API](../docs/api.md#authorplacement) defines rule shapes, coordinate spaces and errors.
+Keep one source plan.
+Regenerate its outputs after changes.
+Do not edit generated files separately.
 
 ## Attribute plans
 
 `Author.bake.attributePlan(entry, mapping)` returns `{ { key, value } }` in mapping order.
 A mapping row is `{ field = "size", attribute = "Size", optional = true }`.
-An absent optional field is skipped. An absent required field refuses.
-To emit application code, use the same mapping with `registryModule`.
+The bake skips absent optional fields and rejects absent required fields.
+Use the same mapping with `registryModule` to generate application code.
 
 ## Layout sheets
 
-`Author.bake.layoutSheet(spec)` creates an SVG from a selected 2D view of an authored plan.
-Use the sheet to inspect the plan during builds and edits. The plan remains authoritative.
-You can compare the deterministic sheet with the actual placement or with native captures.
+`Author.bake.layoutSheet(spec)` creates an SVG from a 2D view of a plan.
+Use it to inspect the plan during builds and edits.
+Compare the sheet with actual placement or native captures.
+The source plan remains the authority.
+The application can project 2D or 3D data into sheet entries without changing that plan.
 
-A consumer can project 2D or 3D plan data into sheet entries without changing the source representation.
-The specification names a coordinate space, a unit, positive bounds, a positive scale and an `Author.set`.
+The specification names a coordinate space, unit, positive bounds, positive scale and an `Author.set`.
 Each entry has a `kind`: `rect`, `point` or `polyline`.
 
 ```luau
@@ -88,56 +92,62 @@ local sheet = Author.bake.layoutSheet {
     },
 }
 ```
-
 The returned `transform` is `{ scale, offsetX, offsetY, width, height }`.
-Input coordinates map as `sheetX = x * scale + offsetX` and `sheetY = y * scale + offsetY`.
+Coordinates map through `sheetX = x * scale + offsetX` and `sheetY = y * scale + offsetY`.
 
-- The header, the margin and the legend have fixed dimensions. A change of labels therefore does not move geometry.
+- Header, margin and legend sizes stay fixed. Label changes do not move geometry.
 - Entries render in semantic-ID order with transparent footprints.
-- After the geometry, the sheet adds numbered marks and matching legend rows for labeled entries. This exposes nested boundaries and dense points without a packing solver.
-- The bake refuses duplicate IDs, mixed coordinate spaces, unknown kinds, non-finite geometry, nonpositive extents and polylines with fewer than two points.
-- The bake does not solve a layout, place content, traverse terrain or UI, or establish a runtime registry.
+- Numbered marks and matching legend rows follow the geometry. They identify nested boundaries and dense points without a packing solver.
+- The bake rejects duplicate IDs, mixed coordinate spaces, unknown kinds, non-finite geometry and nonpositive extents.
+- A polyline requires at least two points.
+- The bake does not resolve layouts, place content, walk terrain or UI, or create a runtime registry.
 
 ## Build-time boundary
 
-Keep authoring work outside the application runtime:
+Authoring emits plans and source files.
+It does not create live services, runtime metadata hosts or mount hooks.
+A generated directive is source that the application ships.
+Core does not depend on this package.
 
-- **No runtime metadata hosts.** Authoring emits plans and source. It does not create a service or a live registry for scenes to query.
-- **No mount hooks.** Nothing here runs inside a Compose mount. A generated directive is inert source that the application ships. Compose does not know that this package exists.
-- **No per-node manifests.** Semantic meaning belongs to the entries in a declared set. Do not create a second scene graph through node-specific manifests.
-- **Queries read authored data.** Coverage checks declarations without executing application scripts.
-- **No exports from `src/`.** Authoring requires nothing from `src/core` and re-exports nothing of it. The one seam that a generated module shares with Compose is structural: the documented mount-point `parent` field.
+Keep semantic meaning in declared set entries.
+Do not create a second scene graph with per-node manifests.
+Coverage reads declarations without executing application scripts.
+Authoring imports and exports nothing from `src/core`.
+Generated directives use only the documented mount-point `parent` field.
 
-`tools/compose-check.luau` reports runtime imports of this package as `CMP032`.
-It reports manual edits to a generated `registryModule` as `CMP033`. See [`../docs/api.md`](../docs/api.md).
+`tools/compose-check.luau` reports runtime authoring imports as `CMP032`.
+It reports manual changes to generated registry modules as `CMP033`.
+See the [API reference](../docs/api.md).
 
 ## The generated registry module
 
-`Author.bake.registryModule` writes strict Luau without dependencies. It generates these items:
+`Author.bake.registryModule` writes strict Luau without dependencies.
+It generates:
 
-- A `PLAN` table keyed by ID, and the attribute-to-entry mapping.
+- A `PLAN` table keyed by ID and an attribute-to-entry mapping.
 - `planFor(id)`, which rejects unknown IDs.
 - `apply(id, setAttribute)`, which returns a Compose directive.
 
-The directive applies the plan to `mountPoint.parent` through the setter that you supply.
-The generated header names the generator and the input digests. They identify whether the input changed.
-
-The setter that you pass is usually the setter of the host.
-On a runtime whose host implements `render.setAttribute`, `host.render.setAttribute` is the correct argument.
-For attributes that you write by hand instead of baking, the node prop is shorter. See [`../docs/api.md`](../docs/api.md#attributes).
+The directive applies a plan to `mountPoint.parent` through the supplied setter.
+The header records the generator and input digests for change detection.
+For a host with `render.setAttribute`, pass `host.render.setAttribute` as the setter.
+For attributes written by hand, use the [Attributes property](../docs/api.md#attributes).
 
 ## The generated data module
 
-`Author.bake.dataModule { name, idKey, entries }` writes a strict Luau module without dependencies.
-The module returns records keyed by ID. Records and their fields use sorted key order.
-A field can contain a string, a finite number, a boolean or a nested table of those values.
-This preserves structured data without flattening it into scalar attribute rows.
+`Author.bake.dataModule { name, idKey, entries }` writes strict Luau without dependencies.
+The module returns records keyed by ID, with sorted record and field keys.
+Values can be strings, finite numbers, booleans or nested tables of those values.
+It preserves structure without converting tables into scalar attribute rows.
 
-The output contains the strict directive, the types and the data. It has no commentary and no digest header.
-To detect stale output, compare it with a fresh bake.
-The bake refuses before it writes anything if a field value is not serializable, if an ID is duplicate, or if an entry lacks its ID field.
+The output contains the strict directive, types and data.
+It has no commentary or digest header.
+Compare it with a fresh bake to detect stale output.
+The bake rejects invalid values, duplicate IDs and missing ID fields before it writes output.
 
 ## Verification
 
-The tests for set, coverage, validation, digest, registry, data module, placement and project tree refute malformed content and nondeterministic output.
-Use the focused tests while you edit. For final integration, follow [AGENTS](../AGENTS.md).
+Tests cover sets, coverage, validation, digests, registry modules, data modules, placement and project trees.
+They reject invalid content and check repeatable output.
+Use focused tests during edits.
+Follow [the maintainer guide](../AGENTS.md) for integration checks.

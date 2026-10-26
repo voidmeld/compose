@@ -1,194 +1,177 @@
-# Cells, formulas, watches and reactors
+# Reactive state
 
-Cells, formulas and watches represent application values. Reactors schedule their updates.
-
-`Cell<T>` can be passed directly to APIs that accept `Readable<T>`.
-Its `peek` method uses the readable receiver type. `set` and `update` keep the writable cell contract.
-The application supplies the scheduling triggers and decides how to organize state.
+Cells hold state. Formulas calculate values from other state.
+Reactors schedule updates. The application supplies the events that change state.
 
 ## The protocol
 
-Two things hold a value, and one function reads them.
+A reactive function receives `use`. Each `use(value)` call records a dependency.
+Formulas, watches, property bindings and structural sources use this protocol.
+Use `value:peek()` for a read that must not record a dependency.
 
 ```luau
 local progress = Compose.cell(100)
 local percent = Compose.formula(function(use)
     return use(progress) / 100
 end)
-
 runtime:watch(function(use)
     print(use(percent))
 end, "progress readout")
-
 progress:set(90)
 progress:update(function(value) return value - 10 end)
-progress:peek()   --> 80
 ```
 
-Each reactive body receives `use`. This includes formulas, watches, bound properties and structural sources.
-A call to `use` records a dependency. For an intentional untracked read, use `:peek()`.
+A source is a readable or a function that calculates a value.
+A cell satisfies the readable protocol. Its setter methods keep the writable cell contract.
 
-A `Source` is a cell, a formula or a body that computes a value.
+- Bind a readable directly with `Text = progress`.
+- Transform it with `Text = function(use) return use(progress) .. "%" end`.
 
-- To bind a readable directly, use `Text = progress`.
-- To transform its value, use `Text = function(use) return use(progress) .. "%" end`.
-
-`Compose.sharedCell` declares intentionally shared state at module scope. It needs no owner and behaves like `cell` at runtime.
-
-`Compose.accumulator` tracks one source and reduces each change into its own readable state.
-It reads its previous state without tracking that read, so its own update cannot trigger it again.
-The [API reference](api.md#composesharedcell) documents both constructors.
-Consumer diagnostics recognize these forms and report equivalent manual constructions.
+`Compose.sharedCell` declares state that all users of a module share.
+It needs no owner and has the same runtime behavior as `cell`.
+`Compose.accumulator` reduces each observed source change into readable state.
+Its previous-state read records no dependency, so its update cannot trigger itself.
+The [API reference](api.md#composesharedcell) gives both contracts.
+The consumer checker detects equivalent manual forms.
 
 ## Nodes, consumers and edges
 
-The graph contains producers, consumers and dependency edges. See [`../src/core/reactive/graph.luau`](../src/core/reactive/graph.luau).
+The [reactive graph](../src/core/reactive/graph.luau) has producers, consumers and dependency edges.
 
-- A **producer** holds a value and a version. The version advances when the value changes.
-- A **consumer** reads producers and receives change notifications.
-- A formula has both roles. A cell is a producer. A watch is a consumer.
-- An **edge** joins the doubly-linked subscriber list of the producer and the dependency array of the consumer. The array follows read order.
+- A producer holds a value and a version.
+- A consumer reads producers and receives change notifications.
+- A cell is a producer. A watch is a consumer. A formula has both roles.
+- An edge joins a producer's subscriber list to a consumer's dependency array.
 
-Removing an edge from the subscriber list costs O(1). New edges append to that list, so notifications follow first-read order.
+The subscriber list links each entry to its previous and next entry.
+Removal costs O(1). New entries go at the end.
+Notifications follow first-read order. The dependency array also follows read order.
 
 ### Subscription lifetime
 
-Every edge is strong in both directions.
+An edge keeps both ends alive.
+A watch releases its edges on disposal.
+Later reads in the same callback return current values without recording dependencies.
+A new watch run also removes dependencies that it no longer reads.
+Direct and fused bindings share subscriptions until their last listener leaves.
 
-- A watch releases its subscriptions when it is disposed.
-- Reads that continue in the same callback after disposal return current values. They do not attach dependencies.
-- Direct and fused bindings detach their shared subscription when their last listener is removed.
-- If a watch runs again, it also detaches the dependencies that its body no longer reads.
+An owner keeps its watch alive without a separate retained handle.
+Call the returned disposer to stop a watch early.
+Owner disposal releases it without waiting for garbage collection.
 
-A watch does not need a retained handle. Its owner controls its lifetime.
-To stop a watch early, call the disposer that `runtime:watch(...)` returns.
-Owner disposal releases the watch without waiting for garbage collection.
+A formula created under an active owner belongs to that owner.
+Outside an owner, call `formula:dispose()` when its lifetime ends.
+Disposal releases upstream dependencies permanently.
+Later reads raise `reactive/disposed-formula`.
+A read of an existing formula does not transfer ownership.
 
-- Formulas that you create inside an active owner share its lifetime.
-- Formulas that you create outside an owner need an explicit `:dispose()` when their lifetime ends.
-- Disposal permanently releases the upstream dependencies. A later read raises `reactive/disposed-formula`.
-- Reading a formula does not transfer its ownership.
-
-The optional second argument names an explicit watch in a running causal profile.
-It turns a synthetic row such as `watch#101` into an operation name. It does not retain a watch handle and does not add a second lifetime mechanism.
+An optional watch label names its row in a causal profile.
+It does not create a separate lifetime or retain a watch handle.
 
 ### Re-reading the same shape allocates nothing
 
 On each run, the consumer reads its dependency array in order.
-`use(x)` reuses the edge at the current position if that edge already points to *x*.
-At the first mismatch, Compose detaches and rebuilds the remaining edges.
-An unchanged read sequence reuses every edge.
+`use(x)` reuses the current edge if it already points to `x`.
+At the first mismatch, Compose removes and rebuilds the remaining edges.
+An unchanged read order reuses all edges.
 
 ## Change propagation
 
-A changed write advances the version of the cell and visits its subscribers.
+A changed write advances the cell version and visits its subscribers.
 It marks direct dependents `DIRTY` and indirect dependents `CHECK`.
-Each affected watch enters the queue of its reactor. Evaluation occurs when a read or a queue drain requests it.
+Each affected watch enters its reactor queue.
+A read or queue drain requests evaluation.
 
-`CHECK` means that a dependency might have changed.
-Compose refreshes each dependency and compares its version with the last observed version.
-If no version changed, the consumer returns to `CLEAN` without running. This prevents redundant evaluation in diamond-shaped graphs.
+For `CHECK`, Compose refreshes each dependency and compares versions.
+If no version changed, the consumer returns to `CLEAN` without evaluation.
+This avoids repeated evaluation in diamond graphs.
 
-A formula publishes a new `version` only when its computed value changes.
-A recomputation that produces an equal value leaves the version alone, so downstream consumers return to `CLEAN` without running.
-A filter that returns an equal list stops the cascade there.
+A formula advances its version only when its result changes.
+An equal result lets downstream consumers return to `CLEAN` without evaluation.
+Thus a filter that returns an equal list stops further propagation.
 
 ## Reactors
 
-A **reactor** has its own queue, batch depth and drain. Each runtime owns a separate reactor.
+Each reactor has its own queue, batch depth and drain operation.
+Each runtime owns a separate reactor.
 `Compose.createOwner(reactor)` assigns an owner to an existing reactor.
-The batch of one runtime does not defer the watches of another runtime.
-An error in one reactor does not prevent another reactor from draining.
+A batch or failure in one reactor does not block another reactor.
 
 ```luau
-runtime:batch(function() ... end)  -- watches deferred until it returns; nests
-runtime:settle()                   -- run everything pending; a no-op inside a batch
-runtime:pending()                  -- how many watches are waiting
+runtime:batch(function() ... end)
+runtime:settle()
+runtime:pending()
 ```
 
-Several reactors can read the same cell.
-A write outside a batch settles every affected reactor, even if one raises. Compose reports the collected failures afterwards.
+`batch` defers queued watches until its outermost call ends.
+`settle` runs pending work. It does nothing inside a batch.
+`pending` counts queued watches.
 
-A **cell belongs to no reactor and no runtime**. A cell is a value with subscribers. A write to a cell settles every reader of that cell.
-A shared model is the set of cells that an application reads from several trees.
+A cell belongs to no reactor or runtime.
+Several reactors can read it.
+A write outside a batch settles all affected reactors, even if one fails.
+Compose then reports the collected failures.
+To batch several runtimes, call each runtime's `batch` operation.
 
-- Give that model an owner that you create outside all of those trees, with `Compose.createRootOwner`.
-- Dispose the owner after the trees.
-- If you dispose the model first, the trees keep reading cells that nothing writes again.
-
-Batching is not process-wide. Each reactor tracks its own batch state, so `runtime:batch` defers the watches of that runtime only.
-To batch several runtimes together, call the `batch` of each one. Otherwise a write settles each affected reactor in turn.
+For a shared model, create a root owner outside its scene trees.
+Dispose that owner after the trees.
+Otherwise, the trees can keep reading cells that no code updates.
 
 ### One clock for several runtimes
 
-A frame clock is a host capability, not a runtime argument. A host can carry `frames = { onFrame, now }`.
-Everything that moves reads the clock from the host that it was built on:
+A host supplies `frames = { onFrame, now }`.
+Animation and collection admission use that host clock.
+Runtimes share a clock when they share a host.
+Pass the same host to each `Compose.createRuntime` call to share it.
 
-- springs
-- tweens
-- timelines
-- collection admission
+`ComposeRoblox.createRuntime()` reuses one cached ambient host.
+An explicit engine argument creates a fresh host.
+Use that argument when the hosts must stay independent.
+The Roblox host selects its native frame source.
 
-Several runtimes therefore share one clock when they **share one host**.
-To share a host, pass the same host value to each `Compose.createRuntime`.
-On Roblox, call `ComposeRoblox.createRuntime()` with no engine. Each such call reuses one memoized ambient host, which holds one Heartbeat connection.
-
-The host owns the signal. Each consumer that needs frames takes its own listener on the host.
-The consumer releases that listener when its owner is disposed, so the host holds no listener after the last consumer goes.
-The host calls the listeners in the order in which it took them.
-That order fixes the tick order of the runtimes that share the clock. The runtime that subscribed first moves first, on every frame.
-`tests/lifecycle/shared-frames.verify.luau` pins all three behaviors.
-
-`ComposeRoblox.createRuntime(engine)` with an explicit engine builds a fresh host, and therefore a second Heartbeat connection.
-Pass an explicit engine only when the two trees must stay independent.
+The host owns the frame signal.
+Each consumer releases its listener when its owner ends.
+The host keeps no listener after the last consumer leaves.
+Listeners run in subscription order, which fixes runtime tick order.
+[The shared-frame tests](../tests/lifecycle/shared-frames.verify.luau) check these rules.
 
 ### The contract
 
-The contract, in order of importance:
+1. Queued watches observe coherent state after the outermost batch ends.
+2. Several dependency changes share one queue entry until that watch runs.
+3. A write during a watch can queue it again in the same drain.
+4. A failure clears the queue and batch flag before Compose reports it.
+5. A cascade above the run limit raises an error.
+6. A failed formula raises again until a dependency changes.
 
-1. Watches observe coherent state. Inside a batch, nothing runs until the body returns.
-2. Multiple dependency changes coalesce while a watch is queued. A write during execution can queue the watch again in the same drain.
-3. Batches nest. Only the outermost batch drains.
-4. A user error does not block future work. Compose clears the queue and releases the batch flag before it reports the error.
-5. A watch can write. The watches that it wakes run in the same drain. A cascade that exceeds the run limit raises an error.
-6. A formula whose body raises raises again on every read until a dependency changes, and then recomputes. Formulas and watches that read it keep that dependency, so they recover with it.
+Formulas and watches retain their dependency on a failed formula.
+They recover when that dependency changes.
 
 ### A batch is not a transaction
 
-If a batch body raises, its completed writes remain. Watches that observe those writes still run.
-A batch does not roll back state.
+If the batch body fails, completed writes remain.
+Watches still observe them. A batch does not restore previous state.
 
 ## Versions come from a counter, not a clock
 
-Version changes use a strictly increasing integer counter. They do not depend on elapsed time.
-A formula advances its version only when its computed value changes.
-`tools/check-boundary.luau` rejects `os.clock` in core.
+Versions use an increasing integer counter.
+A formula advances its version only when its result changes.
+[The boundary check](../tools/check-boundary.luau) rejects `os.clock` in core.
 
 ## Measuring work
 
-- To count completed and avoided work, use [work counters](api.md#composesetworkcounters).
-- To trace a write through formulas, watches and host updates, use [the causal profiler](api.md#composeprofile).
-- For timing, follow [the benchmark procedure](benchmarks.md).
-
-Counts alone do not establish an improvement in speed.
+Use [work counters](api.md#composesetworkcounters) to count completed and avoided work.
+Use the [causal profiler](api.md#composeprofile) to follow writes through updates.
+Use the [benchmark procedure](benchmarks.md) to measure time.
+Counts alone cannot show a speed improvement.
 
 ## The guarantees, and where tests pin them
 
-[`../tests/reactive/contract.verify.luau`](../tests/reactive/contract.verify.luau) states the everyday shape of each primitive:
-laziness, equality suppression, supplied comparisons, formula caching, diamond deduplication, chain settling, untracked reads, ownership and nested batching.
-[`../tests/reactive/shared-cell.verify.luau`](../tests/reactive/shared-cell.verify.luau) checks that shared cells behave like cells.
+| Tests | Contract |
+| --- | --- |
+| [Reactive contract](../tests/reactive/contract.verify.luau) | Lazy evaluation, equality, caching, dependency tracking, ownership and batches. |
+| [Shared cells](../tests/reactive/shared-cell.verify.luau) | Shared cells behave like cells. |
+| [Accumulator](../tests/reactive/accumulator.verify.luau) | Reduction order, batches, equality, disposal and recovery. |
+| [Failure cases](../tests/reactive/falsifiers.verify.luau) | Changing dependencies, independent runtimes, repeated writes, disposal during a drain and recovery. |
 
-[`../tests/reactive/accumulator.verify.luau`](../tests/reactive/accumulator.verify.luau) states the contract of the accumulator:
-eager reduction, event order, batch coalescing, output suppression, disposal and recovery after a reducer raises.
-It also checks that the accumulator cannot trigger itself.
-
-[`../tests/reactive/falsifiers.verify.luau`](../tests/reactive/falsifiers.verify.luau) covers additional failure cases.
-Each check can detect a specific implementation defect.
-
-- **Dynamic dependency churn.** Reads from abandoned branches stop receiving notifications. Dependencies can grow, shrink and change order.
-- **Lifetime without a retained handle.** The watch survives garbage collection without a retained disposer. Owner disposal stops it.
-- **Independent runtimes.** A batch or watch failure in one reactor does not prevent another reactor from settling.
-- **Re-entrant writes.** A watch that writes to something that it reads runs again, including from inside its own first run. This case fails if Compose clears the stale flag after the body instead of before it.
-- **Dispose during a drain.** A watch that an earlier watch tears down in the same drain does not run.
-- **Recovery after an abandoned drain.** The cascade bound clears the queue and leaves its watches stale. The next write must still mark them.
-- **Standing graph memory.** Every edge comes back when a subtree is released. A body that reads the same shape again does not accumulate edges.
+The failure cases also check graph memory after disposal and repeated reads.

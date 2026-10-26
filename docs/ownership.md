@@ -1,301 +1,175 @@
 # Ownership
 
-This guide governs a component that creates, adopts, borrows or cleans up a resource.
-Compose uses ownership to decide which resources it disposes.
-
-## Disposal rule
-
-**Compose destroys nodes that it creates or explicitly adopts. It preserves borrowed nodes.**
+Ownership determines which resources Compose releases.
+Compose destroys nodes that it creates or adopts. It preserves borrowed nodes.
 
 ## Node custody
 
-| Custody | How a node gets it | Destroyed on disposal? |
+| Custody | Source | Destroyed on disposal? |
 | --- | --- | --- |
-| `owned` | A runtime constructor made it. | yes |
-| `adopted` | You called `runtime.adopt(node)`. | yes |
-| `borrowed` | Every other case, including anything that Compose has never seen. | **no** |
+| `owned` | A runtime constructor created the node. | Yes |
+| `adopted` | The application called `runtime.adopt(node)`. | Yes |
+| `borrowed` | All other nodes, including unknown nodes. | No |
 
-An unrecognized node is `borrowed` by default.
-This default prevents Compose from destroying a node that another system owns.
-Examples are an external mount target, a model, a service and a shared layer.
+`Compose.custodyOf(node)` returns the custody.
+Compose stores custody with weak keys. The record does not keep the node alive.
 
-```luau
-Compose.custodyOf(node)   --> "owned" | "adopted" | "borrowed"
-```
-
-Custody lives in a weak-keyed table, so recording it never keeps a node alive.
-
-### `adopt` and `borrow` are both explicit
-
-```luau
-runtime.adopt(existingNode)    -- "destroy this when I go"
-runtime.borrow(existingNode)   -- "never destroy this"  (already the default; say it when
-                               --  the intent matters to a reader)
-```
-
-`adopt` refuses a node that Compose already owns. A node has exactly one owner, and a second adoption would destroy the node twice.
+Use `runtime.adopt(node)` to transfer responsibility for destruction to Compose.
+Use `runtime.borrow(node)` to return custody to the external owner.
+An unknown node is already borrowed. An explicit `borrow` call can make this decision clear.
+`adopt` rejects a node that Compose already owns. Each node has one owner.
 
 ### A mount target keeps the custody it has
 
-`runtime.mount` and `runtime.mountFragment` take a target node. An external target is usually borrowed.
-A component can also mount into a container that it creates or adopts.
+`runtime.mount` and `runtime.mountFragment` preserve target custody.
+The owner of an owned or adopted target still destroys that target.
 
-Mounting preserves the custody of the target.
-An `owned` or `adopted` container stays registered for destruction with its owner.
-If Compose changed it to `borrowed`, the container would outlive its tree.
+- Compose releases the mounted block before it destroys the target.
+- Disposal of only the block preserves the target and its other children.
+- Inside a mount, the active owner controls disposal order.
+- Outside a mount, Compose registers the block against its target.
+- Before target destruction, Compose releases those blocks, newest first.
+- The block's disposer removes that registration and preserves target custody.
 
-- Compose disposes the mounted block before it destroys the container.
-- If you dispose only the block, the container and its other children stay.
-- Inside a mount, the active owner controls the disposal order.
-- Outside a mount, the target still belongs to the scope that created or adopted it. Compose registers the mounted block against that target node.
-- Before Compose destroys the target, it disposes the mounted blocks of the target, newest first.
-- If you call the own disposer of a block, Compose removes that block and preserves the custody of the target.
-
-A portal has different custody. `Compose.portal` marks its target borrowed.
+`Compose.portal` makes its target borrowed.
 Use a portal for a layer that another system owns.
-To mount into a container that your tree owns, mount directly. A portal would demote the container to borrowed and prevent its destruction.
-The [mount-target example](../examples/mount-target.luau) exercises owned and adopted targets.
+Mount directly into a container that your tree owns.
+A portal would prevent Compose from destroying that container.
+The [mount-target example](../examples/mount-target.luau) checks these rules.
 
 ### Subscriptions are always owned
 
-If you observe or connect to a borrowed object, you own only the resulting subscription.
-The object survives. The subscription does not.
-
-```luau
-runtime.decorate(playerGui.Overlay, {
-    [Compose.event("Changed")] = onChanged,
-    BackgroundTransparency = 0.5,
-})
-```
-
-On disposal, Compose releases the connection and **clears the property to its default**. It does not destroy `playerGui.Overlay`.
-Compose clears the properties that it wrote on borrowed nodes. It skips this step for owned nodes, because it destroys them instead.
+Observation of a borrowed node owns the subscription, but keeps the node borrowed.
+`runtime.decorate` binds properties and events to an existing node.
+Disposal releases those subscriptions.
+On a borrowed node, it also resets each written property to the class default.
+It does not restore the previous value.
+Compose destroys owned nodes instead of resetting their properties.
 
 ## Owners
 
-An owner is a list of disposers, with the guarantee that each disposer runs exactly once.
+An owner stores cleanup functions.
+`Compose.createOwner(reactor?)` creates an owner.
+`Compose.owner.own(owner, cleanup)` registers cleanup and returns a detach function.
+`Compose.owner.createChild(owner)` creates a child owner.
+`Compose.owner.watch(owner, body)` registers a watch.
+`Compose.owner.dispose(owner)` releases all registrations, newest first.
 
-```luau
-local owner = Compose.createOwner()
+Each cleanup function runs once, including after repeated disposal or detach calls.
+Early disposal of a child removes its parent registration.
+The owner removes a registration before it calls its cleanup function.
+Thus a subscription registered after its node ends before node destruction.
 
-local detach = Compose.owner.own(owner, function() ... end)   -- register; returns a detach
-Compose.owner.watch(owner, function(use) ... end)    -- a watch held by this owner
-local child = Compose.owner.createChild(owner)              -- nests
-
-Compose.owner.dispose(owner)   -- releases everything, newest first, exactly once
-```
-
-Owners guarantee two behaviors.
-
-**Exactly once.** Each resource is released once, even if you call disposal or detach again.
-If you dispose a child and then its parent, the parent does not release the resources of the child twice.
-The owner removes each entry before it calls the entry.
-
-**Reverse order.** The owner releases the newest registration first.
-A subscription that you register after its node is released before that node. This prevents events from reaching a destroyed node.
-
-Disposal continues after an error.
-
-- If a disposer raises, the owner runs the remaining disposers and reports all errors together.
-- If a disposer registers another disposer during that teardown, the owner runs the new disposer immediately. The owner skips no disposer.
-- If exactly one disposer fails, the owner raises that failure again with its original value and no added position.
-- If several disposers fail, the owner raises one summary that names each failure.
-
-### Registering after disposal
-
-An already disposed owner calls a newly registered disposer immediately.
-This can happen when an asynchronous callback creates a resource after its tree has been disposed.
-
-```luau
-Compose.owner.dispose(owner)
-Compose.owner.own(owner, function() print("released") end)   --> prints immediately
-```
+Disposal continues after a failure.
+If one cleanup fails, the owner raises that original failure without a new position.
+If several fail, it raises one summary with all failures.
+A cleanup registered during disposal runs immediately.
+A cleanup registered after disposal also runs immediately.
 
 ### Checkpoints
 
-```luau
-local mark = Compose.owner.checkpoint(owner)
--- ... register things ...
-Compose.owner.rollbackTo(owner, mark)   -- releases exactly those, newest first
-```
-
-A failed `create` uses a checkpoint to release the resources that it registered during that attempt.
-The checkpoint avoids a separate child owner for each node construction.
+`Compose.owner.checkpoint(owner)` records the current registrations.
+`Compose.owner.rollbackTo(owner, mark)` releases registrations after that checkpoint, newest first.
+A failed node construction uses this operation to release resources from that attempt.
 
 ## The ambient owner
 
-`create`, `cleanup`, `watch` and the structural primitives register with the active owner.
-A mount activates its owner, so components do not pass an owner to every call.
-
-A watch body activates a scope for that run.
-Before you allocate resources in a reactive body, read the [watch cleanup contract](api.md#composecleanup). Those resources have a shorter lifetime than the watch itself.
-
-`Compose.withOwner` explicitly activates an owner for a body.
-It ends that activation whether the body returns or raises.
-
-```luau
-local owner = Compose.createOwner()
-Compose.withOwner(owner, function()
-    Compose.watch(function(use) ... end)
-end)
-Compose.owner.dispose(owner)
-```
+Node construction, cleanup, watches and structural directives use the active owner.
+A mount activates its owner while it builds content.
+`Compose.withOwner(owner, body)` activates an explicit owner until the body returns or raises.
+A watch activates a scope for each run.
+Resources created during that run follow the [watch cleanup contract](api.md#composecleanup).
 
 ### Which owner is active, exactly
 
-An activation belongs to the thread that opened it. "Active" is therefore answered for each thread, not for the process.
+Each thread has its own activation.
+Compose selects the owner in this order:
 
-1. The innermost activation that the **running thread** opened, if it has one.
-2. Otherwise, an unambiguous owner from the threads that **resume** this one. Only the innermost activation of each thread participates. This is how a task body that Compose resumed registers with the owner that resumed it. User functions under `Compose.setYieldChecking(true)` are included.
-3. Otherwise, nothing is active, and every refusal in the table below applies.
+1. Use the innermost activation on the running thread.
+2. Otherwise, use an unambiguous owner from the threads that resume it.
+3. Otherwise, apply the missing-owner rules below.
 
-A suspended component keeps its owner when it resumes.
-Another mount can run during the suspension without changing that ownership.
-Each thread has its own activation. If you dispose one mount, you do not dispose the nodes or connections of another mount.
+Only the innermost activation of each resuming thread participates.
+This includes user functions under `Compose.setYieldChecking(true)`.
+Luau reports resuming threads as `normal`, but does not give their order.
+Different owners on those threads cause `owner/no-active-owner`.
+An explicit activation on the running thread resolves that ambiguity.
 
-The reactive evaluation context also belongs to its coroutine and resume chain.
-An independent callback cannot borrow the owner or the dependency tracking of a suspended run.
-An explicit owner that you activate inside a run takes precedence until that activation ends.
-Activations on unrelated suspended threads do not affect that choice.
-A failure unwinds only the evaluation context of the failing coroutine.
+A suspended component keeps its owner after resumption.
+Other mounts do not change that ownership.
+The reactive evaluation context follows the same thread and resume chain.
+An independent callback cannot inherit a suspended run's owner or dependency tracking.
+A failure releases only the failing coroutine's evaluation context.
 
-Rule 2 applies only within a resume chain. A thread inherits when the owner of the resumer is unambiguous.
-Luau reports resumer threads as `normal` and does not expose their order.
-Competing owners on distinct resumer threads raise `owner/no-active-owner`, because the activation order cannot identify the nearest resumer.
+Use `Compose.bindOwner(callback)` inside the intended owner to bind a callback to it.
+Alternatively, activate the owner inside the callback with `Compose.withOwner`.
+A host callback started independently has no resume chain from which to select an owner.
 
-- To resolve this ambiguity, bind the child callback with `Compose.bindOwner` inside its intended owner, or use `Compose.withOwner` inside the child.
-- An explicit activation on the current thread also resolves it.
-- An independently started host callback has no resume chain and cannot infer an owner. To give that callback an explicit owner, use [`Compose.bindOwner`](api.md#composebindowner):
-
-```luau
-local onArrived = Compose.bindOwner(function(child)
-    runtime.connect(child, "Changed", handle)     -- registered with this component's owner
-end)
-runtime.connect(container, "ChildAdded", onArrived)
-```
-
-Reactive code still must not yield.
-A formula that yields has no coherent version. A watch that yields observes a world that has moved.
-`Compose.setYieldChecking(true)` enforces this rule in development.
+Reactive functions must not yield.
+Use `Compose.setYieldChecking(true)` to detect yields during development.
 
 ## Entry points, and what happens with no active owner
 
-An entry point can run before any owner is active. Each primitive handles that condition as follows:
+| Call without an active owner | Result | Diagnostic |
+| --- | --- | --- |
+| `Compose.watch`, `Compose.cleanup` | Rejects the call. | `owner/no-active-owner` |
+| `Compose.accumulator` | Rejects the call. | `accumulator/no-active-owner` |
+| `Compose.createPool` | Rejects the call. | `pool/no-active-owner` |
+| `Compose.createKeyedCache` | Rejects the call. | `keyed-cache/no-active-owner` |
+| `Compose.createFocusScope` | Rejects the call. | `focus-scope/no-active-owner` |
+| Shared resource acquisition | Rejects the call. | `async/shared-no-owner` |
+| Structural directives | Rejects the call. | `structure/no-active-owner` |
+| Runtime constructors, `create`, `decorate`, `connect`, `adopt`, animation and scheduling without an explicit owner | Rejects the call. | `owner/no-active-owner` |
+| A context's `provide(value, body)` | Creates a provider owner. | None |
+| `Runtime:watch` | Uses the runtime root owner. | None |
+| `mount`, `mountFragment` | Creates a mount owner. | None |
 
-| Called with no active owner | Behavior | Diagnostic | Reason |
-| --- | --- | --- | --- |
-| `Compose.watch` | refuses | `owner/no-active-owner` | A watch with no owner has no defined end. |
-| `Compose.cleanup` | refuses | `owner/no-active-owner` | The teardown would never run. |
-| `Compose.accumulator` | refuses | `accumulator/no-active-owner` | It subscribes to its source, and the subscription needs an end. |
-| `Compose.createPool` | refuses | `pool/no-active-owner` | A pool cannot outlive the party that is responsible for its resources. |
-| `Compose.createKeyedCache` | refuses | `keyed-cache/no-active-owner` | A cache cannot outlive the party that is responsible for its retained values. |
-| `Compose.createFocusScope` | refuses | `focus-scope/no-active-owner` | It holds a subscription to its source. |
-| an acquire from `Compose.createSharedResource` | refuses | `async/shared-no-owner` | The reference is released when its holder is disposed. |
-| every structural primitive (`show`, `switch`, `keyed`, `indexes`, `presence`, `portal`, the collections) | refuses | `structure/no-active-owner` | The subtree belongs to whatever contains it. |
-| `runtime.constructors.Kind(...)`, `runtime.create(kind)(...)`, `runtime.decorate`, `runtime.connect`, `runtime.adopt`, `runtime.spring`, `runtime.tween`, `runtime.timeline`, `runtime.ramp`, `runtime.scheduler` without an owner argument | refuses | `owner/no-active-owner` | Nodes and bindings must belong to something that can release them. |
-| a context's `provide(value, body)` | **creates a provider owner** | none | The caller releases resources created by a successful body. A failed body disposes the provider owner. |
-| `Runtime:watch` | **falls back to the root owner of the runtime** | none | See below. |
-| `runtime.mount`, `runtime.mountFragment` | **mint a fresh owner for each call** | none | See below. |
+With an active owner, a context provider belongs to that owner.
+Without one, the caller releases resources from a successful provider body.
+A failed provider body disposes its provider owner.
+The [context API](api.md#composecreatecontext) defines value inheritance.
 
-Three rows are exceptions. Each is deliberate.
+`Runtime:watch` can register watches before the first mount.
+`runtime:dispose()` releases the runtime root owner and its watches.
+Later `mount` and `mountFragment` calls raise `runtime/disposed` before they start work.
 
-**A context's `provide` creates an owner.** The body runs under that owner.
-With an active owner, the provider belongs to it. Without one, the caller releases the resources of the body.
-The [context API](api.md#composecreatecontext) defines value inheritance and failure cleanup.
-
-**`Runtime:watch` falls back.** If no owner is active, the runtime supplies its root owner.
-`runtime:dispose()` releases that owner and its watches. This supports subscriptions that you create before the first mount.
-After `runtime:dispose()`, `mount` and `mountFragment` raise `runtime/disposed` and start no work.
-
-**`mount` and `mountFragment` create an owner.** A top-level mount creates and activates its own owner.
-Its disposer releases the mounted block and then that owner, even when a cleanup raises. Compose raises the first failure after it releases both.
-The process root retains the owner, and the returned disposer releases it. `Compose.outstandingMounts()` counts these mounts.
-A mount inside an active owner belongs to that owner and is released with it.
+A top-level mount creates and activates an owner.
+Its disposer releases the block and owner, even if cleanup fails.
+It then raises the first failure.
+The process root retains top-level mount owners until disposal.
+`Compose.outstandingMounts()` counts them.
+A mount inside an active owner belongs to that owner.
 
 ### Making the root explicit
 
-If an entry point needs owner-dependent primitives, use a root owner.
-Manual setup also needs cleanup when the body raises:
-
-```luau
-local owner = Compose.createOwner()
-Compose.withOwner(owner, boot)
--- ... and somebody has to remember Compose.owner.dispose(owner), including when `boot` raised
-```
-
-`Compose.withRootOwner` and `Compose.createRootOwner` do that, with guaranteed disposal.
-
-```luau
--- scoped: released when the body returns or raises
-local result = Compose.withRootOwner(function(owner)
-    return runOnce()
-end)
-
--- long-lived: released at shutdown, and unwound if the boot itself raises
-local app = Compose.createRootOwner(function(owner)
-    startServices()
-    runtime.mount(Overlay, test.root)
-end, runtime.reactor)
-
-app.dispose()
-```
-
-Inside either one, every refusal above becomes an ordinary call.
-A top-level `mount` stops being top-level. It belongs to the root scope, so shutting the scope down takes the tree with it.
-See [`api.md`](api.md#composewithrootowner) and `examples/root-scope.luau`.
+Use `Compose.withRootOwner(body, reactor?)` for a scope that ends when its body returns or raises.
+Use `Compose.createRootOwner(boot, reactor?)` for a scope that ends at application shutdown.
+The second call returns a handle with `dispose()`.
+Both calls release resources if setup fails.
+Nested mounts belong to that root scope.
+See the [root API](api.md#composewithrootowner) and [root-scope example](../examples/root-scope.luau).
 
 ## Why a watch needs an owner
 
-Dependency edges retain both producers and consumers. A watch remains active until its owner disposes it.
-
-`Compose.watch` requires an active owner. Without one, the watch would have no defined lifetime.
-
-```luau
-Compose.watch(function(use) ... end)   -- raises: no owner to hold the lifetime
-```
-
-**You do not need to retain the disposer.** Call the returned disposer only if you need to stop a watch early. Otherwise the owner releases it.
-To check for undisposed top-level mounts, use `Compose.outstandingMounts()`.
+Dependency edges retain their producers and consumers.
+A watch stays active until disposal, even without a retained disposer.
+Call its disposer only to stop it before its owner ends.
 
 ## Failure unwinds completely
 
-Node construction can fail during creation, property writes, event subscriptions, child insertion or the component body. After a failure:
+Creation, property writes, event connections, child insertion and component functions can fail.
+After a failed construction:
 
-- The parent holds exactly the children that it held before.
-- The child count of the slot is unchanged.
-- Nothing that the attempt created survives.
-- No subscription that the attempt made survives.
-- The scheduler remains usable, and the next mount works.
+- The parent keeps its previous children.
+- The slot keeps its previous child count.
+- No resource or subscription from the failed attempt remains.
+- The scheduler can run the next mount.
 
-`tests/lifecycle/unwind.verify.luau` injects a failure at each of these points, at several depths, and asserts all five conditions every time.
-
-## A worked example
-
-```luau
-local function Tooltip(target)
-    local visible = Compose.cell(false)
-
-    -- Borrowed: someone else's node. The subscription is ours; the node is not.
-    runtime.decorate(target, {
-        [Compose.event("MouseEnter")] = function() visible:set(true) end,
-        [Compose.event("MouseLeave")] = function() visible:set(false) end,
-    })
-
-    -- Owned: we made it, we destroy it.
-    return Frame {
-        Compose.show(visible, function()
-            return Label { Text = "tip" }
-        end),
-    }
-end
-```
-
-Disposing the tree that contains `Tooltip` releases the two connections, the `show` branch if it is mounted, and the `Frame`.
-It does not touch `target`. It clears nothing from `target`, because nothing was written to it.
+[The unwind tests](../tests/lifecycle/unwind.verify.luau) inject failures at several depths and check these conditions.
 
 ## Checklist for new code
 
-1. Register non-node resources with `Compose.cleanup`.
-2. Treat external nodes as borrowed, unless you explicitly adopt them.
-3. Add a failure-injection test for each new step of a mount that can fail.
-4. Check late registrations. An already disposed owner calls a newly registered disposer immediately.
+1. Register external cleanup with `Compose.cleanup`.
+2. Keep external nodes borrowed unless you adopt them.
+3. Test each mount operation that can fail.
+4. Check cleanup registered after disposal.

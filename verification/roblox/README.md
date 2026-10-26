@@ -1,36 +1,56 @@
 # Engine verification
 
-[`checks.luau`](checks.luau) lists the engine checks. [`entry.luau`](entry.luau) turns each check into one Verify case.
-The checks cover native property refusal and unwind, class defaults, layout, animation, whole-scene updates and disposal.
-They need an actual engine. Every case requires the capability `roblox-engine`. The entry declares it only on a native host.
-The simulator host reports each case as unsupported. It never reports a pass.
+[`checks.luau`](checks.luau) lists runtime checks and adds the [scene checks](checks-scenes.luau) in order.
+[`entry.luau`](entry.luau) converts each check into a Verify case.
+Cases test native property rejection, failed construction, class defaults, layout, animation, scene updates and disposal.
 
-The gate type-checks this directory under both Luau solvers against the official Roblox declarations that `dependencies.lock.luau` pins.
-That check does not run the engine.
+Each case requires `roblox-engine`.
+The entry declares that capability only on a native host.
+Simulation reports these cases as unsupported.
+The gate checks their types under both solvers with the official Roblox declarations pinned in `dependencies.lock.luau`.
+Type checking does not run the engine.
 
 ## Run the checks
 
-Run the checks in a launched Studio. The command starts a disposable Studio on a generated place, so nothing is saved, published or uploaded.
+Studio must be installed, authenticated and configured for MCP tools.
+The Verify documentation describes native Studio execution.
+The command starts a disposable Studio with a generated place.
+It does not save, publish or upload the place.
 
 ```bash
 lute run .lute/dependencies/verify/tools/run.luau --entry verification/roblox/entry.luau --host studio --context Client --deadline 300
 ```
+Use `--case instance-lifecycle` to select one check.
+The case IDs are in the runtime and scene check files linked above.
+`lute run tools/gate.luau --native` runs this command as `roblox-engine`.
+It also runs `spring-heartbeat` with `--context Server` as `roblox-heartbeat`.
+This keeps coverage of the server frame source.
 
-Use `--case instance-lifecycle` to run one check. The case ids are in [`checks.luau`](checks.luau).
-`lute run tools/gate.luau --native` runs the same command as the producer `roblox-engine`. It also runs `spring-heartbeat` with `--context Server` as `roblox-heartbeat`, retaining coverage of the server frame source.
-Studio must be installed, authenticated and configured for its MCP tools. The Verify documentation describes native Studio execution.
-
-Exit code zero means that every selected case passed.
-The run keeps `report.json`, `summary.txt` and the Studio diagnostics in a unique directory below `.verify`.
-Each case records its detail as a step. The report environment records the Studio version, place, context and animatable types.
-Keep the evidence directory, the Studio version and the source commit outside the active source tree.
+Exit code zero means all selected cases passed.
+Each run keeps `report.json`, `summary.txt` and Studio diagnostics in a unique directory under `.verify`.
+Each case records its detail as a step.
+The report records the Studio version, place, context and animatable types.
+Keep the evidence, Studio version and source commit outside the active source tree.
 Missing or partial output is not a pass.
 
-Runtime primitives need native client validation of `property-readables-before-render`: hidden text/layout measurement, shared per-property signals, settled sampling and the first visible frame. This case also requires `roblox-client`; a server or simulator cannot establish that result. Run client animation, timeline and scheduler checks with the new default `PreRender` frame source, and retain server `Heartbeat` coverage. Measure property-observation callback cost during animated layout in the engine profiler. No headless timing establishes that cost.
-Check mixed motion, timeline, scheduler, collection admission, clock, settled and sequence work for coherent frame publication, callback failure isolation and complete subscription release after completion or disposal on both frame sources.
+### Client and server frames
+
+Run `property-readables-before-render` on a native client.
+It checks hidden layout measurement, shared property signals, settled sampling and the first visible frame.
+It requires `roblox-client`. A server or simulator cannot prove this result.
+Run client animation, timeline and scheduler checks with `PreRender`.
+Retain server `Heartbeat` coverage.
+Measure observation callback cost during animated layout with the engine profiler.
+Headless timing cannot prove that cost.
+
+Check mixed motion, timelines, scheduling, collection admission, clocks, settled sampling and sequences on both frame sources.
+Check coherent frame publication.
+Check isolation after callback failures.
+Check that completion and disposal release all subscriptions.
 
 ## Limits
 
-A passing run verifies only the engine behavior that its cases cover.
-To verify native codegen, observe module-preserving source in the engine profiler. A source directive or a CPU timing cannot establish it.
-Native rendering, device input and application quality need evidence from the consumer.
+A passing run proves only behavior covered by its cases.
+For native code generation, inspect modules with preserved source boundaries in the engine profiler.
+A source directive or CPU timing cannot prove it.
+Native rendering, device input and application quality require consumer evidence.
