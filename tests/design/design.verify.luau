@@ -223,6 +223,45 @@ describe("Compose Design documents", function()
 		expect(parsed.root.children[1].props.text.literal):toBe "Inside"
 	end)
 
+	it("emits a named component and reads it back", function()
+		local value = sample()
+		local code = Design.emit(value, library, { name = "Scores" })
+		expect(string.find(code, "local function Scores(UI: Toy.Controls, props: Props): Instance", 1, true) ~= nil):toBe(
+			true
+		)
+		expect(string.find(code, "\nreturn Scores\n", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(Design.parse(Design.emit(value, library), library))
+		expect(function()
+			Design.emit(value, library, { name = "not a name" })
+		end):toThrow "identifier"
+	end)
+
+	it("extends a library with game kinds and their prelude", function()
+		local extended = Design.extend(library, {
+			kinds = {
+				Tile = {
+					fields = { label = { type = "string" } },
+					children = "none",
+					call = "Chrome.Tile",
+					build = builder "Tile",
+				},
+			},
+			prelude = { 'local Chrome = require("Chrome")', 'local Toy = require("Toy")' },
+		})
+		expect(extended.kinds.Tile.call):toBe "Chrome.Tile"
+		expect(extended.kinds.Label ~= nil):toBe(true)
+		expect(library.kinds.Tile):toBe(nil)
+		expect(#extended.prelude):toBe(2)
+		local value = Design.document.new("Tiles", extended, "Stack")
+		value = Design.document.insert(value, extended, "n1", "Tile")
+		local code = Design.emit(value, extended)
+		expect(string.find(code, 'Chrome.Tile "Tile"', 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, extended).root.children[1].kind):toBe "Tile"
+		expect(function()
+			Design.extend(library, { kinds = { Label = library.kinds.Label } })
+		end):toThrow "already has a kind named Label"
+	end)
+
 	it("edits through a session that tracks selection, problems and history", function()
 		Core.withRootOwner(function()
 			local session = Design.session(library, sample())

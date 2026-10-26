@@ -99,7 +99,13 @@ local function fieldType(library: Library, input: Types.Input): string
 	return if input.type == "slot" then `({shape})` else shape
 end
 
-function source.emit(value: Types.Document, library: Library): string
+export type EmitOptions = { name: string? }
+
+function source.emit(value: Types.Document, library: Library, options: EmitOptions?): string
+	local exported = if options then options.name else nil
+	if exported ~= nil then
+		assert(string.match(exported, "^[%a_][%w_]*$") ~= nil, "A component name is a Luau identifier")
+	end
 	Document.validate(value, library)
 	local lines: { string } = { "--!strict", "" }
 	for _, line in library.prelude do
@@ -178,12 +184,14 @@ function source.emit(value: Types.Document, library: Library): string
 		table.insert(body, indent .. "}")
 		return table.concat(body, "\n")
 	end
-	table.insert(
-		lines,
-		`return function({library.parameter}: {library.parameterType}, props: Props): {library.returnType}`
-	)
+	local signature = `({library.parameter}: {library.parameterType}, props: Props): {library.returnType}`
+	table.insert(lines, if exported then `local function {exported}{signature}` else `return function{signature}`)
 	table.insert(lines, `\treturn {emit(value.root, 1)}`)
 	table.insert(lines, "end")
+	if exported then
+		table.insert(lines, "")
+		table.insert(lines, `return {exported}`)
+	end
 	table.insert(lines, "")
 	return table.concat(lines, "\n")
 end
@@ -530,10 +538,10 @@ function source.parse(code: string, library: Library): Types.Document
 	take "="
 	local header = plain()
 	assert(type(header) == "table", "The design header is a table")
-	while peek() ~= "return" do
+	while not ((peek() == "return" or peek() == "local") and peek(1) == "function") do
 		take()
 	end
-	take "return"
+	take()
 	take "function"
 	while peek() ~= "return" do
 		take()
