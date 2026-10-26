@@ -170,7 +170,7 @@ local function createRuntime(host: Host.Host): Runtime
 					inFlight = nil
 				end
 			end
-			Props.apply(host, node, props, owner, onKey)
+			Props.apply(host, node, props, owner, onKey, true)
 
 			local childCount = #props
 			if childCount == 0 then

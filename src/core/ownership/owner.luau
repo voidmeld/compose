@@ -438,6 +438,15 @@ local function watchStatic<T>(
 	end, nil, after)
 end
 
+local function listenHeld<T>(owner: Owner, producer: Types.ReadOnlyValue<T>, body: (value: T) -> ()): Types.Node
+	if Inspect.isActive() then
+		Inspect.watch(owner)
+	end
+	local edge = watchModule.listenEdge(reactorOf(owner), producer, body)
+	holdSubject(owner, watchModule.unlisten, edge)
+	return edge
+end
+
 local function watchTerminal(owner: Owner, body: (use: Types.Use) -> (), after: Dispose?): Dispose
 	if Inspect.isActive() then
 		Inspect.watch(owner)
@@ -551,6 +560,7 @@ return {
 	own = own,
 	adopt = adopt,
 	holdSubject = holdSubject,
+	listenHeld = listenHeld,
 	heldCount = heldCount,
 	rollbackHeld = rollbackHeld,
 	watch = watch,

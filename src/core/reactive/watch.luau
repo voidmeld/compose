@@ -178,6 +178,10 @@ local function watchStatic<T>(reactor: Reactor, value: Types.ReadOnlyValue<T>, b
 	return Graph.listen(reactor, NodeCast.nodeOf(value), NodeCast.eraseListener(body))
 end
 
+local function listenEdge<T>(reactor: Reactor, value: Types.ReadOnlyValue<T>, body: (value: T) -> ()): Node
+	return Graph.listenEdge(reactor, NodeCast.nodeOf(value), NodeCast.eraseListener(body))
+end
+
 local function sample<T>(body: () -> T): T
 	return Graph.untracked(body)
 end
@@ -186,6 +190,8 @@ return {
 	watch = watch,
 	watchGuarded = watchGuarded,
 	watchStatic = watchStatic,
+	listenEdge = listenEdge,
+	unlisten = Graph.unlisten,
 	watchTerminal = watchTerminal,
 	sample = sample,
 }

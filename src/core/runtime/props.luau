@@ -14,6 +14,7 @@ local stats = require "../reactive/stats"
 local statsOn = stats.state
 local Owner = require "../ownership/owner"
 local Types = require "../reactive/types"
+local Watch = require "../reactive/watch"
 local Weak = require "../weak"
 
 type Node = Host.Node
@@ -30,6 +31,10 @@ type Clear = (node: Node, key: string, value: nil) -> ...unknown
 type GroupBody = (use: Types.Use) -> ...unknown
 
 local propertyBindings: Registry = {}
+
+local fastEdges: { [Node]: Types.Node? } = {}
+
+Weak.keys(fastEdges)
 
 Weak.keys(propertyBindings)
 local attributeBindings: Registry = {}
@@ -553,10 +558,37 @@ local function propertyTarget(host: Host.Host): Target
 	return target
 end
 
-local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Owner, onKey: (string) -> ())
+local function retireFast(node: Node, key: string)
+	local edge = fastEdges[node]
+	local previous: Types.Node? = nil
+	while edge ~= nil do
+		local following = edge.fastNext
+		if edge.fastKey == key then
+			if previous == nil then
+				fastEdges[node] = following
+			else
+				previous.fastNext = following
+			end
+			Watch.unlisten(edge)
+		else
+			previous = edge
+		end
+		edge = following
+	end
+end
+
+local function apply(
+	host: Host.Host,
+	node: Node,
+	props: Props,
+	owner: Owner.Owner,
+	onKey: (string) -> (),
+	created: boolean?
+)
 	local target = propertyTarget(host)
-	local fresh = propertyBindings[node] == nil and Nodes.isDestructible(node)
+	local fresh = created == true and not statsOn.enabled and owner.boundary == nil and not owner.disposed
 	local write = target.write
+	local replacing = not fresh and fastEdges[node] ~= nil
 	local length = #props
 
 	for key, value in props do
@@ -567,6 +599,9 @@ local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Own
 		local marker = Keys.readKey(key)
 		if marker ~= nil then
 			onKey(marker.name)
+			if replacing then
+				retireFast(node, marker.name)
+			end
 			if marker.kind == "group" then
 				bindGroup(host, node, owner, marker.names, value)
 			elseif marker.kind == "event" then
@@ -606,6 +641,9 @@ local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Own
 			)
 		end
 		local name = key
+		if replacing then
+			retireFast(node, name)
+		end
 
 		if name == ATTRIBUTES then
 			onKey(ATTRIBUTES)
@@ -626,7 +664,16 @@ local function apply(host: Host.Host, node: Node, props: Props, owner: Owner.Own
 		end
 
 		if cellModule.isValue(value) then
-			bind(target, node, owner, name, value :: Types.Source<unknown>)
+			if fresh then
+				local edge = Owner.listenHeld(owner, value :: Types.ReadOnlyValue<unknown>, function(current: unknown)
+					write(node, name, current)
+				end)
+				edge.fastKey = name
+				edge.fastNext = fastEdges[node]
+				fastEdges[node] = edge
+			else
+				bind(target, node, owner, name, value :: Types.Source<unknown>)
+			end
 			continue
 		end
 

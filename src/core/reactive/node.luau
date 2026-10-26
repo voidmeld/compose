@@ -34,6 +34,10 @@ local function isNode(candidate: unknown): boolean
 	return type(candidate) == "table" and classes[metatableOf(candidate)] == true
 end
 
+local function heldEdge(subject: unknown): Node
+	return (subject :: unknown) :: Node
+end
+
 local function nodeOf<T>(value: Types.ReadOnlyValue<T>): Node
 	return (value :: unknown) :: Node
 end
@@ -74,6 +78,7 @@ local function identityKey<V, K>(value: V, _index: number): K
 end
 
 return {
+	heldEdge = heldEdge,
 	isNode = isNode,
 	adopt = adopt,
 	use = use,
