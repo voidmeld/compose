@@ -9,13 +9,7 @@ type Literal = Types.Literal
 type Row = Types.Row
 type Resolved = Types.Resolved
 
-export type Context = {
-	inputs: { [string]: Literal }?,
-	outputs: { [string]: (args: { Literal }) -> () }?,
-	slots: { [string]: () -> unknown }?,
-	token: ((name: string) -> Literal)?,
-	decorate: ((node: Types.Node, built: unknown) -> ())?,
-}
+export type Context = Types.RenderContext
 
 local function itemField(current: ReadOnlyValue<Row>, field: string): ReadOnlyValue<Literal?>
 	return Core.formula(function(use: Use): Literal?

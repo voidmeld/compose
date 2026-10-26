@@ -204,14 +204,7 @@ local function fieldType(library: Library, input: Types.Input): string
 	return if input.type == "slot" then `({shape})` else shape
 end
 
-export type EmitOptions = {
-	name: string?,
-	rowFunctions: boolean?,
-	localControls: boolean?,
-	controls: string?,
-	propsType: string?,
-	prelude: { string }?,
-}
+export type EmitOptions = Types.EmitOptions
 
 function source.emit(value: Types.Document, library: Library, options: EmitOptions?): string
 	local exported = if options then options.name else nil

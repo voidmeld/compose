@@ -132,4 +132,21 @@ export type Document = {
 	root: Node,
 }
 
+export type EmitOptions = {
+	name: string?,
+	rowFunctions: boolean?,
+	localControls: boolean?,
+	controls: string?,
+	propsType: string?,
+	prelude: { string }?,
+}
+
+export type RenderContext = {
+	inputs: { [string]: Literal }?,
+	outputs: { [string]: (args: { Literal }) -> () }?,
+	slots: { [string]: () -> unknown }?,
+	token: ((name: string) -> Literal)?,
+	decorate: ((node: Node, built: unknown) -> ())?,
+}
+
 return {}
