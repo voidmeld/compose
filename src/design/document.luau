@@ -49,6 +49,7 @@ local function copyValue(value: Value): Value
 		fields = if value.fields then table.clone(value.fields) else nil,
 		node = value.node,
 		token = value.token,
+		state = value.state,
 	}
 end
 document.copyValue = copyValue
@@ -71,6 +72,8 @@ local function copyNode(node: Node): Node
 		children = children,
 		bind = if bind then { from = bind.from, key = bind.key } else nil,
 		nameField = node.nameField,
+		nameInput = node.nameInput,
+		when = node.when,
 	}
 end
 
@@ -93,13 +96,26 @@ local function copyContract(contract: Types.Contract): Types.Contract
 			type = input.type,
 			preview = if preview ~= nil then copyLiteral(preview) else nil,
 			fields = fields,
+			required = input.required,
 		}
 	end
 	local outputs: { Types.Output } = {}
 	for index, output in contract.outputs do
-		outputs[index] = { id = output.id }
+		local args = output.args
+		outputs[index] = { id = output.id, args = if args then table.clone(args) else nil }
 	end
 	return { inputs = inputs, outputs = outputs }
+end
+
+local function copyState(state: { Types.State }?): { Types.State }?
+	if state == nil then
+		return nil
+	end
+	local copied: { Types.State } = {}
+	for index, entry in state do
+		copied[index] = { id = entry.id, type = entry.type, initial = copyLiteral(entry.initial) }
+	end
+	return copied
 end
 
 local function copyDocument(value: Document): Document
@@ -109,6 +125,7 @@ local function copyDocument(value: Document): Document
 		library = value.library,
 		nextId = value.nextId,
 		contract = copyContract(value.contract),
+		state = copyState(value.state),
 		root = copyNode(value.root),
 	}
 end
@@ -174,6 +191,9 @@ local function present(value: Value): number
 	if value.node ~= nil then
 		count += 1
 	end
+	if value.state ~= nil then
+		count += 1
+	end
 	return count
 end
 
@@ -194,8 +214,27 @@ local function checkContract(contract: Types.Contract)
 	end
 end
 
+local function stateOf(value: Document, id: string): Types.State?
+	local state = value.state
+	if state then
+		for _, entry in state do
+			if entry.id == id then
+				return entry
+			end
+		end
+	end
+	return nil
+end
+document.stateOf = stateOf
+
 local function checkValue(value: Document, field: Types.Field, property: Value, collection: Types.Input?, key: string)
 	assert(present(property) == 1, `{key} holds exactly one literal or binding`)
+	local stateId = property.state
+	if stateId ~= nil then
+		assert(stateOf(value, stateId) ~= nil, `{key} reads unknown state {stateId}`)
+		assert(field.type ~= "event" and field.type ~= "content" and field.type ~= "node", `{key} cannot hold state`)
+		return
+	end
 	local current = property.literal
 	local input, item, output = property.input, property.item, property.output
 	if property.node ~= nil then
@@ -277,6 +316,16 @@ function document.validate(value: Document, library: Library): Document
 	assert(#value.name > 0 and #value.name <= 120, "A design needs a name")
 	assert(value.nextId % 1 == 0 and value.nextId >= 1, "Invalid next node id")
 	checkContract(value.contract)
+	local state = value.state
+	if state then
+		for _, entry in state do
+			assert(string.match(entry.id, IDENTIFIER) ~= nil, "State ids are lower camel case")
+			assert(inputOf(value, entry.id) == nil and not hasOutput(value, entry.id), `Duplicate id {entry.id}`)
+			assert(stateOf(value, entry.id) == entry, `Duplicate state id {entry.id}`)
+			assert(entry.type ~= "slot", `State {entry.id} cannot be a slot`)
+			assert(plain(entry.initial, 0), `State {entry.id} starts with plain data`)
+		end
+	end
 	local seen: { [string]: true } = {}
 	local count, highest = 0, 0
 	local references: { [string]: string } = {}
@@ -301,6 +350,25 @@ function document.validate(value: Document, library: Library): Document
 				end
 				assert(found, `{node.name} takes its name from unknown item field {nameField}`)
 			end
+		end
+		local nameInput = node.nameInput
+		if nameInput ~= nil then
+			assert(nameField == nil, `{node.name} takes its name from one source`)
+			local declared =
+				assert(inputOf(value, nameInput), `{node.name} takes its name from unknown input {nameInput}`)
+			assert(
+				declared.type == "string" and declared.kind == "value",
+				`{node.name} takes its name from {nameInput}, which is not a text value`
+			)
+		end
+		local condition = node.when
+		if condition ~= nil then
+			assert(library.show ~= nil, `{library.name} cannot show nodes conditionally`)
+			assert(node ~= value.root, "The root is always shown")
+			local declared = inputOf(value, condition)
+			local held = stateOf(value, condition)
+			local typed = if declared then declared.type elseif held then held.type else nil
+			assert(typed == "boolean", `{node.name} is shown by {condition}, which is not a true or false input`)
 		end
 		for key, property in node.props do
 			local field = assert(kind.fields[key], `{node.kind} has no property {key}`)
@@ -328,9 +396,21 @@ function document.validate(value: Document, library: Library): Document
 				assert(#node.children == 0, `{node.kind} needs a list input for its template`)
 			end
 		else
-			assert(node.bind == nil, `{node.kind} does not bind a list`)
+			local bind = node.bind
+			if bind then
+				assert(library.keyed ~= nil, `{library.name} cannot repeat children`)
+				local list = assert(inputOf(value, bind.from), `{node.kind} binds unknown input {bind.from}`)
+				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
+				assert(#bind.key > 0, `{node.kind} needs an item key`)
+				assert(#node.children == 1, `{node.kind} repeats exactly one row template`)
+				nested = list
+			end
 		end
 		for _, child in node.children do
+			assert(
+				child.when == nil or (kind.children == "list" and node.bind == nil),
+				`{child.name} is shown conditionally only inside an unbound list container`
+			)
 			visit(child, depth + 1, nested)
 		end
 	end
@@ -485,6 +565,26 @@ end
 function document.setContract(value: Document, library: Library, contract: Types.Contract): Document
 	local nextValue = copyDocument(value)
 	nextValue.contract = copyContract(contract)
+	return document.validate(nextValue, library)
+end
+
+function document.nameFromInput(value: Document, library: Library, id: string, input: string?): Document
+	local nextValue = copyDocument(value)
+	local node = assert(document.find(nextValue.root, id), "Choose a node")
+	node.nameInput = input
+	return document.validate(nextValue, library)
+end
+
+function document.showWhen(value: Document, library: Library, id: string, condition: string?): Document
+	local nextValue = copyDocument(value)
+	local node = assert(document.find(nextValue.root, id), "Choose a node")
+	node.when = condition
+	return document.validate(nextValue, library)
+end
+
+function document.setState(value: Document, library: Library, state: { Types.State }?): Document
+	local nextValue = copyDocument(value)
+	nextValue.state = copyState(state)
 	return document.validate(nextValue, library)
 end
 

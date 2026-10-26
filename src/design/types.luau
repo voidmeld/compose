@@ -15,6 +15,7 @@ export type Value = {
 	fields: { string }?,
 	node: string?,
 	token: string?,
+	state: string?,
 }
 
 export type FieldType =
@@ -76,6 +77,8 @@ export type Library = {
 	cell: string,
 	newCell: string?,
 	token: string?,
+	show: string?,
+	keyed: string?,
 	space: ("2d" | "3d")?,
 	kinds: { [string]: Kind },
 }
@@ -91,9 +94,12 @@ export type Input = {
 	type: InputType,
 	preview: Literal?,
 	fields: { ItemField }?,
+	required: boolean?,
 }
 
-export type Output = { id: string }
+export type Output = { id: string, args: { InputType }? }
+
+export type State = { id: string, type: InputType, initial: Literal }
 
 export type Contract = { inputs: { Input }, outputs: { Output } }
 
@@ -107,6 +113,8 @@ export type Node = {
 	children: { Node },
 	bind: Bind?,
 	nameField: string?,
+	nameInput: string?,
+	when: string?,
 }
 
 export type Document = {
@@ -115,6 +123,7 @@ export type Document = {
 	library: string,
 	nextId: number,
 	contract: Contract,
+	state: { State }?,
 	root: Node,
 }
 

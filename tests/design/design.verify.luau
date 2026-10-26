@@ -519,4 +519,111 @@ describe("Compose Design source link", function()
 	end)
 end)
 
+describe("Compose Design views as code", function()
+	local function viewLibrary(): Design.Library
+		local copied = table.clone(library)
+		copied.show = "Toy.show"
+		copied.keyed = "Toy.keyed"
+		return copied
+	end
+
+	local function view(): (Design.Document, Design.Library)
+		local toy = viewLibrary()
+		local value = Design.document.new("ChooseGame", toy, "Stack")
+		local pickArgs: { Design.InputType } = { "string" }
+		local pick: Design.Output = { id = "onPick", args = pickArgs }
+		local expanded: Design.State = { id = "expanded", type = "boolean", initial = true }
+		value = Design.document.setContract(value, toy, {
+			inputs = {
+				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "games", kind = "readable", type = "list", fields = rowFields, preview = rowsPreview },
+				{ id = "offered", kind = "readable", type = "boolean", preview = false },
+			},
+			outputs = { pick },
+		})
+		value = Design.document.setState(value, toy, { expanded })
+		value = Design.document.nameFromInput(value, toy, "n1", "name")
+		local games, row, offer, toggle
+		value, games = Design.document.insert(value, toy, "n1", "Stack")
+		value, row = Design.document.insert(value, toy, games, "Label")
+		value = Design.document.bind(value, toy, games, { from = "games", key = "id" })
+		value = Design.document.change(value, toy, row, "text", { item = "name" })
+		value, offer = Design.document.insert(value, toy, "n1", "Label")
+		value = Design.document.showWhen(value, toy, offer, "offered")
+		value, toggle = Design.document.insert(value, toy, "n1", "Stack")
+		value = Design.document.change(value, toy, toggle, "Visible", { state = "expanded" })
+		return value, toy
+	end
+
+	it("emits a props-only view with typed contract, state and conditional rows", function()
+		local value, toy = view()
+		local code = Design.emit(value, toy, {
+			name = "ChooseGame",
+			controls = "local UI = Toy.controls()",
+			propsType = "Types.ChooseGameProps",
+			prelude = { 'local Types = require("Types")' },
+		})
+		expect(string.find(code, "local function ChooseGame(props: Types.ChooseGameProps): Instance", 1, true) ~= nil):toBe(
+			true
+		)
+		expect(string.find(code, "local UI = Toy.controls()", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "export type Props", 1, true)):toBe(nil)
+		expect(string.find(code, "UI.Stack(props.name) {", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "local state = { expanded = Toy.cell(true) }", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "Toy.keyed { from = props.games", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "Toy.show(props.offered, function() return UI.Label", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "Visible = state.expanded", 1, true) ~= nil):toBe(true)
+		local parsed = Design.parse(code, toy)
+		expect(parsed.root.nameInput):toBe "name"
+		expect(assert(parsed.root.children[1].bind).from):toBe "games"
+		expect(parsed.root.children[2].when):toBe "offered"
+		expect(parsed.state and parsed.state[1].id):toBe "expanded"
+		expect(Design.emit(parsed, toy, {
+			name = "ChooseGame",
+			controls = "local UI = Toy.controls()",
+			propsType = "Types.ChooseGameProps",
+			prelude = { 'local Types = require("Types")' },
+		})):toBe(code)
+	end)
+
+	it("types required inputs, list rows and output arguments in the emitted props", function()
+		local value, toy = view()
+		local code = Design.emit(value, toy)
+		expect(string.find(code, "\tname: string,", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "games: Toy.Readable<{ { id: string, name: string } }>?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "onPick: ((string) -> ())?", 1, true) ~= nil):toBe(true)
+	end)
+
+	it("renders bound rows, conditional nodes, state and input names", function()
+		local value, toy = view()
+		table.clear(built)
+		local supplied: { [string]: Design.Literal } = { name = "Picker", offered = false }
+		local context: Design.RenderContext = { inputs = supplied }
+		local root = Design.render(value, toy, context) :: Built
+		expect(root.name):toBe "Picker"
+		expect(#root.children):toBe(2)
+		local rows = root.children[1] :: Built
+		expect(#rows.children):toBe(2)
+		local toggle = root.children[2] :: Built
+		local visible = toggle.props.Visible.readable
+		expect(visible ~= nil and visible:peek()):toBe(true)
+	end)
+
+	it("refuses conditions, names and state the contract cannot back", function()
+		local value, toy = view()
+		expect(refused(function()
+			Design.document.showWhen(value, toy, "n4", "name")
+		end)):toBe(true)
+		expect(refused(function()
+			Design.document.nameFromInput(value, toy, "n1", "games")
+		end)):toBe(true)
+		expect(refused(function()
+			Design.document.change(value, toy, "n2", "gap", { state = "missing" })
+		end)):toBe(true)
+		expect(refused(function()
+			Design.document.showWhen(value, library, "n4", "offered")
+		end)):toBe(true)
+	end)
+end)
+
 return nil
