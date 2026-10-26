@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
@@ -107,7 +107,7 @@ jobs:
           (cd "$RUNNER_TEMP/performance-base" && lute setup && lute run tools/sync-dependencies.luau)
       - name: Run counterbalanced paired performance
         env:
-          SHARD: ${{ matrix.shard }}/5
+          SHARD: ${{ matrix.shard }}/6
         run: lute run bench/run-paired.luau "$RUNNER_TEMP/performance-base" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/build/performance" "" "$SHARD"
       - name: Retain paired performance evidence
         if: always()
