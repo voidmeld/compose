@@ -222,8 +222,8 @@ describe("host-neutral design editor", function()
 		})
 		w.settle()
 		expect(string.find(source, "local _design", 1, true) ~= nil):toBe(true)
-		expect(editor.session.document:peek().name):toBe "Seeded"
-		expect(w.find(editor.root, "ArtboardSize").Text):toBe "390 × 844"
+		expect(string.find(source, '"Seeded"', 1, true) ~= nil):toBe(true)
+		expect(w.find(w.screen, "ArtboardSize").Text):toBe "390 × 844"
 		editor.dispose()
 		expect(released):toBe(1)
 		w.close()

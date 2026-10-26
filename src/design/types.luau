@@ -155,4 +155,17 @@ export type RenderContext = {
 	decorate: ((node: Node, built: unknown) -> ())?,
 }
 
+export type LinkStore = {
+	read: () -> string,
+	write: (expected: string, generated: string) -> boolean,
+	watch: (changed: () -> ()) -> () -> (),
+}
+
+export type OpenDesign = { dispose: () -> () }
+
+export type Kit = {
+	name: string,
+	edit: (parent: unknown, name: string, link: LinkStore?) -> OpenDesign,
+}
+
 return {}

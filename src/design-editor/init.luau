@@ -2,6 +2,7 @@
 
 local Compose = require "./core"
 local Design = require "./design"
+local DesignTypes = require "./design/types"
 local Environment = require "@self/environment"
 local Editor = require "@self/editor"
 local UI = require "@self/ui"
@@ -25,10 +26,7 @@ export type Workspace = {
 	previews: { Editor.Preview }?,
 	dispose: (() -> ())?,
 }
-export type Kit = {
-	name: string,
-	edit: (parent: Compose.Node, name: string, link: Design.LinkStore?) -> Editor.Editor,
-}
+export type Kit = DesignTypes.Kit
 
 local function create(
 	library: Design.Library,
@@ -74,7 +72,7 @@ end
 local function kit(name: string, open: () -> Workspace): Kit
 	return {
 		name = name,
-		edit = function(parent: Compose.Node, documentName: string, link: Design.LinkStore?): Editor.Editor
+		edit = function(parent: Compose.Node, documentName: string, link: Design.LinkStore?): DesignTypes.OpenDesign
 			local workspace = open()
 			local library = workspace.library
 			local initial = Design.document.new(documentName, library, workspace.root)
@@ -104,10 +102,6 @@ local function kit(name: string, open: () -> Workspace): Kit
 			end
 			local editor = result
 			return {
-				root = editor.root,
-				session = editor.session,
-				stage = editor.stage,
-				scene = editor.scene,
 				dispose = function()
 					editor.dispose()
 					if release ~= nil then
