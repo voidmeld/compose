@@ -512,8 +512,11 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		local body: { string } = {}
 		local keys: { string } = {}
+		local boundTemplate = kind.children == "template" and node.bind ~= nil
 		for key in node.props do
-			table.insert(keys, key)
+			if not (boundTemplate and (key == kind.source or key == kind.key)) then
+				table.insert(keys, key)
+			end
 		end
 		table.sort(keys)
 		for _, key in keys do
