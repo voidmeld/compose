@@ -313,7 +313,7 @@ local function caseFor(id: string, factory: Factory): Workloads.Case
 	}
 end
 
-local function include(name: string, factory: Factory)
+local function include(name: string, factory: Factory, unsupported: ((string) -> string?)?)
 	local drivers: { [Environment.Environment]: Types.Driver } = {}
 	local function take(environment: Environment.Environment): Types.Driver
 		local driver = assert(drivers[environment], "framework must be loaded before preparation")
@@ -323,13 +323,18 @@ local function include(name: string, factory: Factory)
 	for _, workload in Workloads.all do
 		local reasons = workload.unsupported or {}
 		workload.unsupported = reasons
-		if workload.id == "ordered-window-scroll" then
+		local reason = if unsupported then unsupported(workload.id) else nil
+		local react = name == "react" or name == "react-upstream" or name == "react-reflex"
+		local fusion = name == "fusion" or name == "fusion-charm"
+		if reason then
+			reasons[name] = reason
+		elseif workload.id == "ordered-window-scroll" then
 			reasons[name] =
 				"No native ordered window collection with the workload's retained range and geometry contract."
-		elseif workload.id == "animate-many" and name == "react" then
+		elseif workload.id == "animate-many" and react then
 			reasons[name] =
 				"React and ReactRoblox have no native spring primitive. Adding another animation library would change the comparison."
-		elseif workload.id == "unwind" and name == "react" then
+		elseif workload.id == "unwind" and react then
 			reasons[name] =
 				"A failed native render, including an error boundary, leaves abandoned cost-model host nodes after root unmount. It does not satisfy the partial-build rollback contract."
 		elseif workload.id == "unwind" and name == "blend" then
@@ -338,7 +343,7 @@ local function include(name: string, factory: Factory)
 		elseif workload.id == "update-repeated" and name == "fusion" then
 			reasons[name] = "No public transaction API coalesces the 500 source writes into one host property write."
 		elseif
-			name == "fusion"
+			fusion
 			and (
 				workload.id == "keyed-append"
 				or workload.id == "keyed-prepend"

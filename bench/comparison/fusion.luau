@@ -3,6 +3,7 @@
 local Upstream = require "../harness/upstream"
 local Environment = require "../cost-model"
 local Types = require "./types"
+local State = require "./state"
 
 type Value<T> = { set: (Value<T>, T) -> () }
 type Scope = { unknown }
@@ -21,7 +22,7 @@ type Fusion = {
 	doCleanup: (Scope) -> (),
 }
 
-local function create(environment: Environment.Environment): Types.Driver
+local function create(environment: Environment.Environment, stateDriver: State.State?): Types.Driver
 	local loader = Upstream.create(environment)
 	local fusion: Fusion = loader.load ".lute/dependencies/fusion/src"
 	environment.drain()
@@ -29,13 +30,25 @@ local function create(environment: Environment.Environment): Types.Driver
 	function scopeFor(scope: Scope): Types.Scope
 		local function value<T>(initial: T): Types.Source<T>
 			local state = fusion.Value(scope, initial)
+			local cell = if stateDriver
+				then stateDriver.value(initial, function(next: T)
+					state:set(next)
+				end)
+				else nil
+			if cell then
+				table.insert(scope, cell.release)
+			end
 			return {
 				binding = state,
 				read = function(): T
-					return fusion.peek(state)
+					return if cell then cell.read() else fusion.peek(state)
 				end,
 				write = function(next: T)
-					state:set(next)
+					if cell then
+						cell.write(next)
+					else
+						state:set(next)
+					end
 				end,
 				bind = function(map: (T) -> unknown): unknown
 					return fusion.Computed(scope, function(use: Use): unknown
@@ -141,7 +154,11 @@ local function create(environment: Environment.Environment): Types.Driver
 			end
 		end,
 		batch = function(run: () -> ())
-			run()
+			if stateDriver then
+				stateDriver.batch(run)
+			else
+				run()
+			end
 			environment.drain()
 		end,
 	}

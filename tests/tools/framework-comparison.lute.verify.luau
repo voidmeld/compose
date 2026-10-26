@@ -7,6 +7,8 @@ local Frameworks = require "../../bench/harness/frameworks"
 local Report = require "../../bench/comparison/report"
 local Workloads = require "../../bench/workloads"
 local WorkloadTypes = require "../../bench/workloads/types"
+local Environment = require "../../bench/cost-model"
+local Lock = require "../../dependencies.lock"
 
 local function framework(name: string): Frameworks.Framework
 	return {
@@ -110,6 +112,79 @@ Test.it("normal benchmark entries keep only the required bare and Compose lanes"
 		table.insert(names, candidate.name)
 	end
 	Test.expect(table.concat(names, ",")):toBe "bare,compose"
+end)
+
+Test.it("optional comparison lanes classify every runtime workload and pin benchmark-only sources", function()
+	local names: { [string]: string } = {
+		roact = "roact",
+		seam = "seam",
+		iris = "iris",
+		signals = "signals",
+		["react-reflex"] = "reflex",
+		["fusion-charm"] = "charm",
+		["react-upstream"] = "react-upstream",
+	}
+	local seen: { [string]: boolean } = {}
+	for _, candidate in Frameworks.available(true) do
+		local dependencyName = names[candidate.name]
+		if not dependencyName then
+			continue
+		end
+		seen[candidate.name] = true
+		local found = false
+		for _, dependency in Lock.dependencies do
+			if dependency.name == dependencyName then
+				found = true
+				Test.expect(#dependency.commit):toBe(40)
+				Test.expect(#dependency.tree):toBe(40)
+				Test.expect(dependency.rights):toBe "MIT"
+				for _, surface in dependency.surfaces do
+					Test.expect(surface.role):toBe "benchmark"
+				end
+			end
+		end
+		Test.expect(found):toBe(true)
+		Test.expect(#Workloads.all):toBe(24)
+		for _, workload in Workloads.all do
+			local implemented = workload.cases[candidate.name] ~= nil
+			local reasons: { [string]: string } = workload.unsupported or {}
+			local reason = reasons[candidate.name]
+			Test.expect(implemented ~= (reason ~= nil)):toBe(true)
+			if reason then
+				Test.expect(#reason > 20):toBe(true)
+			end
+		end
+	end
+	for name in names do
+		Test.expect(seen[name]):toBe(true)
+	end
+end)
+
+Test.it("comparison host models native vector defaults and ancestry", function()
+	local environment = Environment.create()
+	local container = environment.container()
+	local parent = environment.globals.Instance.new "Frame"
+	local part = environment.globals.Instance.new "Part"
+	Test.expect(environment.globals.typeof(part.Position)):toBe "Vector3"
+	parent.Parent = container
+	part.Parent = parent
+	Test.expect(part:IsDescendantOf(environment.globals.game)):toBe(true)
+	local changes = 0
+	local connection = environment.signal(part, "AncestryChanged"):Connect(function()
+		changes += 1
+	end)
+	part.Parent = parent
+	Test.expect(changes):toBe(0)
+	part.Parent = container
+	Test.expect(changes):toBe(1)
+	part.Parent = nil
+	Test.expect(part:IsDescendantOf(environment.globals.game)):toBe(false)
+	connection:Disconnect()
+	parent:Destroy()
+	part:Destroy()
+	container:Destroy()
+	Test.expect(environment.liveConnections()):toBe(0)
+	Test.expect(environment.liveInstances()):toBe(1)
 end)
 
 Test.it("calibration rejection keeps raw measurements but cannot supply comparison values", function()

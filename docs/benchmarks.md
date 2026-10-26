@@ -64,7 +64,7 @@ The explicit `--benchmarks` sync checks each commit, tree, remote and clean chec
 It uses sparse checkouts for benchmark dependencies. Blend uses only its 29 listed modules and its license notice.
 These sources stay in the ignored `.lute/dependencies` directory. They are not part of `src` or the package.
 The loader reads only the benchmark surfaces in the lock. It runs upstream source without edits.
-It resolves Roblox module paths, Nevermore module names and React package names against those surfaces.
+It resolves Roblox module paths (including `WaitForChild`), Nevermore module names, React package names and upstream Roblox package layouts against those surfaces.
 It gives each loaded framework a separate cost-model environment and module cache.
 
 Fusion uses the latest GitHub release that GitHub marks as a non-prerelease.
@@ -72,6 +72,10 @@ Its upstream tag contains `beta`; the upstream version table marks it as a relea
 Vide uses its release tag. React and ReactRoblox use the same release.
 React also needs the reconciler, scheduler, shared utilities, Luau polyfills, symbols and promises.
 Blend uses one exact NevermoreEngine revision. Its package version is in the lock.
+Roact and Seam use their latest release tags. Charm uses its latest package release tag; Reflex uses its latest release tag.
+The second React lane uses the upstream Roblox tag with its own polyfill, symbol and promise dependencies.
+Reflex uses its declared Promise dependency separately.
+Iris and Roblox signals have no upstream release or tag. Their pins use exact default-branch commits and the package versions marked `unreleased`.
 The summary prints the exact source identities for all these dependencies.
 
 ### Support
@@ -102,6 +106,18 @@ The unsupported reasons are:
 - React and ReactRoblox have no native spring. This comparison does not add an animation library to that lane.
 - At the pinned React release, a failed render leaves abandoned cost-model nodes after root unmount. An error boundary does not release those nodes. This fails the partial-build rollback contract.
 - At the pinned Blend revision, an error during observable subscription can leave created cost-model nodes without a returned cleanup resource. This fails the partial-build rollback contract.
+
+The additional lanes classify the same 24 workloads:
+
+| Lane | Supported | Unsupported | Unsupported workload ids and reasons |
+| --- | --- | --- | --- |
+| Roact | 19 | 5 | `ordered-window-scroll`: no matching ordered window primitive. `update-repeated`: no public binding batch transaction. `animate-many`: no spring. `unwind`: failed-render rollback is not guaranteed by the public mount handle. `scene-3d`: Roact sets names from reconciliation keys; named dictionary children do not preserve the required mounting order. |
+| Seam | 22 | 2 | `ordered-window-scroll`: no matching ordered window primitive. `status-panel`: the native computed-property type guard rejects the workload's synthetic `Frame.Text`, whose initial type is nil. |
+| Iris | 0 | 24 | Every workload: Iris emits its own immediate-mode widget hierarchy rather than arbitrary retained Instance trees. Its widgets cannot match these observable trees and retained identity contracts. No widget timings are substituted for these runtime workloads. |
+| signals | 12 | 12 | All eight `keyed-*` workloads and `status-panel`: no native keyed Instance collection or row lifetime primitive. `branch-swap`: no conditional Instance ownership primitive. `animate-many`: no spring. `ordered-window-scroll`: no matching ordered window primitive. |
+| React + Reflex | 21 | 3 | `ordered-window-scroll`, `animate-many`, `unwind`: the same rendering limitations as the existing React lane. |
+| Fusion + Charm | 19 | 5 | `ordered-window-scroll` and the same four shrinking keyed workloads as Fusion. Charm batching supports `update-repeated`. |
+| Roblox React | 21 | 3 | `ordered-window-scroll`, `animate-many`, `unwind`: the same rendering limitations as the existing React lane. |
 
 ### Measurement and fairness
 
@@ -137,6 +153,13 @@ Blend uses states, computed properties and `ComputedPairs` with native subscript
 Its row-position map uses the public `Shared` operator so it is computed once per list update.
 Blend's repeated-write lane uses its public `Throttled` operator to emit the last value at the end of the defer lane.
 Fusion and Blend apply independent writes eagerly. The batched workload has one independent source per node, so it does not require those libraries to merge writes to the same sink.
+Roact uses public bindings, class components, fragments and mount handles. Its structural subscriptions update component state.
+Seam uses public scopes, values, computeds, `ForPairs`, `Batch` and springs. Its property bindings flush on a native frame callback, so each batch includes a zero-delta cost-model frame.
+The cost-model host provides ancestry notifications, native vector defaults and the pre-render callback needed by these bindings.
+Signals uses its public signals, computeds, effects and batch scheduler. Its small host bridge assigns properties and owns node and effect cleanup; it adds no scene reconciler or keyed collection.
+React + Reflex subscribes React bindings to native producers and flushes the producers within the React batch. Its repeated-write workload converts the flushed numeric state to text once.
+Fusion + Charm subscribes Fusion values to native atoms, releases each subscription with its Fusion scope, and uses Charm's public batch transaction.
+These combined lanes retain their rendering library's native collection and animation behavior. Their measurements include the bridge and subscription costs.
 
 The animation workload checks tree structure only. Its existing snapshot omits numeric animation properties.
 Fusion and Blend use their native analytic springs. Vide uses its native solver. The target, damping and nominal period match the workload.

@@ -3,6 +3,7 @@
 local Upstream = require "../harness/upstream"
 local Environment = require "../cost-model"
 local Types = require "./types"
+local State = require "./state"
 
 type Binding<T> = { getValue: (Binding<T>) -> T, map: (Binding<T>, (T) -> unknown) -> unknown }
 type React = {
@@ -18,10 +19,16 @@ type ReactRoblox = {
 	Event: { [string]: unknown },
 }
 
-local function create(environment: Environment.Environment): Types.Driver
+local function create(
+	environment: Environment.Environment,
+	stateDriver: State.State?,
+	dependency: string?
+): Types.Driver
 	local loader = Upstream.create(environment)
-	local react: React = loader.load ".lute/dependencies/react/modules/react/src"
-	local roblox: ReactRoblox = loader.load ".lute/dependencies/react/modules/react-roblox/src"
+	local root = ".lute/dependencies/" .. (dependency or "react") .. "/modules/"
+	local react: React = loader.load(root .. "react/src")
+	local roblox: ReactRoblox = loader.load(root .. "react-roblox/src")
+	local releases: { () -> () } = {}
 	local scope: Types.Scope
 	scope = {
 		spring = function(): unknown
@@ -30,15 +37,26 @@ local function create(environment: Environment.Environment): Types.Driver
 		value = function<T>(initial: T): Types.Source<T>
 			local binding, update = react.createBinding(initial)
 			local listeners: { [(T) -> ()]: boolean } = {}
+			local function emit(next: T)
+				update(next)
+				for listener in listeners do
+					listener(next)
+				end
+			end
+			local cell = if stateDriver then stateDriver.value(initial, emit) else nil
+			if cell then
+				table.insert(releases, cell.release)
+			end
 			return {
 				binding = binding,
 				read = function(): T
-					return binding:getValue()
+					return if cell then cell.read() else binding:getValue()
 				end,
 				write = function(next: T)
-					update(next)
-					for listener in listeners do
-						listener(next)
+					if cell then
+						cell.write(next)
+					else
+						emit(next)
 					end
 				end,
 				bind = function(map: (T) -> unknown): unknown
@@ -85,6 +103,18 @@ local function create(environment: Environment.Environment): Types.Driver
 			return roblox.Event[name]
 		end,
 		counterState = function(initial: number): Types.CounterState
+			if stateDriver then
+				local source = scope.value(initial)
+				return {
+					node = scope.node(
+						"TextLabel",
+						{ Text = source.bind(function(value: number): unknown
+							return tostring(value)
+						end) }
+					),
+					write = source.write,
+				}
+			end
 			local write: (number) -> () = function()
 				error("text state is not mounted", 0)
 			end
@@ -103,20 +133,36 @@ local function create(environment: Environment.Environment): Types.Driver
 	}
 	return {
 		mount = function(container: Environment.Instance, build: (Types.Scope) -> unknown): () -> ()
+			local owned: { () -> () } = {}
+			releases = owned
 			local root = roblox.createLegacyRoot(container)
 			local ok, detail = pcall(function()
 				root:render(build(scope))
 			end)
 			if not ok then
 				root:unmount()
+				for _, release in owned do
+					release()
+				end
+				table.clear(owned)
 				error(detail, 0)
 			end
 			return function()
 				root:unmount()
+				for _, release in owned do
+					release()
+				end
+				table.clear(owned)
 			end
 		end,
 		batch = function(run: () -> ())
-			roblox.unstable_batchedUpdates(run)
+			roblox.unstable_batchedUpdates(function()
+				if stateDriver then
+					stateDriver.batch(run)
+				else
+					run()
+				end
+			end)
 			environment.drain()
 		end,
 	}

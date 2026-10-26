@@ -45,6 +45,7 @@ export type Instance = {
 	HasTag: (Instance, string) -> boolean,
 	ClearAllChildren: (Instance) -> (),
 	IsA: (Instance, string) -> boolean,
+	IsDescendantOf: (Instance, unknown) -> boolean,
 	GetPropertyChangedSignal: (Engine.Instance, string) -> Signal<()>,
 	GetAttribute: (Instance, string) -> unknown,
 	SetAttribute: (Engine.Instance, string, unknown) -> (),
@@ -103,6 +104,7 @@ export type Vector3Factory = {
 export type RunService = {
 	Heartbeat: Signal<number>,
 	RenderStepped: Signal<number>,
+	PreRender: Signal<number>,
 	PostSimulation: Signal<number>,
 	IsClient: () -> boolean,
 	IsServer: () -> boolean,
@@ -114,7 +116,7 @@ export type RunService = {
 export type Globals = {
 	[string]: unknown,
 	Instance: InstanceFactory,
-	game: { GetService: (unknown, string) -> unknown },
+	game: { GetService: (unknown, string) -> unknown, IsLoaded: () -> boolean },
 	workspace: unknown,
 	Vector2: Vector2Factory,
 	Vector3: Vector3Factory,
@@ -372,6 +374,9 @@ local function create(): Environment
 	end
 
 	local states: { [unknown]: State } = {}
+	local roots: { [unknown]: boolean } = {}
+	local gameIdentity: unknown = nil
+	local vector3Default: unknown = nil
 	setmetatable(states, { __mode = "k" })
 	local instances: { [unknown]: Instance } = {}
 	setmetatable(instances, { __mode = "kv" })
@@ -396,13 +401,18 @@ local function create(): Environment
 		end
 
 		events.Destroying = makeSignal()
+		events.AncestryChanged = makeSignal()
 
 		local proxy = newproxy(true)
 		local object: Instance = proxy
 		instances[object] = object
+		local properties = table.clone(defaults)
+		if properties.Position ~= nil then
+			properties.Position = vector3Default
+		end
 		states[object] = {
 			className = className,
-			properties = table.clone(defaults),
+			properties = properties,
 			children = {},
 			parent = nil,
 			events = events,
@@ -472,6 +482,17 @@ local function create(): Environment
 			return state.className
 		elseif key == "Parent" then
 			return state.parent
+		elseif key == "IsDescendantOf" then
+			return function(self: Instance, ancestor: unknown): boolean
+				local current = stateOf(self).parent
+				while current do
+					if current == ancestor or (roots[current] and ancestor == gameIdentity) then
+						return true
+					end
+					current = stateOf(current).parent
+				end
+				return false
+			end
 		elseif key == "Destroy" then
 			return destroyInstance
 		elseif key == "Clone" then
@@ -586,11 +607,21 @@ local function create(): Environment
 				error("The Parent property of a destroyed Instance is locked", 0)
 			end
 			counters.parentChanges += 1
+			if state.parent == instances[value] then
+				return
+			end
 			detach(object)
 			state.parent = instances[value]
 			if value ~= nil then
 				table.insert(stateOf(instances[value]).children, object)
 			end
+			local function changed(current: Instance)
+				stateOf(current).events.AncestryChanged:__fire(current, stateOf(current).parent)
+				for _, child in stateOf(current).children do
+					changed(child)
+				end
+			end
+			changed(object)
 			return
 		end
 		if state.events[key] ~= nil then
@@ -997,12 +1028,14 @@ local function create(): Environment
 		return "table"
 	end
 
+	vector3Default = Vector3.zero
 	local heartbeat = makeSignal()
 	local renderStepped = makeSignal()
 	local runService = {
 		Heartbeat = heartbeat,
 		RenderStepped = renderStepped,
 		PostSimulation = heartbeat,
+		PreRender = renderStepped,
 		IsClient = function(): boolean
 			return true
 		end,
@@ -1096,6 +1129,9 @@ local function create(): Environment
 		GuiService = guiService,
 	}
 	local dataModel = {
+		IsLoaded = function(): boolean
+			return true
+		end,
 		GetService = function(_self: unknown, name: string): unknown
 			local existing = services[name]
 			if existing == nil then
@@ -1105,6 +1141,7 @@ local function create(): Environment
 			return existing
 		end,
 	}
+	gameIdentity = dataModel
 	serviceMeta(dataModel, {
 		__index = function(_: unknown, key: string): unknown
 			return services[key]
@@ -1361,7 +1398,9 @@ local function create(): Environment
 		globals = globals,
 		heartbeat = heartbeat,
 		container = function(): Instance
-			return newInstance "Folder"
+			local container = newInstance "Folder"
+			roots[container] = true
+			return container
 		end,
 		step = step,
 		drain = drain,

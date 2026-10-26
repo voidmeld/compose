@@ -26,6 +26,19 @@ end
 local function module(path: string): unknown
 	return setmetatable({ path = path }, {
 		__index = function(_self: unknown, key: string): unknown
+			if key == "WaitForChild" or key == "FindFirstChild" then
+				return function(_object: unknown, child: string): unknown
+					return module(path .. "/" .. child)
+				end
+			elseif key == "FindFirstAncestor" then
+				return function(): unknown
+					return nil
+				end
+			elseif key == "GetFullName" then
+				return function(): string
+					return path
+				end
+			end
 			return module(if key == "Parent" then path:match "^(.*)/[^/]+$" or "" else path .. "/" .. key)
 		end,
 	})
@@ -45,6 +58,50 @@ local function create(environment: Environment.Environment)
 	end
 	local function resolve(path: string): string
 		path = normal(path)
+		local present = false
+		for _, suffix in { "", ".luau", ".lua", "/init.luau", "/init.lua" } do
+			if fs.exists(path .. suffix) and fs.type(path .. suffix) == "file" then
+				present = true
+				break
+			end
+		end
+		local package = path:match "/([^/]+)$"
+		local packages: { [string]: string } = {
+			React = "react-upstream/modules/react/src",
+			ReactRoblox = "react-upstream/modules/react-roblox/src",
+			ReactReconciler = "react-upstream/modules/react-reconciler/src",
+			Scheduler = "react-upstream/modules/scheduler/src",
+			Shared = "react-upstream/modules/shared/src",
+			LuauPolyfill = "polyfill-upstream/modules/luau-polyfill/src",
+			Promise = "promise-upstream/lib",
+			Symbol = "symbol-upstream/src",
+			Signals = "signals/modules/signals/src",
+			SignalsExperimental = "signals/modules/signals-experimental/src",
+			SignalsScheduler = "signals/modules/signals-scheduler/src",
+			SignalsFlags = "signals/modules/signals-flags/src",
+		}
+		local mapped = if package then packages[package] else nil
+		if package == "Promise" and path:find("/reflex/", 1, true) then
+			mapped = "reflex-promise/lib"
+		end
+		if mapped and not present then
+			path = ".lute/dependencies/" .. mapped
+		elseif not present and path:find("/polyfill-upstream/", 1, true) and package then
+			local names: { [string]: string } = {
+				Boolean = "boolean",
+				Collections = "collections",
+				Console = "console",
+				ES7Types = "es7-types",
+				InstanceOf = "instance-of",
+				Math = "math",
+				Number = "number",
+				String = "string",
+				Timers = "timers",
+			}
+			if names[package] then
+				path = ".lute/dependencies/polyfill-upstream/modules/" .. names[package] .. "/src"
+			end
+		end
 		for _, candidate in { path, path .. ".luau", path .. ".lua", path .. "/init.luau", path .. "/init.lua" } do
 			if fs.exists(candidate) and fs.type(candidate) == "file" then
 				for _, root in allowed do
@@ -140,4 +197,14 @@ local function create(environment: Environment.Environment)
 	}
 end
 
-return { create = create }
+return {
+	create = create,
+	callback = function(value: unknown): (...unknown) -> ()
+		assert(type(value) == "function", "event handler must be a function")
+		return boundary(value)
+	end,
+	entries = function(value: unknown): { [unknown]: unknown }
+		assert(type(value) == "table", "children must be a table")
+		return boundary(value)
+	end,
+}
