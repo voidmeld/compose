@@ -61,6 +61,24 @@ local function world(space: string?)
 	env.fake("UserInputService.IsKeyDown", function(_object: VerifyRoblox.Instance, key: unknown): boolean
 		return down[key] == true
 	end)
+	local modifiers: { [string]: { string } } = {
+		Shift = { "LeftShift", "RightShift" },
+		Ctrl = { "LeftControl", "RightControl" },
+		Meta = { "LeftMeta", "RightMeta", "LeftSuper", "RightSuper" },
+		Alt = { "LeftAlt", "RightAlt" },
+	}
+	local function modifierDown(modifier: unknown): boolean
+		local keys: { string } = modifiers[string.match(tostring(modifier), "%.(%w+)$") or ""] or {}
+		for _, key in keys do
+			if down[values.Enum.KeyCode[key]] == true then
+				return true
+			end
+		end
+		return false
+	end
+	env.fake("InputObject.IsModifierKeyDown", function(_object: VerifyRoblox.Instance, modifier: unknown): boolean
+		return modifierDown(modifier)
+	end)
 	local environment: Editor.Environment = ComposeRoblox.designEnvironment {
 		service = place.service,
 		values = {
@@ -157,7 +175,13 @@ local function world(space: string?)
 		env.fire(instance(node), event, ...)
 	end
 	local function pointer(kind: string, x: number, y: number, z: number?)
-		return { UserInputType = values.Enum.UserInputType[kind], Position = values.Vector3.new(x, y, z or 0) }
+		return {
+			UserInputType = values.Enum.UserInputType[kind],
+			Position = values.Vector3.new(x, y, z or 0),
+			IsModifierKeyDown = function(_self: unknown, modifier: unknown): boolean
+				return modifierDown(modifier)
+			end,
+		}
 	end
 	return {
 		runtime = runtime,

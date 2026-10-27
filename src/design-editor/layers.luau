@@ -230,7 +230,7 @@ return function(ui: UI.UI)
 					end
 					table.insert(
 						connections,
-						ui.connect(created.button, "Activated", function()
+						ui.connect(created.button, "Activated", function(input: Compose.Node?)
 							if consumed == id then
 								consumed = nil
 								return
@@ -238,15 +238,8 @@ return function(ui: UI.UI)
 							if dragging and dragging.active then
 								return
 							end
-							local shift = ui.keyDown { "LeftShift", "RightShift" }
-							local command = ui.keyDown {
-								"LeftControl",
-								"RightControl",
-								"LeftMeta",
-								"RightMeta",
-								"LeftSuper",
-								"RightSuper",
-							}
+							local shift = ui.modified(input, { "Shift" })
+							local command = ui.modified(input, { "Ctrl", "Meta" })
 							session.select(id, if command then "toggle" elseif shift then "range" else "replace")
 						end)
 					)

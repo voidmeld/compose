@@ -702,19 +702,10 @@ return function(ui: UI.UI)
 			apply()
 		end
 		local panning: UI.Point? = nil
-		local function beginMarquee(point: UI.Point)
+		local function beginMarquee(point: UI.Point, input: Compose.Node)
 			local picked = pick(point)
 			if picked == nil or picked == session.document:peek().root.id then
-				local additive = ui.keyDown {
-					"LeftShift",
-					"RightShift",
-					"LeftControl",
-					"RightControl",
-					"LeftMeta",
-					"RightMeta",
-					"LeftSuper",
-					"RightSuper",
-				}
+				local additive = ui.modified(input, { "Shift", "Ctrl", "Meta" })
 				marquee =
 					{ from = point, to = point, base = if additive then table.clone(session.selection:peek()) else {} }
 			end
@@ -739,55 +730,55 @@ return function(ui: UI.UI)
 					if middle or spaced then
 						panning = toGui(input)
 					elseif ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") then
-						beginMarquee(toGui(input))
+						beginMarquee(toGui(input), input)
 					end
 				end)
 			)
 		end
-		table.insert(
-			surfaceInput,
-			ui.connect(UserInputService, "InputChanged", function(input: Compose.Node)
-				if marquee and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
-					updateMarquee(toGui(input))
-					return
-				end
-				if resizing and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
-					updateResize(toGui(input))
-					return
-				end
-				if carrying and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
-					carry(toGui(input))
-					return
-				end
-				local from = panning
-				if from and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
-					local at = toGui(input)
-					pan = Math.add(pan, Math.sub(at, from))
-					panning = at
-					apply()
-				end
-			end)
-		)
-		table.insert(
-			surfaceInput,
-			ui.connect(UserInputService, "InputEnded", function(input: Compose.Node)
-				if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") and marquee then
-					finishMarquee()
-				end
-				if
-					ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton3")
-					or ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1")
-				then
-					panning = nil
-				end
-				if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") and resizing then
-					finishResize()
-				end
-				if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") and carrying then
-					finishCarry()
-				end
-			end)
-		)
+		local function onPointerChanged(input: Compose.Node)
+			if marquee and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
+				updateMarquee(toGui(input))
+				return
+			end
+			if resizing and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
+				updateResize(toGui(input))
+				return
+			end
+			if carrying and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
+				carry(toGui(input))
+				return
+			end
+			local from = panning
+			if from and ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") then
+				local at = toGui(input)
+				pan = Math.add(pan, Math.sub(at, from))
+				panning = at
+				apply()
+			end
+		end
+		local function onPointerEnded(input: Compose.Node)
+			if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") and marquee then
+				finishMarquee()
+			end
+			if
+				ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton3")
+				or ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1")
+			then
+				panning = nil
+			end
+			if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") and resizing then
+				finishResize()
+			end
+			if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1") and carrying then
+				finishCarry()
+			end
+		end
+		for _, source in { UserInputService, parent } do
+			if source == UserInputService or ui.isA(source, "GuiObject") then
+				table.insert(surfaceInput, ui.connect(source, "InputChanged", onPointerChanged))
+				table.insert(surfaceInput, ui.connect(source, "InputEnded", onPointerEnded))
+			end
+		end
 		local began = ui.connect(overlay, "InputBegan", function(input: Compose.Node)
 			if
 				ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1")
@@ -800,19 +791,10 @@ return function(ui: UI.UI)
 				elseif ui.call(UserInputService, "IsKeyDown", ui.values.enum("KeyCode", "Space")) ~= true then
 					local picked = pick(point)
 					if picked == nil or picked == session.document:peek().root.id then
-						beginMarquee(point)
+						beginMarquee(point, input)
 						return
 					end
-					local modified = ui.keyDown {
-						"LeftShift",
-						"RightShift",
-						"LeftControl",
-						"RightControl",
-						"LeftMeta",
-						"RightMeta",
-						"LeftSuper",
-						"RightSuper",
-					}
+					local modified = ui.modified(input, { "Shift", "Ctrl", "Meta" })
 					if modified then
 						session.select(picked, "toggle")
 					elseif not table.find(session.selection:peek(), picked) then
