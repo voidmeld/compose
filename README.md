@@ -34,6 +34,25 @@ Use this page to find a task. Each linked page gives the details for that task.
 | Change this repository | [Maintainer guide](AGENTS.md) |
 | Review this simplification | [Change report](ready.md) |
 
+## Performance
+
+The [framework comparison](docs/framework-comparison.md) times Compose against Fusion, Vide, React, Roact, Blend, Seam and other Roblox UI libraries on 23 runtime workloads. Each library passes the same parity checks before timing. These are headless cost-model measurements from CI (`eabe9cc`). They do not measure engine rendering.
+
+Compose is faster than the fastest other library in 12 workloads, equal in 1 and slower in 10. Its retained heap is at most 1.58x that of hand-written Instances, and within 1.1x in 10 workloads.
+
+| Workload | Time vs fastest other library | Time vs hand-written | Heap vs hand-written |
+| --- | ---: | ---: | ---: |
+| cold-mount-100 | 0.79x (Seam) | 0.84x | 1.01x |
+| update-leaf | 0.74x (Roact) | 2.22x | 1.00x |
+| update-batched | 0.83x (React) | 3.29x | 1.12x |
+| keyed-append | 0.89x (Vide) | 1.32x | 1.27x |
+| animate-many | 0.86x (Vide) | 5.88x | 1.58x |
+| cold-mount-10000 | 1.27x (Signals) | 1.39x | 1.01x |
+| mount-dispose | 1.20x (Signals) | 1.05x | 1.01x |
+| keyed-reverse | 1.64x (Blend) | 3.49x | 1.33x |
+
+A ratio below 1.00x is smaller. See [benchmarks](docs/benchmarks.md) for the method and the commands.
+
 ## Packages
 
 | Entry point | Purpose |
