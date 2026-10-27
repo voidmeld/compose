@@ -212,6 +212,88 @@ describe("formulas", function()
 	end)
 end)
 
+describe("formulas with equals", function()
+	it("cut off an equal result before any consumer is scheduled", function()
+		local reactor, owner = domain()
+		local source = Compose.cell(1)
+		local parity = Compose.formula(function(use): number
+			return use(source) % 2
+		end, function(current: number, incoming: number): boolean
+			return current == incoming
+		end)
+		local runs = 0
+		for _ = 1, 50 do
+			Compose.owner.watch(owner, function(use)
+				use(parity)
+				runs += 1
+			end)
+		end
+		expect(runs):toBe(50)
+		Compose.setWorkCounters(true)
+		Compose.resetWorkCounters()
+		source:set(3)
+		Compose.reactor.settle(reactor)
+		local counters = Compose.readWorkCounters()
+		Compose.setWorkCounters(false)
+		expect(runs):toBe(50)
+		expect(counters.watchSchedules):toBe(0)
+
+		source:set(4)
+		Compose.reactor.settle(reactor)
+		expect(runs):toBe(100)
+		Compose.owner.dispose(owner)
+	end)
+
+	it("reads the new value through peek right after a write", function()
+		local reactor, owner = domain()
+		local source = Compose.cell(1)
+		local doubled = Compose.formula(function(use): number
+			return use(source) * 2
+		end, function(current: number, incoming: number): boolean
+			return current == incoming
+		end)
+		local outer = Compose.formula(function(use): number
+			return use(doubled) + 1
+		end)
+		local seen: { number } = {}
+		Compose.owner.watch(owner, function(use)
+			table.insert(seen, use(outer))
+		end)
+		Compose.reactor.batch(reactor, function()
+			source:set(5)
+			expect(outer:peek()):toBe(11)
+		end)
+		Compose.reactor.settle(reactor)
+		expect(seen):toEqual { 3, 11 }
+		Compose.owner.dispose(owner)
+	end)
+
+	it("leaves an error to the consumer that reads it", function()
+		local reactor, owner = domain()
+		local source = Compose.cell(1)
+		local checked = Compose.formula(function(use): number
+			local value = use(source)
+			assert(value > 0, "negative")
+			return value
+		end, function(current: number, incoming: number): boolean
+			return current == incoming
+		end)
+		local failures = 0
+		Compose.owner.watch(owner, function(use)
+			local ok = pcall(use, checked)
+			if not ok then
+				failures += 1
+			end
+		end)
+		expect(function()
+			source:set(-1)
+		end).never:toThrow()
+		Compose.reactor.settle(reactor)
+		expect(failures):toBe(1)
+		Compose.owner.dispose(owner)
+	end)
+end)
+
 describe("watches", function()
 	it("runs once immediately and again on change", function()
 		local reactor, owner = domain()

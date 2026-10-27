@@ -151,6 +151,7 @@ percent:peek()  --> 0.81
 
 The body runs on its first read. Compose caches the result and recomputes it only when a dependency changes.
 An equal result publishes no change, so downstream consumers do not run again.
+With an `equals` comparator, the formula checks its own result when a dependency changes, before Compose schedules any consumer. An equal result then costs one recomputation, whatever the number of consumers. A body error stays with the consumer that reads the formula.
 
 - A formula that you create under an active owner belongs to that owner. It releases its upstream dependencies on teardown or on failed-build unwind.
 - If you read an existing formula from another owner, you borrow it. The read does not transfer ownership.
