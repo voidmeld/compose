@@ -57,6 +57,7 @@ return table.freeze {
 	"tests/runtime/binding-replacement.verify.luau",
 	"tests/runtime/child-key.verify.luau",
 	"tests/runtime/group.verify.luau",
+	"tests/runtime/mapped-binding.verify.luau",
 	"tests/runtime/mount-target-custody.verify.luau",
 	"tests/runtime/mount.verify.luau",
 	"tests/runtime/named.verify.luau",

@@ -179,6 +179,23 @@ The selector subscribes once to its source. A source change looks up only the ol
 
 Creation requires an active owner. The owner retains requested keys and projections until teardown, then releases the source subscription. Borrowed sources remain live. Later projection reads or key requests raise `reactive/disposed-selector`. Source failures propagate to readers; a subsequent source change permits recovery.
 
+### `Compose.map`
+
+`map(source: ReadOnlyValue<T>, transform: (T) -> R) -> (use: Use) -> R`
+
+Returns a reactive body that reads one cell or formula and transforms its value. It works anywhere a body is accepted, such as `Compose.formula` or a bound property. A property bound directly to it on a new node takes the direct-binding path. The property writes `transform(value)` when the source changes, without dependency tracking or a watch run.
+
+```luau
+local index = Compose.cell(1)
+Host.TextLabel {
+    LayoutOrder = Compose.map(index, function(at: number): number
+        return at * 2
+    end),
+}
+```
+
+`transform` must read no other reactive state. Use a body or `Compose.formula` when the value depends on more than one source.
+
 ### `Compose.watch`
 
 `watch(body, label?) -> dispose`

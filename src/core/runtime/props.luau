@@ -536,6 +536,24 @@ local function applyAttributes(host: Host.Host, node: Node, owner: Owner.Owner, 
 	end
 end
 
+type Connect = (Owner.Owner, (unknown) -> ()) -> Types.Node
+
+local mapped: { [unknown]: Connect } = {}
+
+Weak.keys(mapped)
+
+local function map<T, R>(source: Types.ReadOnlyValue<T>, transform: (T) -> R): Types.Body<R>
+	local function body(use: Types.Use): R
+		return transform(use(source))
+	end
+	mapped[body] = function(owner: Owner.Owner, sink: (unknown) -> ()): Types.Node
+		return Owner.listenHeld(owner, source, function(current: T)
+			sink(transform(current))
+		end)
+	end
+	return body
+end
+
 local propertyTargets: { [Host.Host]: Target } = {}
 
 Weak.entries(propertyTargets)
@@ -690,10 +708,18 @@ local function apply(
 			if classify(host, node, name) == "event" then
 				subscribe(host, node, owner, name, value :: (...unknown) -> ())
 			elseif fresh then
-				local source = value :: Types.Body<unknown>
-				local watcher = Owner.effectHeld(owner, function(use: Types.Use)
-					write(node, name, source(use))
-				end)
+				local connect = mapped[value]
+				local watcher: Types.Node
+				if connect ~= nil then
+					watcher = connect(owner, function(current: unknown)
+						write(node, name, current)
+					end)
+				else
+					local source = value :: Types.Body<unknown>
+					watcher = Owner.effectHeld(owner, function(use: Types.Use)
+						write(node, name, source(use))
+					end)
+				end
 				watcher.fastKey = name
 				watcher.fastNext = fastEdges[node]
 				fastEdges[node] = watcher
@@ -719,4 +745,5 @@ end
 return {
 	apply = apply,
 	forget = forget,
+	map = map,
 }
