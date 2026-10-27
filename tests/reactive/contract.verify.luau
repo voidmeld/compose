@@ -268,6 +268,30 @@ describe("formulas with equals", function()
 		Compose.owner.dispose(owner)
 	end)
 
+	it("keeps its consumers in their propagation order", function()
+		local reactor, owner = domain()
+		local source = Compose.cell(1)
+		local doubled = Compose.formula(function(use): number
+			return use(source) * 2
+		end, function(current: number, incoming: number): boolean
+			return current == incoming
+		end)
+		local order: { string } = {}
+		Compose.owner.watch(owner, function(use)
+			use(doubled)
+			table.insert(order, "formula")
+		end)
+		Compose.owner.watch(owner, function(use)
+			use(source)
+			table.insert(order, "direct")
+		end)
+		table.clear(order)
+		source:set(2)
+		Compose.reactor.settle(reactor)
+		expect(order):toEqual { "formula", "direct" }
+		Compose.owner.dispose(owner)
+	end)
+
 	it("leaves an error to the consumer that reads it", function()
 		local reactor, owner = domain()
 		local source = Compose.cell(1)
