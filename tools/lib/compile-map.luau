@@ -18,7 +18,7 @@ local function children(node: Node, visit: (Node, Node?) -> ())
 			if child.kind ~= nil then
 				visit(child, node)
 			else
-				for _, item in child :: { unknown } do
+				for _, item in (value :: unknown) :: { unknown } do
 					if type(item) == "table" and (item :: Node).kind ~= nil then
 						visit(item :: Node, node)
 					end
@@ -65,7 +65,9 @@ local function assigned(root: Node): { [unknown]: boolean }
 	local found: { [unknown]: boolean } = {}
 	walk(root, function(node: Node): boolean
 		if node.kind == "stat" and (node.tag == "assign" or node.tag == "compoundassign") then
-			local targets = if node.tag == "assign" then list(node, "variables") else { node.variable :: Node }
+			local targets: { Node } = if node.tag == "assign"
+				then list(node, "variables")
+				else { node.variable :: Node }
 			for _, target in targets do
 				if type(target) == "table" and target.tag == "local" then
 					found[target["local"]] = true
@@ -127,8 +129,8 @@ local function candidate(fn: Node, written: { [unknown]: boolean }): (Node?, Nod
 end
 
 local function compile(source: string, binding: string): Result
-	local parsed = parser.parse(source)
-	local root = parsed.root :: Node
+	local parsed = (parser.parse(source) :: unknown) :: { root: Node }
+	local root = parsed.root
 	local bound = false
 	for _, statement in list(root, "statements") do
 		if statement.tag == "local" then
