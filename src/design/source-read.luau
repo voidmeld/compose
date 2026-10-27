@@ -2,7 +2,6 @@
 
 local Types = require "./types"
 local Datatype = require "./datatype"
-local Copy = require "./document-copy"
 local Document = require "./document"
 
 type Node = Types.Node
@@ -736,11 +735,6 @@ function source.parse(code: string, library: Library): Types.Document
 			children = {},
 		}
 		nextId += 1
-		if kind.defaults then
-			for key, default in kind.defaults do
-				result.props[key] = { literal = Copy.literal(default) }
-			end
-		end
 		local outerCells = pendingCells
 		pendingCells = {}
 		take "{"
@@ -885,14 +879,9 @@ function source.parse(code: string, library: Library): Types.Document
 		pendingCells = outerCells
 		if from then
 			local row = if rowId ~= nil and listed > 1 then rowId else nil
-			local defaults = kind.defaults
 			local keyProp = kind.key
 			local field = if keyProp then kind.fields[keyProp] else nil
-			local default = if defaults
-					and keyProp
-					and defaults[keyProp] ~= nil
-				then defaults[keyProp]
-				else if field then field.default else nil
+			local default = if field then field.default else nil
 			result.bind = { from = from, key = key or (if type(default) == "string" then default else "id"), row = row }
 		end
 		return result

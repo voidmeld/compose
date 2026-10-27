@@ -43,8 +43,8 @@ local library: Design.Library = {
 				Point = { type = "datatype", datatype = "Vector3", tokens = true },
 				Bounds = { type = "datatype", datatype = "Rect", tokens = true },
 				Range = { type = "datatype", datatype = "NumberRange", tokens = true },
-				Visible = { type = "boolean" },
-				Style = { type = "value" },
+				Visible = { type = "boolean", default = true },
+				Style = { type = "value", default = style },
 				Text = { type = "string" },
 			},
 			defaults = defaults,
@@ -265,12 +265,14 @@ describe("Design datatype components", function()
 		end):toThrow "components"
 	end)
 
-	it("omits equal scalar and table defaults and restores them during parsing", function()
+	it("omits literals equal to their field defaults and keeps them unset when parsing", function()
 		local value = Design.document.new("Component", library, "Box")
 		local code = Design.emit(value, library)
 		expect(string.find(code, "Visible =", 1, true)):toBeNil()
 		expect(string.find(code, "Style =", 1, true)):toBeNil()
-		expect(Design.parse(code, library).root.props):toEqual(value.root.props)
+		local parsed = Design.parse(code, library)
+		expect(parsed.root.props.Visible):toBeNil()
+		expect(Design.emit(parsed, library)):toBe(code)
 		value = Design.document.change(value, library, "n1", "Visible", { literal = false })
 		value = Design.document.change(
 			value,
@@ -283,6 +285,24 @@ describe("Design datatype components", function()
 		expect(string.find(changed, "Visible = false", 1, true) ~= nil):toBe(true)
 		expect(string.find(changed, "Style =", 1, true) ~= nil):toBe(true)
 		expect(Design.emit(Design.parse(changed, library), library)):toBe(changed)
+	end)
+
+	it("keeps seeded kind defaults that the called control does not apply", function()
+		local seeded: { [string]: Design.Literal } = { Text = "Seed" }
+		local toy = Design.extend(library, {
+			kinds = {
+				Seeded = {
+					fields = { Text = { type = "string" } },
+					defaults = seeded,
+					children = "none",
+					call = "UI.Seeded",
+					build = build,
+				},
+			},
+		})
+		local code = Design.emit(Design.document.new("Seeded", toy, "Seeded"), toy)
+		expect(string.find(code, `Text = "Seed"`, 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
 	end)
 
 	it("keeps a representative screen within its recorded emitted byte budget", function()
@@ -300,7 +320,7 @@ describe("Design datatype components", function()
 					fields = {
 						from = { type = "value" },
 						key = { type = "string", default = "name" },
-						Visible = { type = "boolean" },
+						Visible = { type = "boolean", default = true },
 					},
 					defaults = wrapperDefaults,
 					children = "template",

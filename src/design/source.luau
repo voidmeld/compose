@@ -713,7 +713,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local boundTemplate = kind.children == "template" and node.bind ~= nil
 		for key in node.props do
 			local current = node.props[key].literal
-			local default = if kind.defaults then kind.defaults[key] else nil
+			local declared = kind.fields[key]
+			local default = if declared then declared.default else nil
 			if
 				not (boundTemplate and (key == kind.source or key == kind.key))
 				and not (current ~= nil and default ~= nil and literal(current) == literal(default))
@@ -784,11 +785,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				table.insert(body, `{inner}{assert(kind.source)} = {sourceOf(bind.from, depth + 1)},`)
 				local keyProp = kind.key
 				if keyProp then
-					local defaults = kind.defaults
 					local field = kind.fields[keyProp]
-					local default = if defaults and defaults[keyProp] ~= nil
-						then defaults[keyProp]
-						else if field then field.default else nil
+					local default = if field then field.default else nil
 					if default ~= bind.key then
 						table.insert(body, `{inner}{keyProp} = {literal(bind.key)},`)
 					end
