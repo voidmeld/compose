@@ -36,20 +36,22 @@ Use this page to find a task. Each linked page gives the details for that task.
 
 ## Performance
 
-The [framework comparison](docs/framework-comparison.md) times Compose against Fusion, Vide, React, Roact, Blend, Seam and other Roblox UI libraries on 23 runtime workloads. Each library passes the same parity checks before timing. These are headless cost-model measurements from CI (`eabe9cc`). They do not measure engine rendering.
+The [framework comparison](docs/framework-comparison.md) times Compose against Fusion, Vide, React, Roact, Blend, Seam and other Roblox UI libraries on 23 runtime workloads. Each library passes the same parity checks before timing. These are headless cost-model measurements from CI (`00a663b`). They do not measure engine rendering.
 
-Compose is faster than the fastest other library in 12 workloads, equal in 1 and slower in 10. Its retained heap is at most 1.58x that of hand-written Instances, and within 1.1x in 10 workloads.
+Compose is faster than the fastest other library in 11 workloads, equal in 1 and slower in 11. Its retained heap is within 1.1x of hand-written Instances in 10 workloads and at most 1.88x.
 
 | Workload | Time vs fastest other library | Time vs hand-written | Heap vs hand-written |
 | --- | ---: | ---: | ---: |
-| cold-mount-100 | 0.79x (Seam) | 0.84x | 1.01x |
-| update-leaf | 0.74x (Roact) | 2.22x | 1.00x |
-| update-batched | 0.83x (React) | 3.29x | 1.12x |
-| keyed-append | 0.89x (Vide) | 1.32x | 1.27x |
-| animate-many | 0.86x (Vide) | 5.88x | 1.58x |
-| cold-mount-10000 | 1.27x (Signals) | 1.39x | 1.01x |
-| mount-dispose | 1.20x (Signals) | 1.05x | 1.01x |
-| keyed-reverse | 1.64x (Blend) | 3.49x | 1.33x |
+| update-repeated | 0.57x (React Reflex) | 6.72x | 0.79x |
+| update-leaf | 0.66x (Roact) | 2.22x | 1.00x |
+| branch-swap | 0.67x (Vide) | 1.17x | 0.99x |
+| update-batched | 0.77x (React) | 2.86x | 1.13x |
+| animate-many | 0.76x (Vide) | 5.01x | 1.56x |
+| cold-mount-10000 | 1.00x (Signals) | 1.33x | 1.00x |
+| mount-dispose | 1.01x (Signals) | 1.04x | 0.95x |
+| cold-mount-100 | 1.24x (Signals) | 1.13x | 1.01x |
+| keyed-reverse | 1.45x (Blend) | 2.85x | 1.28x |
+| keyed-replace | 1.51x (Roact) | 2.27x | 1.11x |
 
 A ratio below 1.00x is smaller. See [benchmarks](docs/benchmarks.md) for the method and the commands.
 
