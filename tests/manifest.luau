@@ -79,6 +79,7 @@ return table.freeze {
 	"tests/structure/tile-collection.verify.luau",
 	"tests/structure/unordered-host.verify.luau",
 	"tests/tools/bundle.lute.verify.luau",
+	"tests/tools/compile-map.lute.verify.luau",
 	"tests/tools/compose-check.lute.verify.luau",
 	"tests/tools/dependency-source.lute.verify.luau",
 	"tests/tools/dispositions.lute.verify.luau",

@@ -196,6 +196,19 @@ Host.TextLabel {
 
 `transform` must read no other reactive state. Use a body or `Compose.formula` when the value depends on more than one source.
 
+`tools/compile-map.luau` rewrites eligible bodies into `map` calls as a build step:
+
+```sh
+lute run tools/compile-map.luau --binding Compose src/client/*.luau
+```
+
+It changes a function expression only if all of these hold:
+- It returns one expression.
+- It calls its parameter exactly once, on a local that is never reassigned.
+- It uses the parameter nowhere else.
+
+Named function declarations and files without the binding local are unchanged. `--check` lists the changes without writing. Run it on build output, not on source: the rewritten transform has an untyped parameter. Type-check the source.
+
 ### `Compose.watch`
 
 `watch(body, label?) -> dispose`
