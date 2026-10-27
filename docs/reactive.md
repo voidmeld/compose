@@ -77,7 +77,11 @@ An unchanged read order reuses all edges.
 
 ## Change propagation
 
-A changed write advances the cell version and visits its subscribers.
+A changed write updates the cell and invalidates its subscribers.
+When a sole terminal binding is already queued, repeated writes retain the latest value without repeating graph work.
+The binding restores normal notification before evaluation, subscription changes or disposal.
+Enabling work counters or yield checking also restores it before the next write.
+Other changed writes advance the cell version and visit its subscribers.
 It marks direct dependents `DIRTY` and indirect dependents `CHECK`.
 Each affected watch enters its reactor queue.
 A read or queue drain requests evaluation.

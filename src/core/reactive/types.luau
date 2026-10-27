@@ -51,6 +51,8 @@ export type Node = {
 	reactor: Reactor?,
 	release: (() -> ())?,
 	set: ((Node, unknown) -> ())?,
+	resume: ((Node, unknown) -> ())?,
+	coalesced: Node?,
 	group: boolean?,
 	source: Node?,
 	fastKey: string?,

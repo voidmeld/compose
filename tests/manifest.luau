@@ -39,6 +39,7 @@ return table.freeze {
 	"tests/lifecycle/unwind.verify.luau",
 	"tests/reactive/accumulator.verify.luau",
 	"tests/reactive/contract.verify.luau",
+	"tests/reactive/direct-binding.verify.luau",
 	"tests/reactive/falsifiers.verify.luau",
 	"tests/reactive/introspection.verify.luau",
 	"tests/reactive/profile.verify.luau",

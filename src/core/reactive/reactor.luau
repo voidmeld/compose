@@ -189,6 +189,10 @@ local function drain(reactor: Reactor): { string }?
 
 	local queue = reactor.queue
 	if reactor.abandoned then
+		local resume = statsOn.resume
+		if resume ~= nil then
+			resume()
+		end
 		for index = cursor + 1, reactor.count do
 			rearm(queue[index])
 		end
@@ -296,9 +300,25 @@ local function runNow(node: Node)
 		return
 	end
 	reactor.batching = true
-	local consumer, at = Evaluation.snapshot()
-	local ok = xpcall(run, catch, node)
-	if not ok then
+	local listener = node.listener
+	local producer = node[1]
+	local direct = listener ~= nil
+		and producer ~= nil
+		and producer.refresh == nil
+		and producer.first == node
+		and node[4] == nil
+		and not statsOn.enabled
+	local consumer: Node? = nil
+	local at = 0
+	local ok: boolean
+	if direct and listener ~= nil and producer ~= nil then
+		node.version = producer.version
+		ok = xpcall(listener, catch, producer.value)
+	else
+		consumer, at = Evaluation.snapshot()
+		ok = xpcall(run, catch, node)
+	end
+	if not ok and not direct then
 		Evaluation.leave(consumer, at)
 	end
 	local errors: { string }? = nil
@@ -323,6 +343,10 @@ local function pending(reactor: Reactor): number
 end
 
 local function reset(reactor: Reactor)
+	local resume = statsOn.resume
+	if resume ~= nil then
+		resume()
+	end
 	local queue = reactor.queue
 	for index = reactor.count, 1, -1 do
 		queue[index].queued = false
