@@ -41,6 +41,7 @@ return table.freeze {
 	"tests/reactive/falsifiers.verify.luau",
 	"tests/reactive/introspection.verify.luau",
 	"tests/reactive/profile.verify.luau",
+	"tests/reactive/selector.verify.luau",
 	"tests/reactive/shared-cell.verify.luau",
 	"tests/reactive/sink.verify.luau",
 	"tests/reactive/sources.verify.luau",

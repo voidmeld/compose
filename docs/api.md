@@ -162,6 +162,23 @@ Later `:peek()` and `use(formula)` reads raise `reactive/disposed-formula`.
 Disposal neither evaluates the body nor schedules downstream callbacks.
 Dispose downstream consumers before their formula, or give the formula an owner that outlives those consumers.
 
+### `Compose.selector`
+
+`selector(source: ReadOnlyValue<K>) -> (key: K) -> ReadOnlyValue<boolean>`
+
+Creates an owner-bound keyed projection of a cell or formula. Each returned readable answers whether the source matches its key, using table-key identity (`rawequal`, without calling equality metamethods). Repeated requests for the same key return the same readable. Nil, false, numbers, strings and identity keys are supported; keys must be valid table keys or nil.
+
+```luau
+local selected = Compose.cell("first")
+local isSelected = Compose.selector(selected)
+local firstSelected = isSelected("first")
+local secondSelected = isSelected("second")
+```
+
+The selector subscribes once to its source. A source change looks up only the old and new keys and invalidates only their projections. Unchanged answers do not notify subscribers. This avoids running a separate equality formula for every row. Source formulas refresh when routing requires their value. Routing finishes before watches drain, so direct reads, diamonds, batches and independent reactors observe coherent values.
+
+Creation requires an active owner. The owner retains requested keys and projections until teardown, then releases the source subscription. Borrowed sources remain live. Later projection reads or key requests raise `reactive/disposed-selector`. Source failures propagate to readers; a subsequent source change permits recovery.
+
 ### `Compose.watch`
 
 `watch(body, label?) -> dispose`
@@ -282,7 +299,7 @@ Compose calls a body with an untracked reader. Thus `sample(function(use) return
 
 `isValue(value) -> boolean`
 
-True for a cell or a formula. Compose decides by metatable. An ordinary table that you pass as a property value is therefore never mistaken for something reactive.
+True for a cell, a formula or a keyed projection returned by a selector. Compose decides by metatable. An ordinary table that you pass as a property value is therefore never mistaken for something reactive.
 
 ---
 
@@ -546,6 +563,8 @@ The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [re
 #### Property readables
 
 `runtime.observe(node, property, options?) -> ReadOnlyValue<unknown>` requires an active owner and `host.observation`.
+
+The Roblox host shares one engine connection for each instance/property signal across subscribers and runtimes using that host. It disconnects after the last subscriber releases. Listeners run in subscription order; removals take effect during delivery, new listeners wait for the next signal, and one failing listener does not block the others.
 It reads the initial property synchronously. Repeated acquisitions in a runtime return the same readable for the same node, property and options, with one host subscription.
 Each acquisition holds one reference until its owner disposes; the last release disconnects and forgets the entry. The node is borrowed.
 An unchanged value produces no reactive update. A property may contain nil. A failed construction unwinds its acquisitions.
@@ -906,6 +925,8 @@ If values are structural copies and not stable objects, supply a key function.
 
 If the source is reordered, Compose **moves** the existing nodes. It does not destroy and rebuild them.
 This keeps a text field focused, an animation running and a scroll position still.
+
+Reconciliation skips matching key prefixes and suffixes when planning mounts, removals and moves. Every input item is still keyed and checked for duplicates before rows change, and retained row values and requested indices stay current. Full-array input therefore requires O(n) inspection even for one append; host work follows the changed range.
 
 If a row factory raises, that row unwinds while reconciliation continues with independent rows.
 Compose mounts or reorders the successful rows, and then reports all factory failures together.

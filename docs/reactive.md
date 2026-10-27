@@ -90,6 +90,8 @@ A formula advances its version only when its result changes.
 An equal result lets downstream consumers return to `CLEAN` without evaluation.
 Thus a filter that returns an equal list stops further propagation.
 
+For many equality projections of one key, `Compose.selector(source)` shares one source subscription and returns a key-to-readable function. Routing looks up the previous and current keys before watches drain; only projections whose answer changes are invalidated. The creating owner releases the selector. See [the API reference](api.md#composeselector).
+
 ## Reactors
 
 Each reactor has its own queue, batch depth and drain operation.

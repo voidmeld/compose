@@ -13,6 +13,7 @@ local Parity = require "./parity"
 local Scenarios = require "./scenarios"
 local Types = require "./scenarios/types"
 local Workloads = require "./workloads"
+local Projections = require "./workloads/projections"
 local WorkloadTypes = require "./workloads/types"
 
 export type Suite = "workloads" | "screens" | "entities" | "all"
@@ -507,7 +508,13 @@ local function entries(settings: Filter): { Entry }
 	local found: { Entry } = {}
 	if settings.suite == "workloads" or settings.suite == "all" then
 		local position = 0
-		for _, workload in Workloads.all do
+		local workloads = table.clone(Workloads.all)
+		if not settings.comparison then
+			for _, workload in Projections do
+				table.insert(workloads, workload)
+			end
+		end
+		for _, workload in workloads do
 			if selected(workload.id, settings.filter) then
 				position += 1
 				table.insert(found, workloadEntry(workload, position, observed, settings.comparison))

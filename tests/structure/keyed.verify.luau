@@ -54,6 +54,101 @@ local function mountList(world: Support.World, initial: { Item })
 end
 
 describe("keyed", function()
+	it("matches prefix and suffix keys by identity without equality metamethods", function()
+		local world = Support.world()
+		local equality = {
+			__eq = function(): boolean
+				return true
+			end,
+		}
+		local function identityKey()
+			return setmetatable({}, equality)
+		end
+		type IdentityKey = typeof(identityKey())
+		local firstKey, secondKey = identityKey(), identityKey()
+		local a: Item = { id = "a" }
+		local b: Item = { id = "b" }
+		local initial: { Item } = { a }
+		local list = Compose.cell(initial)
+		local dispose, root = world.runtime.mount(function()
+			return world.create "Frame" {
+				Compose.keyed {
+					from = list,
+					key = function(item: Item): IdentityKey
+						return if item.id == "a" then firstKey else secondKey
+					end,
+					render = function(value: Compose.ReadOnlyValue<Item>)
+						return world.create "Row" { Id = value:peek().id }
+					end,
+				},
+			}
+		end, world.root)
+		local before = world.host.childrenOf(root)[1]
+		list:set { b }
+		expect(order(world, root)):toEqual { "b" }
+		expect(world.host.childrenOf(root)[1] == before):toBe(false)
+		list:set { a, b }
+		expect(order(world, root)):toEqual { "a", "b" }
+		list:set { b, a }
+		expect(order(world, root)):toEqual { "b", "a" }
+		dispose()
+	end)
+
+	it("retains matching ends across every single move and middle removal", function()
+		local world = Support.world()
+		local initial = items("a", "b", "c", "d", "e", "f")
+		local dispose, root, list = mountList(world, initial)
+		local original = world.host.childrenOf(root)
+		for from = 1, #initial do
+			for to = 1, #initial do
+				list:set(initial)
+				local moved = table.clone(initial)
+				local item = table.remove(moved, from)
+				assert(item ~= nil)
+				table.insert(moved, to, item)
+				world.host.resetCounts()
+				list:set(moved)
+				local children = world.host.childrenOf(root)
+				for index, value in moved do
+					expect(world.host.propertyOf(children[index], "Id")):toBe(value.id)
+					expect(world.host.propertyOf(children[index], "Order")):toBe(index)
+					for oldIndex, oldValue in initial do
+						if oldValue == value then
+							expect(children[index]):toBe(original[oldIndex])
+						end
+					end
+				end
+				expect(world.host.counts().moveChild):toBe(if from == to then 0 else 1)
+			end
+		end
+		list:set { initial[1], initial[2], initial[5], initial[6] }
+		expect(order(world, root)):toEqual { "a", "b", "e", "f" }
+		local remaining = world.host.childrenOf(root)
+		for index, child in remaining do
+			expect(world.host.propertyOf(child, "Order")):toBe(index)
+		end
+		dispose()
+	end)
+
+	it("validates duplicate keys across matching ends before changing rows and recovers", function()
+		local world = Support.world()
+		local initial = items("a", "b", "c", "d")
+		local dispose, root, list = mountList(world, initial)
+		for _, duplicate in { items("a", "b", "c", "a"), items("a", "b", "b", "d"), items("a", "a", "c", "d") } do
+			world.host.resetCounts()
+			expect(function()
+				list:set(duplicate)
+			end):toThrow "structure/duplicate-key"
+			expect(order(world, root)):toEqual { "a", "b", "c", "d" }
+			expect(world.host.counts().createNode):toBe(0)
+			expect(world.host.counts().destroyNode):toBe(0)
+			list:set(initial)
+		end
+		list:set(items("a", "x", "d"))
+		expect(order(world, root)):toEqual { "a", "x", "d" }
+		dispose()
+	end)
+
 	it("mounts one row per item in order", function()
 		local world = Support.world()
 		local dispose, root = mountList(world, items("a", "b", "c"))

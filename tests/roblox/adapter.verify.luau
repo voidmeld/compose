@@ -77,6 +77,79 @@ local function styledWorld()
 end
 
 describe("roblox adapter", function()
+	it("shares raw property connections across runtimes and releases only the last holder", function()
+		local w = world(true)
+		local host = ComposeRoblox.createHost(w.emulator.engine)
+		local first = Compose.createRuntime(host)
+		local second = Compose.createRuntime(host)
+		local node = host.render.createNode "Frame"
+		local a, ownerA = Support.owned(function()
+			return first.observe(node, "Visible")
+		end)
+		local b, ownerB = Support.owned(function()
+			return second.observe(node, "Visible")
+		end)
+		expect(w.emulator.environment.liveConnections()):toBe(1)
+		w.emulator.environment.poke(Support.instance(node), "Visible", false)
+		expect(a:peek()):toBe(false)
+		expect(b:peek()):toBe(false)
+		Compose.owner.dispose(ownerA)
+		expect(w.emulator.environment.liveConnections()):toBe(1)
+		w.emulator.environment.poke(Support.instance(node), "Visible", true)
+		expect(a:peek()):toBe(false)
+		expect(b:peek()):toBe(true)
+		Compose.owner.dispose(ownerB)
+		Compose.owner.dispose(ownerB)
+		expect(w.emulator.environment.liveConnections()):toBe(0)
+		first:dispose()
+		second:dispose()
+		host.render.destroyNode(node)
+	end)
+
+	it("preserves raw listener order, mutation, failures and resubscription", function()
+		local w = world(true)
+		local host = ComposeRoblox.createHost(w.emulator.engine)
+		local node = host.render.createNode "Frame"
+		local observe = assert(host.observation).observeProperty
+		local calls: { string } = {}
+		local later: (() -> ())? = nil
+		local added: (() -> ())? = nil
+		local first = observe(node, "Visible", function()
+			table.insert(calls, "first")
+			assert(later)()
+			if added == nil then
+				added = observe(node, "Visible", function()
+					table.insert(calls, "added")
+				end)
+			end
+			error("raw listener failed", 0)
+		end)
+		later = observe(node, "Visible", function()
+			table.insert(calls, "removed")
+		end)
+		local good = observe(node, "Visible", function()
+			table.insert(calls, "good")
+		end)
+		expect(function()
+			w.emulator.environment.poke(Support.instance(node), "Visible", false)
+		end):toThrow "raw listener failed"
+		expect(calls):toEqual { "first", "good" }
+		expect(w.emulator.environment.liveConnections()):toBe(1)
+		first()
+		table.clear(calls)
+		w.emulator.environment.poke(Support.instance(node), "Visible", true)
+		expect(calls):toEqual { "good", "added" }
+		good()
+		assert(added)()
+		expect(w.emulator.environment.liveConnections()):toBe(0)
+		local stop = observe(node, "Visible", function() end)
+		expect(w.emulator.environment.liveConnections()):toBe(1)
+		stop()
+		stop()
+		expect(w.emulator.environment.liveConnections()):toBe(0)
+		host.render.destroyNode(node)
+	end)
+
 	describe("styled observation", function()
 		it("observes ValueBase Value and Name through property signals instead of Changed payloads", function()
 			for _, kind in { "StringValue", "NumberValue" } do
