@@ -42,6 +42,7 @@ export type Node = {
 	state: number?,
 	reads: number?,
 	run: ((Node) -> ())?,
+	runIn: (({ consumer: Node?, order: number }, Node) -> ())?,
 	effect: ((use: Use) -> ())?,
 	listener: ((value: unknown) -> ())?,
 	queued: boolean?,

@@ -142,6 +142,7 @@ describe("keyed", function()
 			expect(order(world, root)):toEqual { "a", "b", "c", "d" }
 			expect(world.host.counts().createNode):toBe(0)
 			expect(world.host.counts().destroyNode):toBe(0)
+			expect(world.host.counts().setProperty):toBe(0)
 			list:set(initial)
 		end
 		list:set(items("a", "x", "d"))
@@ -231,6 +232,30 @@ describe("keyed", function()
 		dispose()
 	end)
 
+	it("keeps a longest increasing subsequence during a shuffle", function()
+		local world = Support.world()
+		local dispose, root, list = mountList(world, items("a", "b", "c", "d", "e", "f"))
+		world.host.resetCounts()
+		list:set(items("c", "a", "e", "b", "f", "d"))
+		expect(order(world, root)):toEqual { "c", "a", "e", "b", "f", "d" }
+		expect(world.host.counts().moveChild):toBe(3)
+		expect(world.host.counts().createNode):toBe(0)
+		expect(world.host.counts().destroyNode):toBe(0)
+		dispose()
+	end)
+
+	it("replaces keys without moving retained increasing rows", function()
+		local world = Support.world()
+		local dispose, root, list = mountList(world, items("a", "b", "c", "d", "e"))
+		world.host.resetCounts()
+		list:set(items("x", "b", "y", "d", "z"))
+		expect(order(world, root)):toEqual { "x", "b", "y", "d", "z" }
+		expect(world.host.counts().moveChild):toBe(0)
+		expect(world.host.counts().createNode):toBe(3)
+		expect(world.host.counts().destroyNode):toBe(3)
+		dispose()
+	end)
+
 	it("appends without touching the rows already there", function()
 		local world = Support.world()
 		local dispose, root, list = mountList(world, items("a", "b"))
@@ -300,6 +325,7 @@ describe("keyed", function()
 		expect(order(world, root)):toEqual { "x", "y" }
 		expect(world.host.counts().createNode):toBe(2)
 		expect(world.host.counts().destroyNode):toBe(2)
+		expect(world.host.counts().moveChild):toBe(0)
 		dispose()
 	end)
 

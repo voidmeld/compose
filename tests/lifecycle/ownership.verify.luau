@@ -80,6 +80,26 @@ describe("ownership", function()
 			expect(order):toEqual { "third", "second", "first" }
 		end)
 
+		it("disposes deep owner trees iteratively in depth first reverse registration order", function()
+			local root = Compose.createOwner()
+			local current = root
+			local released: { number } = {}
+			for index = 1, 10000 do
+				Compose.owner.own(current, function()
+					table.insert(released, index)
+				end)
+				current = Compose.owner.createChild(current)
+			end
+			Compose.owner.dispose(root)
+			expect(#released):toBe(10000)
+			for index, value in released do
+				expect(value):toBe(10001 - index)
+			end
+			expect(Compose.owner.isDisposed(current)):toBe(true)
+			Compose.owner.dispose(root)
+			expect(#released):toBe(10000)
+		end)
+
 		it("disposes each entry exactly once, however it is reached", function()
 			local runs = 0
 			local owner = Compose.createOwner()

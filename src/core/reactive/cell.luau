@@ -53,7 +53,17 @@ local function write(self: Node, incoming: unknown)
 		local consumer = first[2]
 		if consumer == nil then
 			if first[4] == nil or onlyListeners(first) then
-				Reactor.runNow(first)
+				local reactor = first.reactor
+				if reactor ~= nil and reactor.batching then
+					if not first.queued then
+						first.queued = true
+						local count = reactor.count + 1
+						reactor.count = count
+						reactor.queue[count] = first
+					end
+				else
+					Reactor.runNow(first)
+				end
 				return
 			end
 		elseif first[4] == nil then
@@ -66,8 +76,18 @@ local function write(self: Node, incoming: unknown)
 			elseif consumer.run ~= nil then
 				consumer.retry = false
 				consumer.state = Graph.DIRTY
-				Reactor.enqueue(consumer)
-				Graph.settleTouched()
+				local reactor = consumer.reactor
+				if reactor ~= nil and reactor.batching then
+					if not consumer.queued then
+						consumer.queued = true
+						local count = reactor.count + 1
+						reactor.count = count
+						reactor.queue[count] = consumer
+					end
+				else
+					Reactor.enqueue(consumer)
+					Graph.settleTouched()
+				end
 				return
 			end
 		end
@@ -113,7 +133,17 @@ function CELL.set(self: Node, incoming: unknown)
 		local consumer = first[2]
 		if consumer == nil then
 			if first[4] == nil or onlyListeners(first) then
-				Reactor.runNow(first)
+				local reactor = first.reactor
+				if reactor ~= nil and reactor.batching then
+					if not first.queued then
+						first.queued = true
+						local count = reactor.count + 1
+						reactor.count = count
+						reactor.queue[count] = first
+					end
+				else
+					Reactor.runNow(first)
+				end
 				return
 			end
 		elseif first[4] == nil then
@@ -126,8 +156,18 @@ function CELL.set(self: Node, incoming: unknown)
 			elseif consumer.run ~= nil then
 				consumer.retry = false
 				consumer.state = Graph.DIRTY
-				Reactor.enqueue(consumer)
-				Graph.settleTouched()
+				local reactor = consumer.reactor
+				if reactor ~= nil and reactor.batching then
+					if not consumer.queued then
+						consumer.queued = true
+						local count = reactor.count + 1
+						reactor.count = count
+						reactor.queue[count] = consumer
+					end
+				else
+					Reactor.enqueue(consumer)
+					Graph.settleTouched()
+				end
 				return
 			end
 		end

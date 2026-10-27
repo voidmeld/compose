@@ -176,7 +176,7 @@ local function subscribe(host: Host.Host, node: Node, owner: Owner.Owner, name: 
 			0
 		)
 	end
-	Owner.own(owner, (events).connectEvent(node, name, handler))
+	Owner.adopt(owner, (events).connectEvent(node, name, handler))
 end
 
 local function refuseNodeValue(host: Host.Host, node: Node, key: string, value: unknown)
@@ -585,9 +585,8 @@ local function apply(
 	onKey: (string) -> (),
 	created: boolean?
 )
-	local target = propertyTarget(host)
 	local fresh = created == true and not statsOn.enabled and owner.boundary == nil and not owner.disposed
-	local write = target.write
+	local write = host.render.setProperty
 	local replacing = not fresh and fastEdges[node] ~= nil
 	local length = #props
 
@@ -623,10 +622,10 @@ local function apply(
 					end
 					subscribe(host, node, owner, marker.name, value :: (...unknown) -> ())
 				elseif type(value) == "function" or cellModule.isValue(value) then
-					bind(target, node, owner, marker.name, value :: Types.Source<unknown>)
+					bind(propertyTarget(host), node, owner, marker.name, value :: Types.Source<unknown>)
 				else
 					refuseNodeValue(host, node, marker.name, value)
-					writeOnce(target, node, owner, marker.name, value)
+					writeOnce(propertyTarget(host), node, owner, marker.name, value)
 				end
 				continue
 			end
@@ -658,7 +657,7 @@ local function apply(
 			if fresh then
 				write(node, name, value)
 			else
-				writeOnce(target, node, owner, name, value)
+				writeOnce(propertyTarget(host), node, owner, name, value)
 			end
 			continue
 		end
@@ -668,7 +667,7 @@ local function apply(
 			if fresh then
 				write(node, name, literal)
 			else
-				writeOnce(target, node, owner, name, literal)
+				writeOnce(propertyTarget(host), node, owner, name, literal)
 			end
 			continue
 		end
@@ -682,7 +681,7 @@ local function apply(
 				edge.fastNext = fastEdges[node]
 				fastEdges[node] = edge
 			else
-				bind(target, node, owner, name, value :: Types.Source<unknown>)
+				bind(propertyTarget(host), node, owner, name, value :: Types.Source<unknown>)
 			end
 			continue
 		end
@@ -699,7 +698,7 @@ local function apply(
 				watcher.fastNext = fastEdges[node]
 				fastEdges[node] = watcher
 			else
-				bind(target, node, owner, name, value :: Types.Source<unknown>)
+				bind(propertyTarget(host), node, owner, name, value :: Types.Source<unknown>)
 			end
 			continue
 		end
@@ -708,7 +707,7 @@ local function apply(
 		if fresh then
 			write(node, name, value)
 		else
-			writeOnce(target, node, owner, name, value)
+			writeOnce(propertyTarget(host), node, owner, name, value)
 		end
 	end
 end
