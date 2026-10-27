@@ -9,6 +9,117 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("renders resolved datatype components through the host and releases reactive bindings", function()
+		local w = Support.world()
+		local kind = w.library.kinds[w.document.root.kind]
+		kind.fields.Size = { type = "datatype", datatype = "UDim2", tokens = true }
+		kind.build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+			local size = props.Size
+			return w.runtime.create "Frame" {
+				Name = name,
+				Size = function(use: Compose.Use): unknown
+					local readable = size.readable
+					local literal = if readable then use(readable) else size.literal
+					assert(type(literal) == "table")
+					local xScale, xOffset, yScale, yOffset = literal[1], literal[2], literal[3], literal[4]
+					assert(type(xScale) == "number" and type(xOffset) == "number")
+					assert(type(yScale) == "number" and type(yOffset) == "number")
+					return w.values.UDim2.new(xScale, xOffset, yScale, yOffset)
+				end,
+			}
+		end
+		local value = Design.document.change(
+			Design.document.new("Geometry", w.library, w.document.root.kind),
+			w.library,
+			"n1",
+			"Size",
+			{
+				literal = Design.datatype.literal { 0, { token = "size.width" }, 0, { token = "size.pill" } },
+			}
+		)
+		local initial: Design.Literal? = 48
+		local height = Compose.cell(initial)
+		local dispose, root = w.runtime.mount(function(): unknown
+			return Design.render(value, w.library, {
+				resolveToken = function(name: string): Design.Resolved
+					return if name == "size.pill" then { readable = height } else { literal = 240 }
+				end,
+			})
+		end, w.screen)
+		w.settle()
+		expect(w.point(root, "AbsoluteSize")):toEqual { X = 240, Y = 48 }
+		height:set(64)
+		w.settle()
+		expect(w.point(root, "AbsoluteSize")):toEqual { X = 240, Y = 64 }
+		dispose()
+		height:set(72)
+		expect(height:peek()):toBe(72)
+		w.close()
+	end)
+
+	it("shows and selects tokens per datatype component with undo and numeric edits", function()
+		local w = Support.world()
+		local kind = w.library.kinds[w.document.root.kind]
+		kind.fields.Size = { type = "datatype", datatype = "UDim2", tokens = true }
+		kind.fields.Anchor = { type = "datatype", datatype = "Vector2", tokens = true }
+		kind.fields.Padding = { type = "datatype", datatype = "UDim", tokens = true }
+		local initial = Design.datatype.literal { 1, 0, 0, { token = "size.pill" } }
+		local value = Design.document.change(w.document, w.library, "n1", "Size", { literal = initial })
+		local editor = DesignEditor.create(w.library, value, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			stageSize = { X = 480, Y = 320 },
+			tokens = { "size.pill", "size.minimumTouch" },
+			token = function(name: string): Design.Literal
+				return if name == "size.pill" then 32 else 48
+			end,
+		})
+		w.settle()
+		local inspector = w.find(editor.root, "DesignInspector")
+		local function component(key: string, index: number)
+			return w.find(w.find(inspector, key), `Component{index}`)
+		end
+		local function box(key: string, index: number)
+			return assert(component(key, index):FindFirstChildWhichIsA("TextBox", true))
+		end
+		expect(box("Size", 4).Text):toBe "size.pill"
+		expect(box("Size", 1).Text):toBe "1"
+		w.fire(w.find(component("Size", 4), "Bind"), "Activated")
+		w.settle()
+		expect(box("Size", 4).Text):toBe "size.minimumTouch"
+		expect(editor.session.document:peek().root.props.Size.literal):toEqual(
+			Design.datatype.literal { 1, 0, 0, { token = "size.minimumTouch" } }
+		)
+		expect(editor.session.undo()):toBe(true)
+		w.settle()
+		expect(box("Size", 4).Text):toBe "size.pill"
+		for index = 1, 4 do
+			w.fire(w.find(component("Size", index), "Bind"), "Activated")
+			w.settle()
+			expect(box("Size", index).Text):toBe(if index == 4 then "size.minimumTouch" else "size.pill")
+		end
+		local height = box("Size", 4)
+		height.Text = "64"
+		w.fire(height, "FocusLost")
+		w.settle()
+		expect(box("Size", 4).Text):toBe "64"
+		expect(editor.session.document:peek().root.props.Size.literal):toEqual(
+			Design.datatype.literal { { token = "size.pill" }, { token = "size.pill" }, { token = "size.pill" }, 64 }
+		)
+		for _, key in { "Anchor", "Padding" } do
+			w.fire(w.find(component(key, 2), "Bind"), "Activated")
+			w.settle()
+			expect(box(key, 2).Text):toBe "size.pill"
+			expect(editor.session.document:peek().root.props[key].literal):toEqual(
+				Design.datatype.literal { 0, { token = "size.pill" } }
+			)
+		end
+		local code = Design.emit(editor.session.document:peek(), w.library)
+		expect(Design.emit(Design.parse(code, w.library), w.library)):toBe(code)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("opens a kit with its native live tokens, token choices and preview slots", function()
 		local w = Support.world()
 		local tint = Compose.cell(w.values.Color3.new(0.2, 0.4, 0.6))

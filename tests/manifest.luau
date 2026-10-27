@@ -20,6 +20,7 @@ return table.freeze {
 	"tests/collection/layout.verify.luau",
 	"tests/collection/prefix.verify.luau",
 	"tests/collection/relevance.verify.luau",
+	"tests/design/datatype.verify.luau",
 	"tests/design/design.verify.luau",
 	"tests/design/editor.lute.verify.luau",
 	"tests/examples/examples.verify.luau",

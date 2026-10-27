@@ -40,8 +40,13 @@ One undo restores the previous size.
 ### Fields and content
 
 The inspector provides a control for each field type.
-It edits `value` and `datatype` fields as Luau literals.
+It edits `value` fields and other datatypes as Luau literals.
 Examples are `{ top = 8, bottom = 8 }` and `{ 0, 10, 0, 20 }`.
+Numeric datatypes have one input per component.
+With `tokens = true`, each component's ◆ button cycles through token choices.
+A token component displays its name. Enter a number to replace it.
+The document stores it as `{ token = "size.pill" }` inside the component array.
+For example, `{ 1, 0, 0, { token = "size.pill" } }` emits `UDim2.new(1, 0, 0, T.size.pill)` with a `T.` token prefix.
 It selects design nodes for `node` fields.
 `Design.literal` writes literals. `Design.parseLiteral` reads them.
 An invalid literal sets `session.problem` and preserves the previous value.

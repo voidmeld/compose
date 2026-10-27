@@ -1,6 +1,7 @@
 --!strict
 
 local Types = require "./types"
+local Datatype = require "./datatype"
 
 type Document = Types.Document
 type Node = Types.Node
@@ -13,8 +14,6 @@ local MAX_DEPTH = 32
 local IDENTIFIER = "^%l[%w]*$"
 local OUTPUT = "^on%u[%w]*$"
 local TOKEN = "^%a[%w]*$"
-local DATATYPE_ARITY: { [string]: number } =
-	{ UDim2 = 4, UDim = 2, Vector2 = 2, Vector3 = 3, Rect = 4, NumberRange = 2 }
 
 local Copy = require "./document-copy"
 local copyLiteral, copyValue, copyNode = Copy.literal, Copy.value, Copy.node
@@ -273,14 +272,22 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 			if string.sub(datatype, 1, 5) == "Enum." then
 				assert(type(current) == "string", `{key} must name an item of {datatype}`)
 			else
-				local arity = DATATYPE_ARITY[datatype]
+				local arity = Datatype.arity[datatype]
 				local valid = type(current) == "table" and (arity == nil or #current == arity)
 				if valid and type(current) == "table" then
-					for _, component in current do
-						valid = valid and type(component) == "number"
+					for index, component in current do
+						valid = valid
+							and type(index) == "number"
+							and index % 1 == 0
+							and index >= 1
+							and index <= #current
+							and (
+								type(component) == "number"
+								or (field.tokens == true and Datatype.token(component) ~= nil)
+							)
 					end
 				end
-				assert(valid, `{key} must be {arity or "some"} numbers for {datatype}`)
+				assert(valid, `{key} must be {arity or "some"} numeric or token components for {datatype}`)
 			end
 		else
 			assert(field.type == "value", `{key} must be bound`)

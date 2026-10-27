@@ -3,6 +3,7 @@
 local Types = require "./types"
 local Document = require "./document"
 local Read = require "./source-read"
+local Datatype = require "./datatype"
 
 type Node = Types.Node
 type Literal = Types.Literal
@@ -85,7 +86,12 @@ local function layoutHeader(header: Literal): string
 	return lay(header, 0, 16)
 end
 
-local function datatypeLiteral(datatype: string, value: Literal): string
+local function tokenExpression(library: Library, token: string): string
+	local call = assert(library.token, `{library.name} has no theme tokens`)
+	return if string.sub(call, -1) == "." then call .. token else `{call} {literal(token)}`
+end
+
+local function datatypeLiteral(library: Library, datatype: string, value: Literal): string
 	if string.sub(datatype, 1, 5) == "Enum." then
 		return `{datatype}.{tostring(value)}`
 	end
@@ -95,7 +101,25 @@ local function datatypeLiteral(datatype: string, value: Literal): string
 	local parts: { string } = {}
 	if type(value) == "table" then
 		for _, component in value do
-			table.insert(parts, literal(component))
+			local token = Datatype.token(component)
+			table.insert(parts, if token then tokenExpression(library, token) else literal(component))
+		end
+		if datatype == "UDim2" then
+			if value[1] == 0 and value[3] == 0 then
+				return `UDim2.fromOffset({parts[2]}, {parts[4]})`
+			elseif value[2] == 0 and value[4] == 0 then
+				return `UDim2.fromScale({parts[1]}, {parts[3]})`
+			end
+		elseif datatype == "Vector2" or datatype == "Vector3" then
+			for _, constant in { "zero", "one" } do
+				local same = true
+				for _, component in value do
+					same = same and component == (if constant == "zero" then 0 else 1)
+				end
+				if same then
+					return `{datatype}.{constant}`
+				end
+			end
 		end
 	end
 	return `{datatype}.new({table.concat(parts, ", ")})`
@@ -650,11 +674,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			end
 			return callback(output, list, depth)
 		end
-		local call = assert(library.token, `{library.name} has no theme tokens`)
-		if string.sub(call, -1) == "." then
-			return call .. assert(token)
-		end
-		return `{call} {literal(assert(token))}`
+		return tokenExpression(library, assert(token))
 	end
 	local function tagged(node: Node, depth: number): string
 		local tags, tagging = node.tags, library.tags
@@ -692,7 +712,12 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local keys: { string } = {}
 		local boundTemplate = kind.children == "template" and node.bind ~= nil
 		for key in node.props do
-			if not (boundTemplate and (key == kind.source or key == kind.key)) then
+			local current = node.props[key].literal
+			local default = if kind.defaults then kind.defaults[key] else nil
+			if
+				not (boundTemplate and (key == kind.source or key == kind.key))
+				and not (current ~= nil and default ~= nil and literal(current) == literal(default))
+			then
 				table.insert(keys, key)
 			end
 		end
@@ -732,7 +757,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				written = returning(parameter, layout(current, depth + 2, 0), depth + 1, luauType)
 				table.remove(scopes)
 			elseif current ~= nil and datatype ~= nil then
-				written = datatypeLiteral(datatype, current)
+				written = datatypeLiteral(library, datatype, current)
 			elseif current ~= nil and type(current) == "table" and luauType and not carriesRow(current) then
 				local typeName: string = luauType
 				written = hoist(node, key, typeName, current)
@@ -759,7 +784,14 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				table.insert(body, `{inner}{assert(kind.source)} = {sourceOf(bind.from, depth + 1)},`)
 				local keyProp = kind.key
 				if keyProp then
-					table.insert(body, `{inner}{keyProp} = {literal(bind.key)},`)
+					local defaults = kind.defaults
+					local field = kind.fields[keyProp]
+					local default = if defaults and defaults[keyProp] ~= nil
+						then defaults[keyProp]
+						else if field then field.default else nil
+					if default ~= bind.key then
+						table.insert(body, `{inner}{keyProp} = {literal(bind.key)},`)
+					end
 				end
 			end
 			local templateProp = kind.template

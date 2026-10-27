@@ -2051,6 +2051,12 @@ A field's `type` is `string`, `number`, `boolean`, `choice`, `color`, `vector3`,
 
 A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can provide fixed `args` and current item `fields`. A `content` field binds a slot input or a content subtree. `Bind` is `{ from, key, row? }`. `from` names a list input or the enclosing row's list field. `key` names its stable key. `row` selects the template child. Other children stay beside the repeated content. Template kinds receive `rows` and `template` values through the properties named by `source` and `template`.
 
+Numeric datatype literals are component arrays. With `tokens = true`, each component accepts a number or `{ token = "size.pill" }`. For example, `{ literal = { 1, 0, 0, { token = "size.pill" } } }` describes `UDim2.new(1, 0, 0, T.size.pill)` when `library.token = "T."`. Names follow the library's token syntax. Plain `value` tables keep their usual meaning.
+
+### `Design.datatype`
+
+`literal(components: { DatatypeComponent }) -> Literal` copies a typed component array into a document literal. `DatatypeComponent` is `number | { token: string }`. `token(literal) -> string?` reads a valid component token name. `arity` lists component counts for `UDim2`, `UDim`, `Vector2`, `Vector3`, `Rect` and `NumberRange`.
+
 ### Design contracts and types
 
 `Contract` is `{ inputs: { Input }, outputs: { Output } }`. An input has `id`, `kind` (`value`, `readable` or `cell`), `type`, optional plain-data `preview`, `required`, `fields` and `luauType`. Input types are `string`, `number`, `boolean`, `color`, `image`, `list`, `record` and `slot`. List and record `fields` recursively declare `{ id, type, fields?, luauType? }`. Emitted list items and nested records retain these shapes.
@@ -2063,11 +2069,15 @@ An output has `id`, optional `args: { InputType }` or `row` naming a list input 
 
 `emit(document, library, options?) -> string` writes a typed Luau component and its plain-data contract header. The parser reads it without execution. Supported edits keep the same result after writing and reading. The literal functions convert plain data. Invalid source or literals raise an error.
 
+The writer omits literals equal to `kind.defaults`. It also omits a template wrapper's key when it equals the declared default. Parsing restores those defaults. `UDim2` uses `fromOffset` for zero scales and `fromScale` for zero offsets. Other values use `new`. All-zero and all-one vectors use `zero` and `one`. Token components stay as token expressions, even when their resolved value is zero.
+
 `EmitOptions` accepts `name`, `rowFunctions`, `localControls`, `controls`, `propsType` and `prelude`. The generated component accepts the library controls parameter and typed `Props`. Readable inputs pass directly to controls. `library.show` and `library.keyed` name structural functions in generated source. A `library.token` ending in `.` writes token paths (`Tokens.font.title`); other token names become resolver calls. Token tables belong to the consumer and may contain host datatypes and reactive values. Attributes use an ordinary `value` field forwarded by the kind to the runtime's reserved `Attributes` property; Design adds no host attribute policy.
 
 ### `Design.parse`
 
 `parse(source, library) -> Document` reads an emitted component and validates its contract without executing source.
+
+It accepts `UDim2.new`, `UDim2.fromOffset`, `UDim2.fromScale`, `UDim.new` and vector `new` calls with numeric or token arguments. It also accepts `Vector2.one`, `Vector2.zero`, `Vector3.one` and `Vector3.zero`. These forms normalize to component arrays. Emitting, parsing and emitting again preserves the emitted bytes.
 
 ### `Design.literal`
 
@@ -2080,6 +2090,8 @@ An output has `id`, optional `args: { InputType }` or `row` naming a list input 
 ### `Design.render`
 
 `render(document, library, context?) -> unknown` builds through the library. `RenderContext` accepts `inputs` (plain snapshot values), `bindings: { [string]: Resolved }`, `outputs` (handlers receiving an argument array), `slots` (owned content factories), `token(name) -> Literal`, `resolveToken(name) -> Resolved`, `decorate(node, built)` and `players(players)`. `resolveToken` takes precedence over `token` and supplies native or reactive tokens directly to kind builders without a second token representation.
+
+Datatype component tokens must resolve to numbers. `resolveToken` can supply a numeric `value`, `literal` or `readable`. Reactive components produce a readable component array. The builder converts the resolved array to its host datatype.
 
 `Resolved` supplies `literal`, opaque `value`, `readable`, `callback`, `slot`, `rows`, `template`, `node` and `key`. A binding takes precedence over snapshot inputs and previews and reaches the kind builder without conversion. Use `readable` for live plain values, `rows` for a live row collection, and `value` for an opaque host value or formula that the builder understands. Bindings do not transfer ownership of sources. Builders must consume the appropriate resolved member and pass structural children to runtime constructors.
 

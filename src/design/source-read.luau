@@ -1,6 +1,8 @@
 --!strict
 
 local Types = require "./types"
+local Datatype = require "./datatype"
+local Copy = require "./document-copy"
 local Document = require "./document"
 
 type Node = Types.Node
@@ -381,6 +383,30 @@ function source.parse(code: string, library: Library): Types.Document
 		end
 		return path
 	end
+	local function token(): string?
+		local call = library.token
+		if call == nil or tokens[at] == nil or tokens[at].kind ~= "name" then
+			return nil
+		end
+		local start = at
+		local path = dotted()
+		if string.sub(call, -1) == "." and string.sub(path, 1, #call) == call then
+			return string.sub(path, #call + 1)
+		elseif path == call then
+			local wrapped = peek() == "("
+			if wrapped then
+				take "("
+			end
+			local name = plain()
+			if wrapped then
+				take ")"
+			end
+			assert(type(name) == "string", "Token names are text")
+			return name
+		end
+		at = start
+		return nil
+	end
 	local function startsCall(path: string): boolean
 		local offset = 0
 		for index, part in string.split(path, ".") do
@@ -583,40 +609,52 @@ function source.parse(code: string, library: Library): Types.Document
 				end
 				assert(type(hex) == "string", "Color3.fromHex takes text")
 				return { literal = "#" .. hex }, nil
-			elseif string.match(path, "^[%w_]+%.new$") and peek() == "(" then
-				take "("
+			elseif
+				path == "Vector2.one"
+				or path == "Vector2.zero"
+				or path == "Vector3.one"
+				or path == "Vector3.zero"
+			then
+				local datatype, constant = string.match(path, "^(%w+)%.(%w+)$")
 				local components: Record = {}
+				for index = 1, assert(Datatype.arity[assert(datatype)]) do
+					components[index] = if constant == "one" then 1 else 0
+				end
+				return { literal = components }, nil
+			elseif
+				(string.match(path, "^[%w_]+%.new$") or path == "UDim2.fromOffset" or path == "UDim2.fromScale")
+				and peek() == "("
+			then
+				take "("
+				local components: { Types.DatatypeComponent } = {}
 				while peek() ~= ")" do
-					components[#components + 1] = plain()
+					local name = token()
+					if name then
+						components[#components + 1] = { token = name }
+					else
+						local number = plain()
+						assert(type(number) == "number", "Datatype constructors take numeric or token components")
+						components[#components + 1] = number
+					end
 					if peek() == "," then
 						take ","
 					end
 				end
 				take ")"
-				return { literal = components }, nil
+				if path == "UDim2.fromOffset" or path == "UDim2.fromScale" then
+					assert(#components == 2, `{path} takes two components`)
+					local expanded: { Types.DatatypeComponent } = if path == "UDim2.fromOffset"
+						then { 0, components[1], 0, components[2] }
+						else { components[1], 0, components[2], 0 }
+					components = expanded
+				end
+				return { literal = Datatype.literal(components) }, nil
 			end
 			at = start
 		end
-		local tokenCall = library.token
-		if tokenCall and tokens[at] and tokens[at].kind == "name" then
-			local start = at
-			local path = dotted()
-			if string.sub(tokenCall, -1) == "." and string.sub(path, 1, #tokenCall) == tokenCall then
-				return { token = string.sub(path, #tokenCall + 1) }, nil
-			end
-			if path == tokenCall then
-				local wrapped = peek() == "("
-				if wrapped then
-					take "("
-				end
-				local tokenName = plain()
-				if wrapped then
-					take ")"
-				end
-				assert(type(tokenName) == "string", "Token names are text")
-				return { token = tokenName }, nil
-			end
-			at = start
+		local name = token()
+		if name then
+			return { token = name }, nil
 		end
 		return { literal = plain() }, nil
 	end
@@ -698,6 +736,11 @@ function source.parse(code: string, library: Library): Types.Document
 			children = {},
 		}
 		nextId += 1
+		if kind.defaults then
+			for key, default in kind.defaults do
+				result.props[key] = { literal = Copy.literal(default) }
+			end
+		end
 		local outerCells = pendingCells
 		pendingCells = {}
 		take "{"
@@ -842,7 +885,15 @@ function source.parse(code: string, library: Library): Types.Document
 		pendingCells = outerCells
 		if from then
 			local row = if rowId ~= nil and listed > 1 then rowId else nil
-			result.bind = { from = from, key = key or "id", row = row }
+			local defaults = kind.defaults
+			local keyProp = kind.key
+			local field = if keyProp then kind.fields[keyProp] else nil
+			local default = if defaults
+					and keyProp
+					and defaults[keyProp] ~= nil
+				then defaults[keyProp]
+				else if field then field.default else nil
+			result.bind = { from = from, key = key or (if type(default) == "string" then default else "id"), row = row }
 		end
 		return result
 	end
