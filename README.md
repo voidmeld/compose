@@ -36,22 +36,32 @@ Use this page to find a task. Each linked page gives the details for that task.
 
 ## Performance
 
-The [framework comparison](docs/framework-comparison.md) times Compose against Fusion, Vide, React, Roact, Blend, Seam and other Roblox UI libraries on 23 runtime workloads. Each library passes the same parity checks before timing. These are headless cost-model measurements from CI (`00a663b`). They do not measure engine rendering.
+The [framework comparison](docs/framework-comparison.md) times Compose against Fusion, Vide, React, Roact, Blend, Seam and other Roblox UI libraries on 24 runtime workloads. Each library is measured as it ships, warm, through the same comparison driver, and passes the same parity checks before timing. Compose runs native code because it ships `--!native`. These are headless cost-model measurements from CI (`99df90e`). They do not measure engine rendering.
 
-Compose is faster than the fastest other library in 11 workloads, equal in 1 and slower in 11. Its retained heap is within 1.1x of hand-written Instances in 10 workloads and at most 1.88x.
+On the 20 workloads that do not measure a Compose-specific contract, Compose is faster than the fastest other library in 6, within 5% in 4 and slower in 10. Its retained heap is within 1.1x of hand-written Instances in 7 of the 19 workloads with a heap baseline and at most 1.60x. See [Workloads with Compose contracts](docs/benchmarks.md#workloads-with-compose-contracts) for the four excluded workloads.
 
 | Workload | Time vs fastest other library | Time vs hand-written | Heap vs hand-written |
 | --- | ---: | ---: | ---: |
-| update-repeated | 0.57x (React Reflex) | 6.72x | 0.79x |
-| update-leaf | 0.66x (Roact) | 2.22x | 1.00x |
-| branch-swap | 0.67x (Vide) | 1.17x | 0.99x |
-| update-batched | 0.77x (React) | 2.86x | 1.13x |
-| animate-many | 0.76x (Vide) | 5.01x | 1.56x |
-| cold-mount-10000 | 1.00x (Signals) | 1.33x | 1.00x |
-| mount-dispose | 1.01x (Signals) | 1.04x | 0.95x |
-| cold-mount-100 | 1.24x (Signals) | 1.13x | 1.01x |
-| keyed-reverse | 1.45x (Blend) | 2.85x | 1.28x |
-| keyed-replace | 1.51x (Roact) | 2.27x | 1.11x |
+| animate-many | 0.69x (Vide) | 3.90x | 1.51x |
+| cold-mount-100 | 0.79x (Signals) | 1.16x | 1.01x |
+| cold-mount-1000 | 0.79x (Vide) | 0.86x | 1.00x |
+| keyed-append | 0.89x (Vide) | 1.27x | 1.30x |
+| update-fanout | 0.90x (React) | 1.65x | 1.09x |
+| update-batched | 0.92x (React) | 3.29x | 1.19x |
+| keyed-remove | 0.98x (Vide) | 2.24x | 1.31x |
+| keyed-insert | 0.99x (Vide) | 2.23x | 1.32x |
+| branch-swap | 1.03x (Vide) | 1.28x | 1.60x |
+| keyed-prepend | 1.04x (Blend) | 3.15x | 1.33x |
+| keyed-replace | 1.13x (Roact) | 1.81x | 1.29x |
+| cold-mount-10000 | 1.15x (Signals) | 1.23x | 1.00x |
+| mount-dispose | 1.17x (Signals) | 1.07x | 1.00x |
+| scene-3d | 1.31x (React Reflex) | 1.51x | 1.21x |
+| update-leaf | 1.34x (Roact) | 2.90x | 1.00x |
+| keyed-reverse | 1.58x (Blend) | 3.06x | 1.34x |
+| events | 1.72x (Signals) | 1.29x | 1.00x |
+| keyed-shuffle | 1.76x (Blend) | 3.25x | 1.34x |
+| keyed-rotate | 1.91x (Blend) | 3.70x | 1.34x |
+| mount-cycles | 2.13x (Signals) | 1.38x | — |
 
 A ratio below 1.00x is smaller. See [benchmarks](docs/benchmarks.md) for the method and the commands.
 
