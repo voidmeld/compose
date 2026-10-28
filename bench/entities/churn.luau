@@ -273,7 +273,7 @@ local function composeCase(fraction: number): Types.Case
 	}
 end
 
-local function bareCase(fraction: number): Types.Case
+local function plainCase(fraction: number): Types.Case
 	local function reconcile(state: {
 		entities: { Trace.Entity },
 		nodes: { [number]: Environment.Instance },
@@ -306,7 +306,7 @@ local function bareCase(fraction: number): Types.Case
 		end
 	end
 
-	local function build2(context: Types.BareContext, scale: Scale)
+	local function build2(context: Types.PlainContext, scale: Scale)
 		local Instance = context.env.globals.Instance
 		local parent = Instance.new "Frame"
 		parent.Name = "Entities"
@@ -325,10 +325,10 @@ local function bareCase(fraction: number): Types.Case
 	end
 	type State2 = typeof(Types.resultOf(build2))
 
-	return Types.bare {
+	return Types.plain {
 		build = build2,
 
-		steady = function(state: State2, _context: Types.BareContext, frame: number)
+		steady = function(state: State2, _context: Types.PlainContext, frame: number)
 			local trace = traceFor(state.size, fraction)
 			local tick = trace[((frame - 1) % #trace) + 1]
 			for _, change in tick.changes do
@@ -348,7 +348,7 @@ local function bareCase(fraction: number): Types.Case
 			end
 		end,
 
-		burst = function(state: State2, _context: Types.BareContext, round: number)
+		burst = function(state: State2, _context: Types.PlainContext, round: number)
 			local entities = state.entities
 			local removing = #entities // 2
 			for _ = 1, removing do
@@ -375,7 +375,7 @@ local function bareCase(fraction: number): Types.Case
 			reconcile(state)
 		end,
 
-		teardown = function(state: State2, _context: Types.BareContext)
+		teardown = function(state: State2, _context: Types.PlainContext)
 			for _, node in state.nodes do
 				node:Destroy()
 			end
@@ -383,7 +383,7 @@ local function bareCase(fraction: number): Types.Case
 			state.parent:Destroy()
 		end,
 
-		snapshot = function(_state: State2, context: Types.BareContext): string
+		snapshot = function(_state: State2, context: Types.PlainContext): string
 			return context.env.snapshot(context.container, PARITY_KEYS, "LayoutOrder")
 		end,
 	}
@@ -404,7 +404,7 @@ local churn: Scenario = {
 	steadyFrames = 120,
 	burstRounds = 6,
 	warmup = 2,
-	cases = { compose = composeCase(0.25), bare = bareCase(0.25) },
+	cases = { compose = composeCase(0.25), plain = plainCase(0.25) },
 }
 
 local function at(rate: number, id: string, budget: number): Scenario
@@ -412,7 +412,7 @@ local function at(rate: number, id: string, budget: number): Scenario
 	made.id = id
 	made.title = ("Identity churn at %d%% replacement"):format(math.floor(rate * 100))
 	made.steadyBudgetSeconds = budget
-	made.cases = { compose = composeCase(rate), bare = bareCase(rate) }
+	made.cases = { compose = composeCase(rate), plain = plainCase(rate) }
 	return made
 end
 

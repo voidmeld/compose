@@ -6,7 +6,7 @@ local Trace = require "./trace"
 local Types = require "../scenarios/types"
 local Items = require "./items"
 
-type Context = Types.BareContext
+type Context = Types.PlainContext
 type Scale = Types.Scale
 
 export type Shared = {

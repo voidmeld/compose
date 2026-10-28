@@ -1,7 +1,7 @@
 --!strict
 
 local Environment = require "../cost-model"
-local Bare = require "./bare"
+local Plain = require "./plain"
 local Scene = require "./scene"
 local Trace = require "./trace"
 local Types = require "../scenarios/types"
@@ -527,26 +527,26 @@ local composeCase: Types.Case<State1, Types.ComposeContext> = {
 	end,
 }
 
-local shared: Bare.Shared
-local function build2(context: Types.BareContext, scale: Scale)
-	return Bare.build(context, scale, shared)
+local shared: Plain.Shared
+local function build2(context: Types.PlainContext, scale: Scale)
+	return Plain.build(context, scale, shared)
 end
 type State2 = typeof(Types.resultOf(build2))
 
-local bareCase: Types.Case<State2, Types.BareContext> = {
+local plainCase: Types.Case<State2, Types.PlainContext> = {
 	build = build2,
-	steady = function(state: State2, _context: Types.BareContext, frame: number)
+	steady = function(state: State2, _context: Types.PlainContext, frame: number)
 		local trace = traceFor(#state.items)
-		Bare.apply(state, trace[((frame - 1) % #trace) + 1], frame)
+		Plain.apply(state, trace[((frame - 1) % #trace) + 1], frame)
 	end,
-	burst = function(state: State2, _context: Types.BareContext, round: number)
+	burst = function(state: State2, _context: Types.PlainContext, round: number)
 		local trace = burstFor(#state.items)
-		Bare.burst(state, trace[((round - 1) % #trace) + 1], round, BURST_LOG_LINES)
+		Plain.burst(state, trace[((round - 1) % #trace) + 1], round, BURST_LOG_LINES)
 	end,
-	teardown = function(state: State2, _context: Types.BareContext)
-		Bare.teardown(state)
+	teardown = function(state: State2, _context: Types.PlainContext)
+		Plain.teardown(state)
 	end,
-	snapshot = function(_state: State2, context: Types.BareContext): string
+	snapshot = function(_state: State2, context: Types.PlainContext): string
 		return snapshotOf(context)
 	end,
 }
@@ -569,7 +569,7 @@ local integrated: Scenario = {
 	warmup = 2,
 	cases = {
 		compose = Types.compose(composeCase),
-		bare = Types.bare(bareCase),
+		plain = Types.plain(plainCase),
 	},
 }
 

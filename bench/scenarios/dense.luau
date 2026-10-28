@@ -132,7 +132,7 @@ local function build1(context: Types.ComposeContext, scale: Scale)
 end
 type State1 = typeof(Types.resultOf(build1))
 
-local function build2(context: Types.BareContext, scale: Scale)
+local function build2(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local root = Instance.new "Frame"
@@ -251,9 +251,9 @@ local dashboard: Scenario = {
 			end,
 		},
 
-		bare = Types.bare {
+		plain = Types.plain {
 			build = build2,
-			steady = function(state: State2, _context: Types.BareContext, tick: number)
+			steady = function(state: State2, _context: Types.PlainContext, tick: number)
 				local scale = state.scale
 				state.bars.Level.Size = (60 + (tick % 40)) / 100
 				state.bars.Reserve.Size = 50 + (tick % 50)
@@ -266,7 +266,7 @@ local dashboard: Scenario = {
 				state.slots[slot].Size = value
 				state.slots[slot].Visible = value > 0
 			end,
-			burst = function(state: State2, context: Types.BareContext, round: number)
+			burst = function(state: State2, context: Types.PlainContext, round: number)
 				local Instance = Support.instances(context)
 				local scale = state.scale
 				state.bars.Level.Size = (1 + (round % 5)) / 100
@@ -295,12 +295,12 @@ local dashboard: Scenario = {
 					table.insert(state.textNodes, node)
 				end
 			end,
-			teardown = function(state: State2, _context: Types.BareContext)
+			teardown = function(state: State2, _context: Types.PlainContext)
 				Support.destroyAll(state.badgeNodes)
 				Support.destroyAll(state.textNodes)
 				Support.destroyAll(state.made)
 			end,
-			snapshot = function(_state: State2, context: Types.BareContext): string
+			snapshot = function(_state: State2, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Name", "Size", "Visible", "Text", "LayoutOrder" })
 			end,
 		},
@@ -385,7 +385,7 @@ local function build3(context: Types.ComposeContext, scale: Scale)
 end
 type State3 = typeof(Types.resultOf(build3))
 
-local function build4(context: Types.BareContext, scale: Scale)
+local function build4(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local root = Instance.new "Frame"
@@ -510,9 +510,9 @@ local entityLabels: Scenario = {
 			end,
 		},
 
-		bare = Types.bare {
+		plain = Types.plain {
 			build = build4,
-			steady = function(state: State4, _context: Types.BareContext, tick: number)
+			steady = function(state: State4, _context: Types.PlainContext, tick: number)
 				local scale = state.scale
 				for offset = 0, scale.churn - 1 do
 					local at = ((tick * 7 + offset * 13) % #state.labels) + 1
@@ -527,7 +527,7 @@ local entityLabels: Scenario = {
 				member.level = (tick % 100) + 1
 				state.summaryNodes[member.id].Size = member.level / member.maximum
 			end,
-			burst = function(state: State4, context: Types.BareContext, round: number)
+			burst = function(state: State4, context: Types.PlainContext, round: number)
 				local Instance = Support.instances(context)
 				state.generation += 1
 				local entities = state.labels
@@ -573,7 +573,7 @@ local entityLabels: Scenario = {
 				end
 				state.labels = next
 			end,
-			teardown = function(state: State4, _context: Types.BareContext)
+			teardown = function(state: State4, _context: Types.PlainContext)
 				for id, node in state.labelNodes do
 					node:Destroy()
 					state.labelNodes[id] = nil
@@ -584,7 +584,7 @@ local entityLabels: Scenario = {
 				end
 				Support.destroyAll(state.made)
 			end,
-			snapshot = function(_state: State4, context: Types.BareContext): string
+			snapshot = function(_state: State4, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Name", "Size", "Visible", "Text", "LayoutOrder" })
 			end,
 		},
@@ -681,7 +681,7 @@ local function build5(context: Types.ComposeContext, scale: Scale)
 end
 type State5 = typeof(Types.resultOf(build5))
 
-local function build6(context: Types.BareContext, scale: Scale)
+local function build6(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local root = Instance.new "Frame"
@@ -794,9 +794,9 @@ local entityLabelsSparse: Scenario = {
 			end,
 		},
 
-		bare = Types.bare {
+		plain = Types.plain {
 			build = build6,
-			steady = function(state: State6, _context: Types.BareContext, tick: number)
+			steady = function(state: State6, _context: Types.PlainContext, tick: number)
 				local scale = state.scale
 				for offset = 0, scale.churn - 1 do
 					local at = ((tick * 7 + offset * 13) % #state.labels) + 1
@@ -810,7 +810,7 @@ local entityLabelsSparse: Scenario = {
 				member.level = (tick % 100) + 1
 				state.summaryNodes[member.id].Size = member.level / member.maximum
 			end,
-			burst = function(state: State6, context: Types.BareContext, round: number)
+			burst = function(state: State6, context: Types.PlainContext, round: number)
 				local Instance = Support.instances(context)
 				state.generation += 1
 				local entities = state.labels
@@ -855,7 +855,7 @@ local entityLabelsSparse: Scenario = {
 				end
 				state.labels = next
 			end,
-			teardown = function(state: State6, _context: Types.BareContext)
+			teardown = function(state: State6, _context: Types.PlainContext)
 				for id, node in state.labelNodes do
 					node:Destroy()
 					state.labelNodes[id] = nil
@@ -866,7 +866,7 @@ local entityLabelsSparse: Scenario = {
 				end
 				Support.destroyAll(state.made)
 			end,
-			snapshot = function(_state: State6, context: Types.BareContext): string
+			snapshot = function(_state: State6, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Name", "Size", "Visible", "Text", "LayoutOrder" })
 			end,
 		},

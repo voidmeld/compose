@@ -25,17 +25,17 @@ export type Opened = {
 	loaded: Loaded,
 }
 
-local function bareLoad(environment: Environment.Environment): Loaded
+local function plainLoad(environment: Environment.Environment): Loaded
 	return { library = environment.globals, extras = {} }
 end
 
 local FRAMEWORKS: { Framework } = {
 	{
-		name = "bare",
+		name = "plain",
 		version = "n/a",
 		what = "no framework: plain imperative Luau against the same cost-model environment",
 		workCounters = false,
-		load = bareLoad,
+		load = plainLoad,
 	},
 	{
 		name = "compose",
