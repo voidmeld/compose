@@ -30,7 +30,6 @@ export type Filter = {
 	filter: string?,
 	scale: string?,
 	paired: boolean?,
-	comparison: boolean?,
 	offset: number?,
 }
 
@@ -160,8 +159,7 @@ end
 local function workloadMember(
 	workload: Workloads.Workload,
 	framework: Frameworks.Framework,
-	observed: string,
-	collect: boolean
+	observed: string
 ): Benchmark.Spec
 	local case = workload.cases[framework.name]
 	local samples: { [unknown]: Sample<WorkloadTypes.State> } = {}
@@ -190,9 +188,6 @@ local function workloadMember(
 			environment.drain()
 			environment.resetCounters()
 			samples[sample] = sample
-			if collect then
-				Lute.memory.settle { cycles = 2 }
-			end
 			return sample
 		end,
 		workload = function(state: unknown)
@@ -204,9 +199,6 @@ local function workloadMember(
 		finalize = function(state: unknown)
 			samples[state].environment.drain()
 		end,
-		teardown = function()
-			Frameworks.close(framework)
-		end,
 		afterSample = function(state: unknown, sampler: Benchmark.Sampler)
 			local sample = samples[state]
 			local counters = sample.environment.counters()
@@ -217,17 +209,12 @@ local function workloadMember(
 	}
 end
 
-local function workloadEntry(
-	workload: Workloads.Workload,
-	position: number,
-	observed: string,
-	comparison: boolean?
-): Entry
-	local order = rotated(Frameworks.available(comparison), position - 1)
+local function workloadEntry(workload: Workloads.Workload, position: number, observed: string): Entry
+	local order = rotated(Frameworks.available(), position - 1)
 	local members: { Benchmark.Spec } = {}
 	for _, framework in order do
 		if workload.cases[framework.name] ~= nil then
-			table.insert(members, workloadMember(workload, framework, observed, comparison == true))
+			table.insert(members, workloadMember(workload, framework, observed))
 		end
 	end
 	return {
@@ -518,15 +505,13 @@ local function entries(settings: Filter): { Entry }
 	if settings.suite == "workloads" or settings.suite == "all" then
 		local position = settings.offset or 0
 		local workloads = table.clone(Workloads.all)
-		if not settings.comparison then
-			for _, workload in Projections do
-				table.insert(workloads, workload)
-			end
+		for _, workload in Projections do
+			table.insert(workloads, workload)
 		end
 		for _, workload in workloads do
 			if selected(workload.id, settings.filter) then
 				position += 1
-				table.insert(found, workloadEntry(workload, position, observed, settings.comparison))
+				table.insert(found, workloadEntry(workload, position, observed))
 			end
 		end
 	end

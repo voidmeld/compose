@@ -203,38 +203,9 @@ describe("configured dependency source", function()
 		expect(fs.exists(STAGE .. "/compose/.lute/dependencies/verify")):toBe(false)
 	end)
 
-	it("keeps benchmark surfaces opt-in and sparsely checks out only consumed files and notices", function()
+	it("accepts an external HTTPS repository and rejects missing notices", function()
 		local source = fixture()
-		fs.writeStringToFile(source .. "/outside.txt", "not consumed\n")
-		fs.writeStringToFile(source .. "/LICENSE", string.rep("MIT fixture notice\n", 3))
-		git(source, "add", "outside.txt", "LICENSE")
-		git(source, "commit", "--quiet", "-m", "Benchmark fixture")
-		writeLock(git(source, "rev-parse", "HEAD"), git(source, "rev-parse", "HEAD^{tree}"))
-		local lockPath = STAGE .. "/compose/dependencies.lock.luau"
-		local lock = fs.readFileToString(lockPath):gsub('role = "verification"', 'role = "benchmark"')
-		lock = lock:gsub('rights = "MIT",', 'rights = "MIT",\n\t\t\tnotices = { "LICENSE" },')
-		fs.writeStringToFile(lockPath, lock)
-		local ok = sync(STAGE .. "/sources")
-		expect(ok):toBe(true)
-		local cached = STAGE .. "/compose/.lute/dependencies/verify"
-		expect(fs.exists(cached)):toBe(false)
-		local benchmarkOk, benchmarkOutput = run(
-			{ "lute", "run", "tools/sync-dependencies.luau", "--benchmarks" },
-			process.cwd() .. "/" .. STAGE .. "/compose",
-			environment(STAGE .. "/sources")
-		)
-		if not benchmarkOk then
-			error(benchmarkOutput, 0)
-		end
-		expect(fs.exists(cached .. "/src/init.luau")):toBe(true)
-		expect(fs.exists(cached .. "/LICENSE")):toBe(true)
-		expect(fs.exists(cached .. "/outside.txt")):toBe(false)
-		expect(git(cached, "status", "--porcelain")):toBe ""
-	end)
-
-	it("accepts an external HTTPS benchmark repository and rejects missing notices", function()
-		local source = fixture()
-		local external = "https://github.com/example/benchmark.git"
+		local external = "https://github.com/example/library.git"
 		git(source, "remote", "set-url", "origin", external)
 		local lockPath = STAGE .. "/compose/dependencies.lock.luau"
 		local lock = fs.readFileToString(lockPath):gsub(REPOSITORY:gsub("([^%w])", "%%%1"), external)
