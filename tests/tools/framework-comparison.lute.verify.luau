@@ -175,6 +175,34 @@ describe("framework comparison", function()
 		expect(optimized).never:toBe "inlined"
 	end)
 
+	it("runs library files in the Lute environment with their cost-model globals bound", function()
+		local globals = (Environment.create().globals :: unknown) :: { [string]: unknown }
+		local loaded = Upstream.prepare(
+			"sharedHelper = function() return Instance end\nreturn function() return sharedHelper(), math.floor(2.5), script end",
+			globals,
+			"probe"
+		)
+		local bound = assert(loaded.bound)
+		expect(table.find(bound, "Instance") ~= nil):toBe(true)
+		expect(table.find(bound, "sharedHelper") ~= nil):toBe(true)
+		expect(table.find(bound, "script") ~= nil):toBe(true)
+		expect(table.find(bound, "math")):toBeNil()
+		local reader = Upstream.run(loaded, globals) :: () -> (unknown, number, unknown)
+		local instance, floored, script = reader()
+		expect(instance):toBe(globals.Instance)
+		expect(floored):toBe(2)
+		expect(script):toBe(globals.script)
+		expect(debug.info(reader, "l")):toBe(2)
+		expect(luau.load(luau.compile "return sharedHelper", "other")()):toBeNil()
+
+		local fallback =
+			Upstream.prepare("type function Echo(t) print(t) return t end\nreturn Instance, print", globals, "typed")
+		expect(fallback.bound):toBeNil()
+		local instanceAgain, printer = Upstream.run(fallback, globals)
+		expect(instanceAgain):toBe(globals.Instance)
+		expect(printer):toBe(globals.print)
+	end)
+
 	it("comparison lanes load once per process and Compose loads as it ships", function()
 		local compose: Frameworks.Framework? = nil
 		for _, candidate in Frameworks.available(true) do
