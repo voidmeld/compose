@@ -408,6 +408,8 @@ describe("roblox adapter", function()
 
 			dispose()
 			expect(w.emulator.environment.liveConnections()):toBe(0)
+			w.emulator.environment.fire(Support.instance(button), "Activated")
+			expect(clicks):toBe(1)
 		end)
 
 		it("honours an explicit event key", function()
