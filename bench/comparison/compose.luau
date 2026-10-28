@@ -53,9 +53,7 @@ local function create(environment: Environment.Environment): Types.Driver
 				cell:set(next)
 			end,
 			bind = function(map: (T) -> unknown): unknown
-				return function(use: Core.Use): unknown
-					return map(use(cell))
-				end
+				return compose.map(cell, map)
 			end,
 		}
 	end
@@ -91,9 +89,7 @@ local function create(environment: Environment.Environment): Types.Driver
 				render = function(row: Core.ReadOnlyValue<Types.Row>, index: Core.ReadOnlyValue<number>)
 					return Host.TextLabel {
 						Text = tostring(row:peek().id),
-						LayoutOrder = function(use: Core.Use): number
-							return use(index)
-						end,
+						LayoutOrder = index,
 					}
 				end,
 			}
