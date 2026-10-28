@@ -334,7 +334,7 @@ local composeCase: Types.Case<State1, Types.ComposeContext> = {
 	end,
 }
 
-local function build2(context: Types.BareContext, scale: Scale)
+local function build2(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local function new(
@@ -423,10 +423,10 @@ local function build2(context: Types.BareContext, scale: Scale)
 end
 type State2 = typeof(Types.resultOf(build2))
 
-local bareCase: Types.Case<State2, Types.BareContext> = {
+local plainCase: Types.Case<State2, Types.PlainContext> = {
 	build = build2,
 
-	steady = function(state: State2, _context: Types.BareContext, frame: number)
+	steady = function(state: State2, _context: Types.PlainContext, frame: number)
 		local cx, cy = cameraAt(frame)
 		local shown = visibleAt(state.all, cx, cy)
 		local wanted: { [number]: number } = {}
@@ -473,7 +473,7 @@ local bareCase: Types.Case<State2, Types.BareContext> = {
 		state.waveNode.Text = ("wave %d"):format((frame // 120) + 1)
 	end,
 
-	burst = function(state: State2, _context: Types.BareContext, round: number)
+	burst = function(state: State2, _context: Types.PlainContext, round: number)
 		local cx, cy = cameraAt(round * 733)
 		local shown = visibleAt(state.all, cx, cy)
 		local wanted: { [number]: number } = {}
@@ -506,7 +506,7 @@ local bareCase: Types.Case<State2, Types.BareContext> = {
 		state.waveNode.Text = ("wave %d"):format(round + 100)
 	end,
 
-	teardown = function(state: State2, _context: Types.BareContext)
+	teardown = function(state: State2, _context: Types.PlainContext)
 		for _, node in state.sprites do
 			node:Destroy()
 		end
@@ -514,7 +514,7 @@ local bareCase: Types.Case<State2, Types.BareContext> = {
 		Support.destroyAll(state.made)
 	end,
 
-	snapshot = function(_state: State2, context: Types.BareContext): string
+	snapshot = function(_state: State2, context: Types.PlainContext): string
 		return context.env.snapshot(context.container, PARITY_KEYS, "LayoutOrder")
 	end,
 }
@@ -537,7 +537,7 @@ local scene2d: Scenario = {
 	warmup = 2,
 	cases = {
 		compose = Types.compose(composeCase),
-		bare = Types.bare(bareCase),
+		plain = Types.plain(plainCase),
 	},
 }
 

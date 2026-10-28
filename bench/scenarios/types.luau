@@ -28,7 +28,7 @@ export type Context<L = unknown, E = Extras> = {
 }
 
 export type ComposeContext = Context<typeof(Compose), { runtime: Compose.Runtime }>
-export type BareContext = Context<Environment.Globals, {}>
+export type PlainContext = Context<Environment.Globals, {}>
 
 export type State = {
 	steady: (number) -> (),
@@ -130,8 +130,8 @@ local function compose<S>(case: Case<S, ComposeContext>): Case
 	end)
 end
 
-local function bare<S>(case: Case<S, BareContext>): Case
-	return pack(case, function(context: Context, _scale: Scale, _step: (number) -> ()): BareContext
+local function plain<S>(case: Case<S, PlainContext>): Case
+	return pack(case, function(context: Context, _scale: Scale, _step: (number) -> ()): PlainContext
 		return {
 			env = context.env,
 			library = context.env.globals,
@@ -153,8 +153,8 @@ local function composeRun<S>(case: Case<S, RunContext<S, ComposeContext>>): Case
 		}
 	end)
 end
-local function bareRun<S>(case: Case<S, RunContext<S, BareContext>>): Case
-	return pack(case, function(context: Context, scale: Scale, step: (number) -> ()): RunContext<S, BareContext>
+local function plainRun<S>(case: Case<S, RunContext<S, PlainContext>>): Case
+	return pack(case, function(context: Context, scale: Scale, step: (number) -> ()): RunContext<S, PlainContext>
 		return {
 			env = context.env,
 			library = context.env.globals,
@@ -165,4 +165,4 @@ local function bareRun<S>(case: Case<S, RunContext<S, BareContext>>): Case
 		}
 	end)
 end
-return { compose = compose, bare = bare, composeRun = composeRun, bareRun = bareRun, resultOf = resultOf }
+return { compose = compose, plain = plain, composeRun = composeRun, plainRun = plainRun, resultOf = resultOf }

@@ -5,7 +5,7 @@ local Roblox = require "../../src/roblox"
 local ComposeEngine = require "../harness/compose-engine"
 local Types = require "./types"
 local Environment = require "../cost-model"
-local BareSupport = require "./bare-support"
+local PlainSupport = require "./plain-support"
 
 type Selection = { selected: Core.Value<number>, tick: number, dispose: () -> () }
 type Observation = { tick: number, write: (number) -> (), dispose: () -> () }
@@ -16,8 +16,8 @@ type Keyed = {
 	flip: boolean,
 	dispose: () -> (),
 }
-type BareSelection = { rows: { Environment.Instance }, tick: number, dispose: () -> () }
-type BareAppend = { frame: Environment.Instance, last: Environment.Instance?, dispose: () -> () }
+type PlainSelection = { rows: { Environment.Instance }, tick: number, dispose: () -> () }
+type PlainAppend = { frame: Environment.Instance, last: Environment.Instance?, dispose: () -> () }
 
 local selection: Types.Workload = {
 	id = "projection-selection-500",
@@ -58,9 +58,9 @@ local selection: Types.Workload = {
 				state.dispose()
 			end,
 		},
-		bare = Types.bare {
-			prepare = function(context: Types.BareContext): BareSelection
-				local Instance = BareSupport.instances(context)
+		plain = Types.plain {
+			prepare = function(context: Types.PlainContext): PlainSelection
+				local Instance = PlainSupport.instances(context)
 				local frame = Instance.new "Frame"
 				local rows: { Environment.Instance } = {}
 				for index = 1, 500 do
@@ -78,15 +78,15 @@ local selection: Types.Workload = {
 					end,
 				}
 			end,
-			run = function(state: BareSelection)
+			run = function(state: PlainSelection)
 				state.rows[state.tick].Visible = false
 				state.tick = state.tick % 500 + 1
 				state.rows[state.tick].Visible = true
 			end,
-			snapshot = function(_, context: Types.BareContext): string
+			snapshot = function(_, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Visible" })
 			end,
-			release = function(state: BareSelection)
+			release = function(state: PlainSelection)
 				state.dispose()
 			end,
 		},
@@ -144,7 +144,7 @@ local observation: Types.Workload = {
 			end,
 		},
 	},
-	unsupported = { bare = "measures shared host observation dispatch" },
+	unsupported = { plain = "measures shared host observation dispatch" },
 }
 
 local append: Types.Workload = {
@@ -188,9 +188,9 @@ local append: Types.Workload = {
 				state.dispose()
 			end,
 		},
-		bare = Types.bare {
-			prepare = function(context: Types.BareContext): BareAppend
-				local Instance = BareSupport.instances(context)
+		plain = Types.plain {
+			prepare = function(context: Types.PlainContext): PlainAppend
+				local Instance = PlainSupport.instances(context)
 				local frame = Instance.new "Frame"
 				for index = 1, 500 do
 					local row = Instance.new "TextLabel"
@@ -206,21 +206,21 @@ local append: Types.Workload = {
 					end,
 				}
 			end,
-			run = function(state: BareAppend, context: Types.BareContext)
+			run = function(state: PlainAppend, context: Types.PlainContext)
 				if state.last then
 					state.last:Destroy()
 					state.last = nil
 				else
-					local row = BareSupport.instances(context).new "TextLabel"
+					local row = PlainSupport.instances(context).new "TextLabel"
 					row.Text = "501"
 					row.Parent = state.frame
 					state.last = row
 				end
 			end,
-			snapshot = function(_, context: Types.BareContext): string
+			snapshot = function(_, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Text" })
 			end,
-			release = function(state: BareAppend)
+			release = function(state: PlainAppend)
 				state.dispose()
 			end,
 		},

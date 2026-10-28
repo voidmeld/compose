@@ -99,7 +99,7 @@ local function make(id: string, title: string, what: string, lane: string, budge
 	end
 	type State1 = typeof(Types.resultOf(build1))
 
-	local function build2(context: Types.BareContext, scale: Scale)
+	local function build2(context: Types.PlainContext, scale: Scale)
 		local Instance = Support.instances(context)
 		local pool = Support.items(scale.size)
 		local root = Instance.new "Frame"
@@ -200,16 +200,16 @@ local function make(id: string, title: string, what: string, lane: string, budge
 				end,
 			},
 
-			bare = Types.bare {
+			plain = Types.plain {
 				build = build2,
-				steady = function(state: State2, _context: Types.BareContext, tick: number)
+				steady = function(state: State2, _context: Types.PlainContext, tick: number)
 					local scale = state.scale
 					state.first = ((tick * 3) % (scale.size - scale.visible)) + 1
 					local at = ((tick * 17) % scale.size) + 1
 					state.quantities[state.pool[at].id] = (tick % 99) + 1
 					state.slice()
 				end,
-				burst = function(state: State2, _context: Types.BareContext, round: number)
+				burst = function(state: State2, _context: Types.PlainContext, round: number)
 					local kinds = Support.KINDS
 					state.filter = if round % 3 == 0 then "" else kinds[(round % #kinds) + 1]
 					state.sort = if round % 2 == 0 then "name" else "priority"
@@ -221,14 +221,14 @@ local function make(id: string, title: string, what: string, lane: string, budge
 					state.logical = project(state.pool, state.filter, state.sort)
 					state.slice()
 				end,
-				teardown = function(state: State2, _context: Types.BareContext)
+				teardown = function(state: State2, _context: Types.PlainContext)
 					for id, node in state.nodes do
 						node:Destroy()
 						state.nodes[id] = nil
 					end
 					state.root:Destroy()
 				end,
-				snapshot = function(_state: State2, context: Types.BareContext): string
+				snapshot = function(_state: State2, context: Types.PlainContext): string
 					return context.env.snapshot(context.container, { "Name", "Text", "Visible", "LayoutOrder" })
 				end,
 			},

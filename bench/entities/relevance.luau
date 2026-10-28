@@ -161,7 +161,7 @@ local function composeCase(every: number, saturated: boolean): Types.Case
 	}
 end
 
-local function bareCase(every: number, saturated: boolean): Types.Case
+local function plainCase(every: number, saturated: boolean): Types.Case
 	local function refresh(
 		state: {
 			items: { Trace.Entity },
@@ -212,7 +212,7 @@ local function bareCase(every: number, saturated: boolean): Types.Case
 		end
 	end
 
-	local function build2(context: Types.BareContext, scale: Scale)
+	local function build2(context: Types.PlainContext, scale: Scale)
 		local Instance = context.env.globals.Instance
 		local items = Items.copy(entitiesFor(scale.size))
 		local parent = Instance.new "Frame"
@@ -241,16 +241,16 @@ local function bareCase(every: number, saturated: boolean): Types.Case
 	end
 	type State2 = typeof(Types.resultOf(build2))
 
-	return Types.bare {
+	return Types.plain {
 		build = build2,
 
-		steady = function(state: State2, _context: Types.BareContext, frame: number)
+		steady = function(state: State2, _context: Types.PlainContext, frame: number)
 			local trace = traceFor(#state.items, every)
 			local tick = trace[((frame - 1) % #trace) + 1]
 			refresh(state, if saturated then saturate(tick, #state.items) else tick)
 		end,
 
-		burst = function(state: State2, _context: Types.BareContext, round: number)
+		burst = function(state: State2, _context: Types.PlainContext, round: number)
 			local visible = round % 2 == 1
 			local createVisibility: (number, Trace.Visibility?) -> { Trace.Visibility } = table.create
 			local visibility: { Trace.Visibility } = createVisibility(#state.items)
@@ -270,7 +270,7 @@ local function bareCase(every: number, saturated: boolean): Types.Case
 			})
 		end,
 
-		teardown = function(state: State2, _context: Types.BareContext)
+		teardown = function(state: State2, _context: Types.PlainContext)
 			for _, label in state.labels do
 				label:Destroy()
 			end
@@ -282,7 +282,7 @@ local function bareCase(every: number, saturated: boolean): Types.Case
 			state.parent:Destroy()
 		end,
 
-		snapshot = function(_state: State2, context: Types.BareContext): string
+		snapshot = function(_state: State2, context: Types.PlainContext): string
 			return context.env.snapshot(context.container, PARITY_KEYS, "LayoutOrder")
 		end,
 	}
@@ -303,7 +303,7 @@ local sweep: Scenario = {
 	steadyFrames = 180,
 	burstRounds = 8,
 	warmup = 2,
-	cases = { compose = composeCase(4, false), bare = bareCase(4, false) },
+	cases = { compose = composeCase(4, false), plain = plainCase(4, false) },
 }
 
 local saturated: Scenario = {
@@ -321,7 +321,7 @@ local saturated: Scenario = {
 	steadyFrames = 90,
 	burstRounds = 6,
 	warmup = 2,
-	cases = { compose = composeCase(1, true), bare = bareCase(1, true) },
+	cases = { compose = composeCase(1, true), plain = plainCase(1, true) },
 }
 
 return {

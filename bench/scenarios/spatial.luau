@@ -287,7 +287,7 @@ local composeCase: Types.Case<State1, Types.ComposeContext> = {
 	end,
 }
 
-local function build2(context: Types.BareContext, scale: Scale)
+local function build2(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local function new(
@@ -370,10 +370,10 @@ local function build2(context: Types.BareContext, scale: Scale)
 end
 type State2 = typeof(Types.resultOf(build2))
 
-local bareCase: Types.Case<State2, Types.BareContext> = {
+local plainCase: Types.Case<State2, Types.PlainContext> = {
 	build = build2,
 
-	steady = function(state: State2, _context: Types.BareContext, frame: number)
+	steady = function(state: State2, _context: Types.PlainContext, frame: number)
 		local y, p, r = poseAt(frame)
 		for index = 1, PANELS do
 			state.panels[index].Position = panelPlacement(index, y, p, r)
@@ -437,7 +437,7 @@ local bareCase: Types.Case<State2, Types.BareContext> = {
 		end
 	end,
 
-	burst = function(state: State2, _context: Types.BareContext, round: number)
+	burst = function(state: State2, _context: Types.PlainContext, round: number)
 		local y = (round * 1800) % 3600
 		local wanted: { [number]: number } = {}
 		for _, widget in state.all do
@@ -479,7 +479,7 @@ local bareCase: Types.Case<State2, Types.BareContext> = {
 		end
 	end,
 
-	teardown = function(state: State2, _context: Types.BareContext)
+	teardown = function(state: State2, _context: Types.PlainContext)
 		for _, node in state.highlights do
 			node:Destroy()
 		end
@@ -492,7 +492,7 @@ local bareCase: Types.Case<State2, Types.BareContext> = {
 		Support.destroyAll(state.made)
 	end,
 
-	snapshot = function(_state: State2, context: Types.BareContext): string
+	snapshot = function(_state: State2, context: Types.PlainContext): string
 		return context.env.snapshot(context.container, PARITY_KEYS, "LayoutOrder")
 	end,
 }
@@ -515,7 +515,7 @@ local spatial: Scenario = {
 	warmup = 2,
 	cases = {
 		compose = Types.compose(composeCase),
-		bare = Types.bare(bareCase),
+		plain = Types.plain(plainCase),
 	},
 }
 

@@ -61,7 +61,7 @@ local function build1(context: Types.ComposeContext, scale: Scale)
 end
 type State1 = typeof(Types.resultOf(build1))
 
-local function build2(context: Types.BareContext, scale: Scale)
+local function build2(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local root = Instance.new "Frame"
@@ -151,9 +151,9 @@ local animatedNavigation: Scenario = {
 			end,
 		},
 
-		bare = Types.bare {
+		plain = Types.plain {
 			build = build2,
-			steady = function(state: State2, context: Types.BareContext, tick: number)
+			steady = function(state: State2, context: Types.PlainContext, tick: number)
 				local scale = state.scale
 				for offset = 0, 9 do
 					local at = ((tick * 11 + offset * 7) % scale.size) + 1
@@ -180,7 +180,7 @@ local animatedNavigation: Scenario = {
 				end
 				context.env.step(1 / 60)
 			end,
-			burst = function(state: State2, context: Types.BareContext, round: number)
+			burst = function(state: State2, context: Types.PlainContext, round: number)
 				local Instance = Support.instances(context)
 				local scale = state.scale
 				state.root.Name = ("route-%d"):format(round)
@@ -217,14 +217,14 @@ local animatedNavigation: Scenario = {
 				end
 				context.env.step(1 / 60)
 			end,
-			teardown = function(state: State2, _context: Types.BareContext)
+			teardown = function(state: State2, _context: Types.PlainContext)
 				if state.modal ~= nil then
 					state.modal:Destroy()
 					state.modal = nil
 				end
 				Support.destroyAll(state.made)
 			end,
-			snapshot = function(state: State2, context: Types.BareContext): string
+			snapshot = function(state: State2, context: Types.PlainContext): string
 				local frequency = 2 * math.pi / 0.3
 				local stiffness = frequency * frequency
 				local drag = 2 * frequency
@@ -257,7 +257,7 @@ local function build3(context: Types.ComposeContext, _scale: Scale)
 end
 type State3 = typeof(Types.resultOf(build3))
 
-local function build4(context: Types.BareContext, _scale: Scale)
+local function build4(context: Types.PlainContext, _scale: Scale)
 	return { env = context.env }
 end
 type State4 = typeof(Types.resultOf(build4))
@@ -336,9 +336,9 @@ local sessionCycle: Scenario = {
 			end,
 		},
 
-		bare = Types.bareRun {
+		plain = Types.plainRun {
 			build = build4,
-			steady = function(_state: State4, context: Types.RunContext<State4, Types.BareContext>, tick: number)
+			steady = function(_state: State4, context: Types.RunContext<State4, Types.PlainContext>, tick: number)
 				local Instance = Support.instances(context)
 				local scale = context.scale
 				local made: { Environment.Instance } = {}
@@ -389,13 +389,13 @@ local sessionCycle: Scenario = {
 
 				Support.destroyAll(made)
 			end,
-			burst = function(_state: State4, context: Types.RunContext<State4, Types.BareContext>, _round: number)
+			burst = function(_state: State4, context: Types.RunContext<State4, Types.PlainContext>, _round: number)
 				for tick = 1, 4 do
 					context.step(tick)
 				end
 			end,
-			teardown = function(_state: State4, _context: Types.BareContext) end,
-			snapshot = function(_state: State4, context: Types.BareContext): string
+			teardown = function(_state: State4, _context: Types.PlainContext) end,
+			snapshot = function(_state: State4, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Name", "LayoutOrder" })
 			end,
 		},
@@ -445,7 +445,7 @@ local function build5(context: Types.ComposeContext, scale: Scale)
 end
 type State5 = typeof(Types.resultOf(build5))
 
-local function build6(context: Types.BareContext, scale: Scale)
+local function build6(context: Types.PlainContext, scale: Scale)
 	local Instance = Support.instances(context)
 	local made: { Environment.Instance } = {}
 	local root = Instance.new "Frame"
@@ -517,15 +517,15 @@ local inspector: Scenario = {
 			end,
 		},
 
-		bare = Types.bare {
+		plain = Types.plain {
 			build = build6,
-			steady = function(state: State6, _context: Types.BareContext, tick: number)
+			steady = function(state: State6, _context: Types.PlainContext, tick: number)
 				local scale = state.scale
 				local field = (tick % scale.size) + 1
 				state.objects[state.selection][field] = tick
 				state.controls[field].Text = ("%d"):format(tick)
 			end,
-			burst = function(state: State6, _context: Types.BareContext, round: number)
+			burst = function(state: State6, _context: Types.PlainContext, round: number)
 				local scale = state.scale
 				state.selection = (round % scale.objects) + 1
 				local chosen = state.objects[state.selection]
@@ -534,10 +534,10 @@ local inspector: Scenario = {
 					state.controls[field].Text = ("%d"):format(chosen[field])
 				end
 			end,
-			teardown = function(state: State6, _context: Types.BareContext)
+			teardown = function(state: State6, _context: Types.PlainContext)
 				Support.destroyAll(state.made)
 			end,
-			snapshot = function(_state: State6, context: Types.BareContext): string
+			snapshot = function(_state: State6, context: Types.PlainContext): string
 				return context.env.snapshot(context.container, { "Name", "Text", "LayoutOrder" })
 			end,
 		},
