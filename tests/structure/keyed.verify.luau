@@ -378,6 +378,27 @@ describe("keyed", function()
 		dispose()
 	end)
 
+	it("names the later duplicate and its first index when a duplicate crosses a matching end", function()
+		local world = Support.world()
+		local dispose, _, list = mountList(world, items("a", "b", "c", "d"))
+		for _, case in
+			{
+				{ next = items("a", "b", "a"), index = "index: 3", earlier = "also used at index 1" },
+				{ next = items("a", "d", "x", "d"), index = "index: 4", earlier = "also used at index 2" },
+			}
+		do
+			local ok, err: unknown = pcall(function()
+				list:set(case.next)
+			end)
+			expect(ok):toBe(false)
+			expect(tostring(err)):toContain "structure/duplicate-key"
+			expect(tostring(err)):toContain(case.index)
+			expect(tostring(err)):toContain(case.earlier)
+			list:set(items("a", "b", "c", "d"))
+		end
+		dispose()
+	end)
+
 	it("rejects duplicate keys with a diagnostic that names the collision", function()
 		local world = Support.world()
 		local ok, err: unknown = pcall(function()
