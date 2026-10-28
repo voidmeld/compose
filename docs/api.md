@@ -603,8 +603,8 @@ By default, the readable updates synchronously when the host delivers that prope
 `ObserveOptions.styled = true` selects `host.observation.readStyledProperty` and `observeStyledProperty`; both are required. It reads the effective value, including raw overrides. Styled and raw observations have separate cache identities. The same frame and polling options apply to either source.
 `ObserveOptions.frame = true` defers notifications to the shared runtime frame clock and requires `host.frames`.
 Compose reads all pending properties before it publishes their values in one batch of the runtime's reactor. Notifications emitted by a read wait for a later frame.
-`ObserveOptions.poll = true` requires `frame = true` and also samples the property each frame, including when the host sends no notification.
-Frame observation samples once after acquisition. It holds no frame listener when no samples are pending and no polling readers remain.
+`ObserveOptions.poll = true` requires `frame = true`. After acquisition and after each notification, it also samples the property each frame, including when the host sends no notification, until the value is unchanged for three frames.
+Frame observation samples once after acquisition. It holds no frame listener when no samples are pending and no polling reader is settling.
 The last holder releases the property subscription, pending samples and polling work.
 `Compose.geometry` remains the pure rectangle operations: derive their inputs from these readables rather than maintaining another observation system.
 
