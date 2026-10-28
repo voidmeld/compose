@@ -146,6 +146,43 @@ describe("runtime primitives", function()
 		expect(world.host.liveSubscriptions()):toBe(0)
 	end)
 
+	it("stops polling after three unchanged frames and polls again after a notification", function()
+		local world = Support.world()
+		local node = world.host.makeNode "Text"
+		local displayed: unknown = 10
+		local reads = 0
+		local observation = assert(world.host.adapter.observation)
+		observation.readProperty = function()
+			reads += 1
+			return displayed
+		end
+		local value, owner = Support.owned(function()
+			return world.runtime.observe(node, "Bounds", { frame = true, poll = true })
+		end)
+		for _ = 1, 4 do
+			world.host.step(1 / 60)
+		end
+		expect(world.host.counts().frameListeners):toBe(0)
+		reads = 0
+		displayed = 15
+		world.host.step(1 / 60)
+		expect(reads):toBe(0)
+		expect(value:peek()):toBe(10)
+		world.host.poke(node, "Bounds", 20)
+		displayed = 20
+		world.host.step(1 / 60)
+		expect(value:peek()):toBe(20)
+		displayed = 25
+		world.host.step(1 / 60)
+		expect(value:peek()):toBe(25)
+		for _ = 1, 3 do
+			world.host.step(1 / 60)
+		end
+		expect(world.host.counts().frameListeners):toBe(0)
+		Compose.owner.dispose(owner)
+		expect(world.host.liveSubscriptions()):toBe(0)
+	end)
+
 	it("polls silent property changes once per frame until the last holder releases", function()
 		local world = Support.world()
 		local node = world.host.makeNode "Text"
