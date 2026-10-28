@@ -277,7 +277,7 @@ describe("lint contract", function()
 		end)
 
 		it("is clean over every gate lint root at HEAD", function()
-			local argv = { "lute", "lint", "-c", CONFIG }
+			local argv = { "lute", "lint", "--sequential", "-c", CONFIG }
 			for _, root in ROOTS do
 				table.insert(argv, root)
 			end
