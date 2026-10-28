@@ -136,10 +136,7 @@ local config: {
 			requiredPaths = { ".lute/dependencies" },
 		},
 		noAny = { untracked = true },
-		specStyle = {
-			untracked = true,
-			exclude = { ["tests/tools/framework-comparison.lute.verify.luau"] = true },
-		},
+		specStyle = { untracked = true },
 	}
 
 return config

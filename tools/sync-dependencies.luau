@@ -10,7 +10,7 @@ type Dependency = {
 	tree: string,
 	rights: string,
 	notices: { string }?,
-	surfaces: { { root: string, role: "runtime" | "tooling" | "verification" | "benchmark" } },
+	surfaces: { { root: string, role: "runtime" | "tooling" | "verification" } },
 }
 
 type Lock = {
@@ -22,38 +22,11 @@ local CACHE_ROOT = ".lute/dependencies"
 local LOCAL_SOURCE_ROOT = "COMPOSE_DEPENDENCY_SOURCE_ROOT"
 local REVIEWED_RIGHTS: { [string]: true } = {
 	MIT = true,
-	["all-rights-reserved-no-license-granted"] = true,
 }
 local lock = require "../dependencies.lock" :: Lock
 
 local function notices(dependency: Dependency): { string }
 	return dependency.notices or {}
-end
-
-local function benchmarkOnly(dependency: Dependency): boolean
-	for _, surface in dependency.surfaces do
-		if surface.role ~= "benchmark" then
-			return false
-		end
-	end
-	return true
-end
-
-local function sparseCheckout(dependency: Dependency, path: string): string?
-	if not benchmarkOnly(dependency) then
-		return nil
-	end
-	local sparse = { "git", "-C", path, "sparse-checkout", "set", "--no-cone" }
-	for _, surface in dependency.surfaces do
-		table.insert(sparse, "/" .. surface.root)
-	end
-	for _, notice in notices(dependency) do
-		table.insert(sparse, "/" .. notice)
-	end
-	if not process.run(sparse).ok then
-		return "benchmark sparse checkout could not be configured"
-	end
-	return nil
 end
 
 local function trim(value: string): string
@@ -108,13 +81,8 @@ local function validateDefinition(dependency: Dependency): string?
 			return "a consumed root may be classified only once"
 		end
 		seenRoots[root] = true
-		if
-			surface.role ~= "runtime"
-			and surface.role ~= "tooling"
-			and surface.role ~= "verification"
-			and surface.role ~= "benchmark"
-		then
-			return "surface roles must be runtime, tooling, verification, or benchmark"
+		if surface.role ~= "runtime" and surface.role ~= "tooling" and surface.role ~= "verification" then
+			return "surface roles must be runtime, tooling, or verification"
 		end
 	end
 	for _, notice in notices(dependency) do
@@ -198,19 +166,9 @@ local function clone(dependency: Dependency, destination: string): string?
 		return sourceProblem
 	end
 	local source: string = configuredSource or exactSibling(dependency) or dependency.repository
-	local arguments = { "git", "clone", "--quiet", "--no-checkout" }
-	if benchmarkOnly(dependency) then
-		table.insert(arguments, "--filter=blob:none")
-	end
-	table.insert(arguments, source)
-	table.insert(arguments, destination)
-	local cloned = process.run(arguments)
+	local cloned = process.run { "git", "clone", "--quiet", "--no-checkout", source, destination }
 	if not cloned.ok then
 		return "clone failed; check repository availability and access"
-	end
-	local sparseProblem = sparseCheckout(dependency, destination)
-	if sparseProblem then
-		return sparseProblem
 	end
 	local checkedOut = process.run {
 		"git",
@@ -246,9 +204,6 @@ end
 local function sync(dependency: Dependency, checkOnly: boolean): string?
 	local target = CACHE_ROOT .. "/" .. dependency.name
 	if fs.exists(target) and #findings(dependency, target) == 0 then
-		if not checkOnly then
-			return sparseCheckout(dependency, target)
-		end
 		return nil
 	end
 	if checkOnly then
@@ -296,12 +251,9 @@ end
 
 local function main(): number
 	local checkOnly = false
-	local benchmarks = false
 	for index = 2, #process.args do
 		if process.args[index] == "--check" then
 			checkOnly = true
-		elseif process.args[index] == "--benchmarks" then
-			benchmarks = true
 		else
 			print(("sync-dependencies: unrecognized argument %q"):format(process.args[index]))
 			return 1
@@ -326,9 +278,6 @@ local function main(): number
 		if invalid ~= nil then
 			print(("sync-dependencies: %s: %s"):format(dependency.name, invalid))
 			return 1
-		end
-		if benchmarkOnly(dependency) and not benchmarks then
-			continue
 		end
 		local problem = sync(dependency, checkOnly)
 		if problem ~= nil then

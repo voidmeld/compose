@@ -83,7 +83,6 @@ return table.freeze {
 	"tests/tools/compose-check.lute.verify.luau",
 	"tests/tools/dependency-source.lute.verify.luau",
 	"tests/tools/dispositions.lute.verify.luau",
-	"tests/tools/framework-comparison.lute.verify.luau",
 	"tests/tools/gate-resources.lute.verify.luau",
 	"tests/tools/lint-contract.lute.verify.luau",
 	"tests/tools/required-surface.lute.verify.luau",
