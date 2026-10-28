@@ -1,6 +1,7 @@
 --!strict
 
 local fs = require "@std/fs"
+local parser = require "@std/syntax/parser"
 local luau = require "@lute/luau"
 local Lock = require "../../dependencies.lock"
 local Environment = require "../cost-model"
@@ -28,7 +29,125 @@ local function compile(source: string): luau.Bytecode
 	return luau.compile(source)
 end
 
-local bytecode: { [string]: { [string]: luau.Bytecode } } = {}
+type Syntax = { [string]: unknown }
+
+local SKIPPED_SYNTAX: { [string]: true } = { leadingTrivia = true, trailingTrivia = true, location = true }
+
+local function globalName(node: unknown): string?
+	if type(node) ~= "table" then
+		return nil
+	end
+	local syntax = node :: Syntax
+	if syntax.kind ~= "expr" or syntax.tag ~= "global" then
+		return nil
+	end
+	local name = syntax.name
+	if type(name) ~= "table" then
+		return nil
+	end
+	local token = name :: Syntax
+	local text = token.text
+	return if type(text) == "string" then text else nil
+end
+
+local function globalsOf(source: string): ({ [string]: true }, { [string]: true })
+	local reads: { [string]: true } = {}
+	local writes: { [string]: true } = {}
+	local function visit(node: Syntax)
+		local read = globalName(node)
+		if read then
+			reads[read] = true
+		end
+		if node.kind == "stat" then
+			local variables = node.variables
+			local targets: { unknown }? = if node.tag == "assign" and type(variables) == "table"
+				then variables :: { unknown }
+				elseif node.tag == "compoundassign" then { node.variable }
+				elseif node.tag == "function" then { node.name }
+				else nil
+			if targets then
+				for _, target in targets do
+					local written = globalName(target)
+					if written then
+						writes[written] = true
+					end
+				end
+			end
+		end
+		for key, child in node do
+			if type(child) == "table" and not (type(key) == "string" and SKIPPED_SYNTAX[key]) then
+				visit(child :: Syntax)
+			end
+		end
+	end
+	local tree: unknown = parser.parse(source)
+	if type(tree) == "table" then
+		visit(tree :: Syntax)
+	end
+	return reads, writes
+end
+
+local luteGlobals: { [string]: { value: unknown } } = {}
+
+local function luteGlobal(name: string): unknown
+	local known = luteGlobals[name]
+	if known == nil then
+		known = { value = luau.load(luau.compile("return " .. name), "lute-global")() }
+		luteGlobals[name] = known
+	end
+	return known.value
+end
+
+export type Loaded = { bytecode: luau.Bytecode, bound: { string }?, chunk: string }
+
+local function bindingFor(source: string, globals: { [string]: unknown }): { string }
+	local reads, writes = globalsOf(source)
+	local names: { string } = {}
+	for name in reads do
+		if writes[name] or name == "script" or name == "require" or not rawequal(globals[name], luteGlobal(name)) then
+			table.insert(names, name)
+		end
+	end
+	for name in writes do
+		if not reads[name] then
+			table.insert(names, name)
+		end
+	end
+	table.sort(names)
+	return names
+end
+
+local function prepare(source: string, globals: { [string]: unknown }, chunk: string): Loaded
+	local names = bindingFor(source, globals)
+	if #names > 0 then
+		local ok, bound = pcall(function(): luau.Bytecode
+			local compiled = compile("local " .. table.concat(names, ", ") .. " = ...; " .. source)
+			luau.load(compiled, chunk)
+			return compiled
+		end)
+		if ok then
+			return { bytecode = bound, bound = names, chunk = chunk }
+		end
+	end
+	if #names == 0 then
+		return { bytecode = compile(source), bound = {}, chunk = chunk }
+	end
+	return { bytecode = compile(source), bound = nil, chunk = chunk }
+end
+
+local function run(loaded: Loaded, globals: { [string]: unknown }): ...unknown
+	local names = loaded.bound
+	if names == nil then
+		return luau.load(loaded.bytecode, loaded.chunk, globals)()
+	end
+	local values: { unknown } = table.create(#names)
+	for index, name in names do
+		values[index] = globals[name]
+	end
+	return luau.load(loaded.bytecode, loaded.chunk)(table.unpack(values, 1, #names))
+end
+
+local bytecode: { [string]: { [string]: Loaded } } = {}
 
 local function normal(path: string): string
 	local parts: { string } = {}
@@ -209,12 +328,13 @@ local function create(environment: Environment.Environment)
 			compiledForMode = {}
 			bytecode[currentMode] = compiledForMode
 		end
-		local compiled = compiledForMode[path]
-		if compiled == nil then
-			compiled = compile(fs.readFileToString(path))
-			compiledForMode[path] = compiled
+		local named = (globals :: unknown) :: { [string]: unknown }
+		local prepared = compiledForMode[path]
+		if prepared == nil then
+			prepared = prepare(fs.readFileToString(path), named, "@" .. path)
+			compiledForMode[path] = prepared
 		end
-		local result: unknown = luau.load(compiled, "@" .. path, globals)()
+		local result: unknown = run(prepared, named)
 		cache[path] = result
 		loaded[path] = true
 		return result
@@ -228,6 +348,8 @@ end
 
 return {
 	create = create,
+	prepare = prepare,
+	run = run,
 	compile = compile,
 	mode = mode,
 	setMode = setMode,
