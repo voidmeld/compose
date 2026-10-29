@@ -284,6 +284,83 @@ describe("keyed", function()
 		dispose()
 	end)
 
+	it("slides a window by trimming the head and appending the tail without moves", function()
+		local world = Support.world()
+		local initial: { Item } = {}
+		for index = 1, 5 do
+			table.insert(initial, { id = `m{index}` })
+		end
+		local dispose, root, list = mountList(world, initial)
+		local current = initial
+		for step = 6, 40 do
+			local nodes: { [string]: Compose.Node } = {}
+			for _, child in world.host.childrenOf(root) do
+				nodes[tostring(world.host.propertyOf(child, "Id"))] = child
+			end
+			local nextList = table.clone(current)
+			table.insert(nextList, { id = `m{step}` })
+			table.remove(nextList, 1)
+			if step % 7 == 0 then
+				table.insert(nextList, { id = `x{step}` })
+				table.remove(nextList, 1)
+			end
+			world.host.resetCounts()
+			list:set(nextList)
+			expect(world.host.counts().moveChild):toBe(0)
+			expect(world.host.counts().destroyNode):toBe(world.host.counts().createNode)
+			local children = world.host.childrenOf(root)
+			expect(#children):toBe(#nextList)
+			for index, child in children do
+				local id = nextList[index].id
+				expect(world.host.propertyOf(child, "Id")):toBe(id)
+				expect(world.host.propertyOf(child, "Order")):toBe(index)
+				if nodes[id] ~= nil then
+					expect(child):toBe(nodes[id])
+				end
+			end
+			current = nextList
+		end
+		local shuffled = { current[3], current[1], current[5], current[2], current[4] }
+		list:set(shuffled)
+		expect(order(world, root)):toEqual {
+			shuffled[1].id,
+			shuffled[2].id,
+			shuffled[3].id,
+			shuffled[4].id,
+			shuffled[5].id,
+		}
+		for index, child in world.host.childrenOf(root) do
+			expect(world.host.propertyOf(child, "Order")):toBe(index)
+		end
+		dispose()
+		expect(#world.host.childrenOf(world.root)):toBe(0)
+	end)
+
+	it("falls back to a full reconcile when a trimmed head key reappears or the tail repeats a key", function()
+		local world = Support.world()
+		local dispose, root, list = mountList(world, items("a", "b", "c", "d"))
+		local original = world.host.childrenOf(root)
+		world.host.resetCounts()
+		list:set(items("b", "c", "d", "a"))
+		expect(order(world, root)):toEqual { "b", "c", "d", "a" }
+		expect(world.host.childrenOf(root)[4]):toBe(original[1])
+		expect(world.host.counts().createNode):toBe(0)
+		expect(world.host.counts().destroyNode):toBe(0)
+		world.host.resetCounts()
+		expect(function()
+			list:set(items("c", "d", "a", "x", "x"))
+		end):toThrow "structure/duplicate-key"
+		expect(order(world, root)):toEqual { "b", "c", "d", "a" }
+		expect(world.host.counts().createNode):toBe(0)
+		expect(world.host.counts().destroyNode):toBe(0)
+		list:set(items("c", "d", "a", "x"))
+		expect(order(world, root)):toEqual { "c", "d", "a", "x" }
+		for index, child in world.host.childrenOf(root) do
+			expect(world.host.propertyOf(child, "Order")):toBe(index)
+		end
+		dispose()
+	end)
+
 	it("inserts into the middle without moving its neighbours", function()
 		local world = Support.world()
 		local dispose, root, list = mountList(world, items("a", "b", "d"))
