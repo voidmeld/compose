@@ -518,7 +518,10 @@ local checks: { Check } = {
 				return lowest
 			end
 
-			cycle()
+			for _ = 1, 16 do
+				cycle()
+			end
+			settle()
 			local first = settle()
 			for _ = 1, 8 do
 				cycle()
@@ -527,7 +530,7 @@ local checks: { Check } = {
 			local perCycle = (last - first) / 8
 
 			assertThat(perCycle < 64, ("heap grew %.1f KB per mount/dispose cycle, which is a leak"):format(perCycle))
-			return ("%.2f KB per cycle across 9 cycles of a 201-node tree"):format(perCycle)
+			return ("%.2f KB per cycle across 8 cycles of a 201-node tree after 16 warm-up cycles"):format(perCycle)
 		end,
 	},
 	{
