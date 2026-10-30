@@ -23,7 +23,7 @@ Use this page to find a task. Each linked page gives the details for that task.
 | Use the visual editor | [Design editor](docs/design-editor.md) |
 | Generate content, layouts and project trees | [Build-time authoring](authoring/README.md) |
 | Measure time and memory | [Benchmarks](docs/benchmarks.md) |
-| Read the library comparison | [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/results.md) |
+| Read the library comparison | [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) |
 | Store local measurements | [Local output](bench/results/README.md) |
 | Run checks in Roblox Studio | [Engine verification](verification/roblox/README.md) |
 | Use the consumer skill | [Compose skill](.agents/skills/compose/SKILL.md) |
@@ -36,7 +36,7 @@ Use this page to find a task. Each linked page gives the details for that task.
 
 ## Performance
 
-The [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository compares Compose with other Roblox scene composition libraries. It measures each library as the library ships and checks that all libraries produce the same result before it measures time. See its [results](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/results.md) and its [method](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/method.md).
+The [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository compares Compose with other Roblox scene composition libraries. It measures each library as the library ships and checks that all libraries produce the same result before it measures time. See its [results](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) and its [method](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/method.md).
 
 This repository keeps the paired performance check. It compares each change with its base on the same runner. See [benchmarks](docs/benchmarks.md).
 
