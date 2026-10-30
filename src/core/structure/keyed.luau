@@ -252,7 +252,10 @@ local function keyed<V, K>(options: Options<V, K>): Children.Directive
 			return true
 		end
 
-		Owners.watch(owner, function(use)
+		local depth, passes = 0, 0
+		local function reconcile(use: Types.Use)
+			passes += 1
+			local pass = passes
 			local list = source(use)
 			currentList = list
 			local wanted = #list
@@ -443,6 +446,9 @@ local function keyed<V, K>(options: Options<V, K>): Children.Directive
 					local entry = matched[index]
 					if entry == missing then
 						local ok, made = pcall(mountRow, index, keys[index], live + 1)
+						if passes ~= pass then
+							return
+						end
 						if not ok then
 							local collected: { string } = failures or {}
 							failures = collected
@@ -466,6 +472,9 @@ local function keyed<V, K>(options: Options<V, K>): Children.Directive
 
 					if entry == missing then
 						local ok, made = pcall(mountRow, index, keys[index], startOf(live))
+						if passes ~= pass then
+							return
+						end
 						if not ok then
 							local collected: { string } = failures or {}
 							failures = collected
@@ -499,6 +508,9 @@ local function keyed<V, K>(options: Options<V, K>): Children.Directive
 
 					if entry == missing then
 						local ok, made = pcall(mountRow, index, keys[index], startOf(anchorLive))
+						if passes ~= pass then
+							return
+						end
 						if not ok then
 							local collected: { string } = failures or {}
 							failures = collected
@@ -526,6 +538,31 @@ local function keyed<V, K>(options: Options<V, K>): Children.Directive
 			end
 			count = #order
 			raiseFailures(failures)
+		end
+		Owners.watch(owner, function(use)
+			depth += 1
+			if depth == 1 then
+				local ok, failure = pcall(function(): unknown
+					reconcile(use)
+					return nil
+				end)
+				depth -= 1
+				if not ok then
+					error(failure, 0)
+				end
+				return
+			end
+			local outerKeys, outerMatched = keys, matched
+			keys, matched = {}, {}
+			local ok, failure = pcall(function(): unknown
+				reconcile(use)
+				return nil
+			end)
+			keys, matched = outerKeys, outerMatched
+			depth -= 1
+			if not ok then
+				error(failure, 0)
+			end
 		end)
 	end
 end
