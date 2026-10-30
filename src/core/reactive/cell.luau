@@ -72,7 +72,7 @@ local function write(self: Node, incoming: unknown)
 			elseif state == Graph.CHECK and not consumer.retry then
 				consumer.state = Graph.DIRTY
 				return
-			elseif consumer.run ~= nil then
+			elseif rawget((consumer :: unknown) :: { [string]: unknown }, "body") == nil and consumer.run ~= nil then
 				consumer.retry = false
 				consumer.state = Graph.DIRTY
 				local reactor = consumer.reactor
@@ -189,7 +189,7 @@ set = function(self: Node, incoming: unknown)
 			elseif state == Graph.CHECK and not consumer.retry then
 				consumer.state = Graph.DIRTY
 				return
-			elseif consumer.run ~= nil then
+			elseif rawget((consumer :: unknown) :: { [string]: unknown }, "body") == nil and consumer.run ~= nil then
 				consumer.retry = false
 				consumer.state = Graph.DIRTY
 				Reactor.runNow(consumer)
@@ -233,6 +233,7 @@ end
 local function start(self: Node)
 	local initializer = self.body
 	self.body = nil
+	self.refresh = nil
 	local class = if self.equals ~= nil then EQUAL else CELL
 	NodeCast.classify(self, class)
 	self.set = class.set
@@ -286,6 +287,7 @@ local function cell<T>(initial: Initial<T>, equals: Equals<T>?): Value<T>
 	local node: Node = { version = version, value = value, first = nil, set = class.set }
 	if initializer then
 		node.body = initializer
+		node.refresh = start
 	end
 	if equals ~= nil then
 		node.equals = NodeCast.eraseEquals(equals)

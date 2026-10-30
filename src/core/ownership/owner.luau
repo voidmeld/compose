@@ -5,7 +5,6 @@ local Types = require "../reactive/types"
 local Inspect = require "./inspect"
 local Reactor = require "../reactive/reactor"
 local watchModule = require "../reactive/watch"
-local NodeCast = require "../reactive/node"
 local Graph = require "../reactive/graph"
 
 local inspecting = Inspect.flag
@@ -93,33 +92,61 @@ local function heldSize(entry: Entry): number
 	return if entry.batchRelease ~= nil then #entry else #entry // 2
 end
 
+local cursor = 0
+
+local function releaseSingles(batch: Entry, release: (subject: unknown) -> (), keep: number)
+	local index = cursor
+	while index > keep do
+		local subject = batch[index]
+		batch[index] = nil
+		index -= 1
+		cursor = index
+		release(subject)
+	end
+end
+
+local function releasePairs(batch: Entry, keep: number)
+	local index = cursor
+	local floor = keep * 2 + 1
+	while index >= floor do
+		local releaseSubject, subject = batch[index], batch[index + 1]
+		batch[index] = nil
+		batch[index + 1] = nil
+		index -= 2
+		cursor = index
+		if type(releaseSubject) == "function" then
+			((releaseSubject :: unknown) :: (subject: unknown) -> ())(subject)
+		end
+	end
+end
+
 local function releaseBatch(batch: Entry, keep: number, failures: { unknown })
+	local outer = cursor
 	local release = batch.batchRelease
 	if release ~= nil then
-		for index = #batch, keep + 1, -1 do
-			local subject = batch[index]
-			batch[index] = nil
-			local ok, failure: unknown = pcall(release, subject)
-			if not ok then
-				table.insert(failures, failure)
+		cursor = #batch
+		while true do
+			local ok, failure: unknown = pcall(releaseSingles, batch, release, keep)
+			if ok then
+				break
 			end
+			table.insert(failures, failure)
 		end
+		cursor = outer
 		if keep == 0 then
 			batch.batchRelease = nil
 		end
 		return
 	end
-	for index = #batch - 1, keep * 2 + 1, -2 do
-		local releaseSubject, subject = batch[index], batch[index + 1]
-		batch[index] = nil
-		batch[index + 1] = nil
-		if type(releaseSubject) == "function" then
-			local ok, failure: unknown = pcall(NodeCast.releaser(releaseSubject), subject)
-			if not ok then
-				table.insert(failures, failure)
-			end
+	cursor = #batch - 1
+	while true do
+		local ok, failure: unknown = pcall(releasePairs, batch, keep)
+		if ok then
+			break
 		end
+		table.insert(failures, failure)
 	end
+	cursor = outer
 end
 
 local function releaseEntry(entry: Entry, failures: { unknown })

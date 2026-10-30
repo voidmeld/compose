@@ -96,7 +96,7 @@ local function sweep(leader: Node, producer: Node, from: Node?)
 end
 
 function TERMINAL.run(leader: Node)
-	local producer = leader.source
+	local producer = rawget((leader :: unknown) :: { [string]: unknown }, "source") :: Node?
 	leader.source = nil
 	if not leader.released then
 		if leader.state == Graph.CHECK and not moved(leader) then
@@ -136,7 +136,7 @@ function TERMINAL.run(leader: Node)
 end
 
 function TERMINAL.runIn(frame: Evaluation.Evaluation, node: Node)
-	if node.source ~= nil or node.state == Graph.CHECK then
+	if rawget((node :: unknown) :: { [string]: unknown }, "source") ~= nil or node.state == Graph.CHECK then
 		TERMINAL.run(node)
 		return
 	end
@@ -179,7 +179,10 @@ local function begin(reactor: Reactor, body: Body, class: {}, label: string?, sc
 	if class == TERMINAL then
 		node.coalesced = false
 		node.run = TERMINAL.run
+		node.runIn = TERMINAL.runIn
+		node.group = true
 		node.reads = 0
+		node.retry = false
 	end
 	NodeCast.classify(node, class)
 	if statsOn.enabled then

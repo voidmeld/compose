@@ -22,6 +22,7 @@ type Dispose = Types.Dispose
 
 local applying = Props.applying
 local inspecting = Inspect.flag
+local tracked = Nodes.tracked
 
 export type Child = Node | Children.Directive
 
@@ -127,6 +128,11 @@ local function createRuntime(host: Host.Host): Runtime
 
 	local function destroyOwnedNode(node: Node)
 		Props.forget(node)
+		if tracked.dependents == 0 then
+			render.destroyNode(node)
+			Nodes.forget(node)
+			return
+		end
 		local ok, err: unknown = pcall(Nodes.releaseDependents, node)
 		render.destroyNode(node)
 		Nodes.forget(node)
