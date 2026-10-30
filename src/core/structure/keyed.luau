@@ -348,7 +348,7 @@ local function keyed<V, K>(options: Options<V, K>): Children.Directive
 
 			local removedAny = false
 			if found < oldEnd - prefix then
-				for index = oldEnd, prefix + 1, -1 do
+				for index = prefix + 1, oldEnd do
 					local existing = order[index]
 					if existing.mark ~= mark then
 						release(existing)

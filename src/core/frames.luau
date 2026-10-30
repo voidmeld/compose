@@ -8,10 +8,12 @@ local function share(frames: Host.Frames, reactor: Reactor.Reactor): Host.Frames
 	local listeners: { { live: boolean, body: (number) -> () } } = {}
 	local stop: Host.Unsubscribe? = nil
 	local dispatching = false
+	local stale = 0
 	local function compact()
-		if dispatching then
+		if dispatching or stale == 0 then
 			return
 		end
+		stale = 0
 		local write = 0
 		for _, entry in listeners do
 			if entry.live then
@@ -81,7 +83,10 @@ local function share(frames: Host.Frames, reactor: Reactor.Reactor): Host.Frames
 				end)
 			end
 			return function()
-				entry.live = false
+				if entry.live then
+					entry.live = false
+					stale += 1
+				end
 				compact()
 			end
 		end,
