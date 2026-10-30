@@ -28,6 +28,36 @@ local function share(frames: Host.Frames, reactor: Reactor.Reactor): Host.Frames
 			release()
 		end
 	end
+	local frameDelta = 0
+	local position = 0
+	local limit = 0
+	local failures: { unknown }? = nil
+	local function sweep()
+		local delta = frameDelta
+		while position < limit do
+			position += 1
+			local current = listeners[position]
+			if current.live then
+				current.body(delta)
+			end
+		end
+	end
+	local function dispatch()
+		position = 0
+		limit = #listeners
+		while true do
+			local ran, problem: unknown = pcall(sweep)
+			if ran then
+				break
+			end
+			local collected = failures or {}
+			failures = collected
+			table.insert(collected, problem)
+		end
+	end
+	local function batched()
+		Reactor.batch(reactor, dispatch)
+	end
 	return {
 		now = frames.now,
 		onFrame = function(body: (number) -> ()): Host.Unsubscribe
@@ -35,27 +65,19 @@ local function share(frames: Host.Frames, reactor: Reactor.Reactor): Host.Frames
 			table.insert(listeners, entry)
 			if stop == nil then
 				stop = frames.onFrame(function(delta)
+					local outerDelta, outerPosition, outerLimit, outerFailures = frameDelta, position, limit, failures
 					dispatching = true
-					local failures: { unknown } = {}
-					local ok, failure: unknown = pcall(function()
-						Reactor.batch(reactor, function()
-							for index = 1, #listeners do
-								local current = listeners[index]
-								if current.live then
-									local ran, problem: unknown = pcall(current.body, delta)
-									if not ran then
-										table.insert(failures, problem)
-									end
-								end
-							end
-						end)
-					end)
+					failures = nil
+					frameDelta = delta
+					local ok, failure: unknown = pcall(batched)
 					dispatching = false
 					compact()
+					local collected = failures or {}
+					frameDelta, position, limit, failures = outerDelta, outerPosition, outerLimit, outerFailures
 					if not ok then
-						table.insert(failures, failure)
+						table.insert(collected, failure)
 					end
-					Owner.raiseAll(failures)
+					Owner.raiseAll(collected)
 				end)
 			end
 			return function()

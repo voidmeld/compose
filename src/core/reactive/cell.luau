@@ -17,6 +17,8 @@ type Value<T> = Types.Value<T>
 type Equals<T> = Types.Equals<T>
 type Initial<T> = (() -> T) | T
 
+local DIRTY = Graph.DIRTY
+
 local function onlyListeners(first: Node): boolean
 	local reactor = first.reactor
 	local edge: Node? = first[4]
@@ -191,8 +193,18 @@ set = function(self: Node, incoming: unknown)
 				return
 			elseif rawget((consumer :: unknown) :: { [string]: unknown }, "body") == nil and consumer.run ~= nil then
 				consumer.retry = false
-				consumer.state = Graph.DIRTY
-				Reactor.runNow(consumer)
+				consumer.state = DIRTY
+				local reactor = consumer.reactor
+				if reactor ~= nil and reactor.batching then
+					if not consumer.queued then
+						consumer.queued = true
+						local count = reactor.count + 1
+						reactor.count = count
+						reactor.queue[count] = consumer
+					end
+				else
+					Reactor.runNow(consumer)
+				end
 				return
 			end
 		end

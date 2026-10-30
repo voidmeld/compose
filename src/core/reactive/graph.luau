@@ -411,7 +411,7 @@ local function runEffect(consumer: Node)
 	if type(producer) == "table" then
 		resumeSet((producer :: unknown) :: Node)
 	end
-	local previousConsumer, previousOrder = Evaluation.enter(consumer)
+	local frame, previousConsumer, previousOrder = Evaluation.enterFrame(consumer)
 	consumer.reads = 0
 	local effect = consumer.effect
 	if effect then
@@ -421,7 +421,7 @@ local function runEffect(consumer: Node)
 			effect(use)
 		end
 	end
-	Evaluation.leave(previousConsumer, previousOrder)
+	Evaluation.leaveFrame(frame, previousConsumer, previousOrder)
 	local reads = consumer.reads or 0
 	if #consumer > reads then
 		trim(consumer, reads + 1)

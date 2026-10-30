@@ -89,6 +89,29 @@ local function enter(consumer: Node?): (Node?, number)
 	return previousConsumer, previousOrder
 end
 
+local function enterFrame(consumer: Node?): (Evaluation, Node?, number)
+	local running = coroutine.running()
+	local cached = if running == cache.thread then cache.frame else nil
+	local current: Evaluation = if cached ~= nil then cached else frame()
+	local previousConsumer, previousOrder = current.consumer, current.order
+	if previousOrder == 0 then
+		cache.active += 1
+	end
+	local order = cache.order + 1
+	cache.order = order
+	current.consumer = consumer
+	current.order = order
+	return current, previousConsumer, previousOrder
+end
+
+local function leaveFrame(current: Evaluation, previousConsumer: Node?, previousOrder: number)
+	current.consumer = previousConsumer
+	current.order = previousOrder
+	if previousOrder == 0 then
+		cache.active -= 1
+	end
+end
+
 local function snapshot(): (Node?, number)
 	local cached = cache.frame
 	local current: Evaluation = if cached ~= nil and coroutine.running() == cache.thread then cached else frame()
@@ -112,6 +135,8 @@ return {
 	context = context,
 	contextOn = contextOn,
 	enter = enter,
+	enterFrame = enterFrame,
+	leaveFrame = leaveFrame,
 	snapshot = snapshot,
 	leave = leave,
 }

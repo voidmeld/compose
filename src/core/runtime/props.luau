@@ -549,9 +549,9 @@ local function applyAttributes(host: Host.Host, node: Node, owner: Owner.Owner, 
 	end
 end
 
-type Connect = (Owner.Owner, (unknown) -> ()) -> Types.Node
+type Mapping = { source: Types.ReadOnlyValue<unknown>, transform: (unknown) -> unknown }
 
-local mapped: { [unknown]: Connect } = {}
+local mapped: { [unknown]: Mapping } = {}
 
 Weak.keys(mapped)
 
@@ -559,11 +559,10 @@ local function map<T, R>(source: Types.ReadOnlyValue<T>, transform: (T) -> R): T
 	local function body(use: Types.Use): R
 		return transform(use(source))
 	end
-	mapped[body] = function(owner: Owner.Owner, sink: (unknown) -> ()): Types.Node
-		return Owner.listenHeld(owner, source, function(current: T)
-			sink(transform(current))
-		end)
-	end
+	mapped[body] = {
+		source = (source :: unknown) :: Types.ReadOnlyValue<unknown>,
+		transform = (transform :: unknown) :: (unknown) -> unknown,
+	}
 	return body
 end
 
@@ -618,25 +617,34 @@ local function bindFunction(
 )
 	local observation = host.observation
 	local liveRead = if observation then observation.readProperty else nil
-	local connect = mapped[value]
+	local mapping = mapped[value]
 	local watcher: Types.Node
 	local written: unknown = UNWRITTEN
-	local function changed(current: unknown)
-		if written ~= UNWRITTEN and current == written and liveRead ~= nil then
-			local read, live = pcall(liveRead, node, name)
-			if read and live == current then
-				return
+	if mapping ~= nil then
+		local transform = mapping.transform
+		watcher = Owner.listenHeld(owner, mapping.source, function(raw: unknown)
+			local current = transform(raw)
+			if written ~= UNWRITTEN and current == written and liveRead ~= nil then
+				local read, live = pcall(liveRead, node, name)
+				if read and live == current then
+					return
+				end
 			end
-		end
-		written = current
-		write(node, name, current)
-	end
-	if connect ~= nil then
-		watcher = connect(owner, changed)
+			written = current
+			write(node, name, current)
+		end)
 	else
 		local source = value :: Types.Body<unknown>
 		watcher = Owner.effectHeld(owner, function(use: Types.Use)
-			changed(source(use))
+			local current = source(use)
+			if written ~= UNWRITTEN and current == written and liveRead ~= nil then
+				local read, live = pcall(liveRead, node, name)
+				if read and live == current then
+					return
+				end
+			end
+			written = current
+			write(node, name, current)
 		end)
 	end
 	watcher.fastKey = name
