@@ -101,10 +101,29 @@ local function nearest(): Owner.Owner?
 	return findOn(false, coroutine.running())
 end
 
+local evaluationCache = Evaluation.cache
+
 local function resolve(): (Owner.Owner?, boolean)
 	local running = coroutine.running()
-	local owner = findOn(true, running)
 	local last = #threads
+	if threads[last] == running then
+		if evaluationCache.active == 0 then
+			return owners[last], true
+		end
+		local frame = evaluationCache.frame
+		if frame ~= nil and evaluationCache.thread == running and frame.order > 0 then
+			local context = frame.consumer
+			if context == nil or context.inherited == nil then
+				return owners[last], true
+			end
+			local own = stacked[running] or 0
+			if own == last and own > (((context :: unknown) :: Owner.RunScope).base or 0) then
+				return owners[last], true
+			end
+		end
+	end
+	local owner = findOn(true, running)
+	last = #threads
 	return owner, owner ~= nil and threads[last] == running and owners[last] == owner
 end
 

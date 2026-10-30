@@ -18,6 +18,7 @@ type Equals<T> = Types.Equals<T>
 type Initial<T> = (() -> T) | T
 
 local DIRTY = Graph.DIRTY
+local CHECK = Graph.CHECK
 
 local function onlyListeners(first: Node): boolean
 	local reactor = first.reactor
@@ -69,14 +70,14 @@ local function write(self: Node, incoming: unknown)
 			end
 		elseif first[4] == nil then
 			local state = consumer.state
-			if state == Graph.DIRTY and not consumer.retry then
+			if state == DIRTY and not consumer.retry then
 				return
-			elseif state == Graph.CHECK and not consumer.retry then
-				consumer.state = Graph.DIRTY
+			elseif state == CHECK and not consumer.retry then
+				consumer.state = DIRTY
 				return
 			elseif rawget((consumer :: unknown) :: { [string]: unknown }, "body") == nil and consumer.run ~= nil then
 				consumer.retry = false
-				consumer.state = Graph.DIRTY
+				consumer.state = DIRTY
 				local reactor = consumer.reactor
 				if reactor ~= nil and reactor.batching then
 					if not consumer.queued then
@@ -96,7 +97,7 @@ local function write(self: Node, incoming: unknown)
 	if first == nil then
 		return
 	end
-	Graph.markStale(self, Graph.DIRTY)
+	Graph.markStale(self, DIRTY)
 	Graph.settleTouched()
 end
 
@@ -145,7 +146,7 @@ set = function(self: Node, incoming: unknown)
 	local consumer = if first ~= nil then first[2] else nil
 	local state = if consumer ~= nil then consumer.state else nil
 	if
-		state == Graph.DIRTY
+		state == DIRTY
 		and consumer ~= nil
 		and consumer.group
 		and not statsOn.enabled
@@ -186,10 +187,10 @@ set = function(self: Node, incoming: unknown)
 				return
 			end
 		elseif first[4] == nil then
-			if state == Graph.DIRTY and not consumer.retry then
+			if state == DIRTY and not consumer.retry then
 				return
-			elseif state == Graph.CHECK and not consumer.retry then
-				consumer.state = Graph.DIRTY
+			elseif state == CHECK and not consumer.retry then
+				consumer.state = DIRTY
 				return
 			elseif rawget((consumer :: unknown) :: { [string]: unknown }, "body") == nil and consumer.run ~= nil then
 				consumer.retry = false
@@ -212,7 +213,7 @@ set = function(self: Node, incoming: unknown)
 	if first == nil then
 		return
 	end
-	Graph.markStale(self, Graph.DIRTY)
+	Graph.markStale(self, DIRTY)
 	Graph.settleTouched()
 end
 
