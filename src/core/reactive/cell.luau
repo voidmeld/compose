@@ -175,9 +175,8 @@ set = function(self: Node, incoming: unknown)
 						local count = reactor.count + 1
 						reactor.count = count
 						reactor.queue[count] = first
-						if not validationState.validating then
-							Graph.coalesce(self, first, if type(incoming) == "number" then coalescedNumber else coalesced)
-						end
+					elseif not validationState.validating then
+						Graph.coalesce(self, first, if type(incoming) == "number" then coalescedNumber else coalesced)
 					end
 				else
 					Reactor.runNow(first)

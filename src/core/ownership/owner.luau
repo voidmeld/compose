@@ -7,6 +7,8 @@ local Reactor = require "../reactive/reactor"
 local watchModule = require "../reactive/watch"
 local NodeCast = require "../reactive/node"
 
+local inspecting = Inspect.flag
+
 type Dispose = Types.Dispose
 
 export type Boundary = {
@@ -411,7 +413,7 @@ local function createChild(owner: Owner): Owner
 	else
 		attach(owner, child)
 	end
-	if Inspect.isActive() then
+	if inspecting.active then
 		Inspect.child(owner, child)
 	end
 	local boundary = owner.boundary
@@ -445,7 +447,7 @@ local function watchStatic<T>(
 	body: (value: T) -> (),
 	after: Dispose?
 ): Dispose
-	if Inspect.isActive() then
+	if inspecting.active then
 		Inspect.watch(owner)
 	end
 	local boundary = owner.boundary
@@ -463,7 +465,7 @@ local function watchStatic<T>(
 end
 
 local function listenHeld<T>(owner: Owner, producer: Types.ReadOnlyValue<T>, body: (value: T) -> ()): Types.Node
-	if Inspect.isActive() then
+	if inspecting.active then
 		Inspect.watch(owner)
 	end
 	local edge = watchModule.listenEdge(reactorOf(owner), producer, body)
@@ -472,7 +474,7 @@ local function listenHeld<T>(owner: Owner, producer: Types.ReadOnlyValue<T>, bod
 end
 
 local function effectHeld(owner: Owner, body: (use: Types.Use) -> ()): Types.Node
-	if Inspect.isActive() then
+	if inspecting.active then
 		Inspect.watch(owner)
 	end
 	local node = watchModule.terminalNode(reactorOf(owner), body)
@@ -481,7 +483,7 @@ local function effectHeld(owner: Owner, body: (use: Types.Use) -> ()): Types.Nod
 end
 
 local function watchTerminal(owner: Owner, body: (use: Types.Use) -> (), after: Dispose?): Dispose
-	if Inspect.isActive() then
+	if inspecting.active then
 		Inspect.watch(owner)
 	end
 	local boundary = owner.boundary
@@ -510,7 +512,7 @@ watchModule.installScope(function(node: Types.Node)
 end, releaseScope)
 
 local function watch(owner: Owner, body: (use: Types.Use) -> (), label: string?, after: Dispose?): Dispose
-	if Inspect.isActive() then
+	if inspecting.active then
 		Inspect.watch(owner)
 	end
 	local boundary = owner.boundary
