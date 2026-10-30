@@ -33,9 +33,13 @@ local function resumeSet(producer: Node)
 	local set = producer.resume
 	if set ~= nil then
 		local edge = producer.first
-		local consumer = if edge ~= nil then edge[2] else nil
-		if consumer ~= nil then
-			consumer.coalesced = nil
+		if edge ~= nil then
+			local consumer = edge[2]
+			if consumer ~= nil then
+				consumer.coalesced = nil
+			else
+				edge.coalesced = nil
+			end
 		end
 		producer.resume = nil
 		producer.set = set
@@ -524,6 +528,9 @@ function LISTENER.run(leader: Node)
 	if producer == nil or producer.released then
 		return
 	end
+	if leader.coalesced ~= nil then
+		resumeSet(producer)
+	end
 	local update = producer.refresh
 	if update then
 		update(producer)
@@ -547,6 +554,9 @@ function CELL_LISTENER.run(leader: Node)
 	local producer = leader[1]
 	if producer == nil then
 		return
+	end
+	if leader.coalesced ~= nil then
+		resumeSet(producer)
 	end
 	if producer.first == leader and leader[4] == nil and not statsOn.enabled then
 		local listener = leader.listener
