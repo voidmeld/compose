@@ -271,10 +271,19 @@ NodeCast.adopt(CELL)
 NodeCast.adopt(EQUAL)
 NodeCast.adopt(LAZY)
 
+local cellSet = CELL.set
+
 local function cell<T>(initial: Initial<T>, equals: Equals<T>?): Value<T>
+	local version = clockState.now + 1
+	clockState.now = version
+	if equals == nil and type(initial) ~= "function" then
+		return (
+			setmetatable({ version = version, value = initial, first = nil, set = cellSet }, CELL) :: unknown
+		) :: Value<T>
+	end
 	local initializer, value = NodeCast.split(initial)
 	local class = if initializer then LAZY elseif equals ~= nil then EQUAL else CELL
-	local node: Node = { version = clock.next(), value = value, first = nil, set = class.set }
+	local node: Node = { version = version, value = value, first = nil, set = class.set }
 	if initializer then
 		node.body = initializer
 	end

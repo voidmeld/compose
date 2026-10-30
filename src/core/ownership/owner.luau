@@ -6,6 +6,7 @@ local Inspect = require "./inspect"
 local Reactor = require "../reactive/reactor"
 local watchModule = require "../reactive/watch"
 local NodeCast = require "../reactive/node"
+local Graph = require "../reactive/graph"
 
 local inspecting = Inspect.flag
 
@@ -43,6 +44,7 @@ local function new(inherited: Reactor.Reactor?, parent: Owner?): Owner
 end
 
 local detached: Reactor.Reactor? = nil
+local releaseHeld = watchModule.releaseHeld
 
 local function noop() end
 
@@ -468,8 +470,12 @@ local function listenHeld<T>(owner: Owner, producer: Types.ReadOnlyValue<T>, bod
 	if inspecting.active then
 		Inspect.watch(owner)
 	end
-	local edge = watchModule.listenEdge(reactorOf(owner), producer, body)
-	holdSubject(owner, watchModule.releaseHeld, edge)
+	local edge = Graph.listenEdge(
+		reactorOf(owner),
+		(producer :: unknown) :: Types.Node,
+		(body :: unknown) :: (value: unknown) -> ()
+	)
+	holdSubject(owner, releaseHeld, edge)
 	return edge
 end
 
@@ -478,7 +484,7 @@ local function effectHeld(owner: Owner, body: (use: Types.Use) -> ()): Types.Nod
 		Inspect.watch(owner)
 	end
 	local node = watchModule.terminalNode(reactorOf(owner), body)
-	holdSubject(owner, watchModule.releaseHeld, node)
+	holdSubject(owner, releaseHeld, node)
 	return node
 end
 

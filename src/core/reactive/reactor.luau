@@ -2,6 +2,7 @@
 --!native
 
 local Evaluation = require "./evaluation"
+local evaluationCache = Evaluation.cache
 local Types = require "./types"
 local stats = require "./stats"
 local statsOn = stats.state
@@ -165,9 +166,19 @@ end
 local function drain(reactor: Reactor): { string }?
 	reactor.errors = nil
 	reactor.abandoned = false
+	if reactor.count == 0 and not statsOn.enabled then
+		reactor.cursor = 0
+		return nil
+	end
 	local openedAt = if statsOn.enabled then statsOn.recorder.nowOrNil() else nil
 
-	local consumer, at = Evaluation.snapshot()
+	local consumer: Types.Node?, at: number
+	local cached = evaluationCache.frame
+	if cached ~= nil and evaluationCache.thread == coroutine.running() then
+		consumer, at = cached.consumer, cached.order
+	else
+		consumer, at = Evaluation.snapshot()
+	end
 	repeat
 		local first = reactor.queue[reactor.cursor + 1]
 		local run = if first ~= nil and first.runIn ~= nil then runInRest else runRest
@@ -235,6 +246,19 @@ local function batch<T...>(reactor: Reactor, body: () -> T...): T...
 		stats.bump "drains"
 	end
 	return finishBatch(reactor, xpcall(body, traceback))
+end
+
+local function batchMethod(reactor: Reactor): <T...>(self: unknown, body: () -> T...) -> T...
+	return function<T...>(_self: unknown, body: () -> T...): T...
+		if reactor.batching then
+			return body()
+		end
+		reactor.batching = true
+		if statsOn.enabled then
+			stats.bump "drains"
+		end
+		return finishBatch(reactor, xpcall(body, traceback))
+	end
 end
 
 local function settle(reactor: Reactor)
@@ -368,6 +392,7 @@ return {
 	enqueue = enqueue,
 	runNow = runNow,
 	batch = batch,
+	batchMethod = batchMethod,
 	settle = settle,
 	settleTouched = settleTouched,
 	pending = pending,

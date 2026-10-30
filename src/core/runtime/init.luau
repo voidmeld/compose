@@ -714,9 +714,7 @@ local function createRuntime(host: Host.Host): Runtime
 		host = supplied,
 		reactor = reactor,
 		watch = watch,
-		batch = function<T...>(_self: Runtime, body: () -> T...): T...
-			return Reactor.batch(reactor, body)
-		end,
+		batch = Reactor.batchMethod(reactor),
 		settle = function(_self: Runtime)
 			Reactor.settle(reactor)
 		end,
