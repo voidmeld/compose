@@ -3,6 +3,7 @@
 
 local Evaluation = require "./evaluation"
 local Types = require "./types"
+local profile = require "./profile"
 local stats = require "./stats"
 local statsOn = stats.state
 
@@ -57,7 +58,7 @@ local function enqueue(node: Node)
 	if node.queued then
 		if statsOn.enabled then
 			stats.bump "watchSchedulesCoalesced"
-			statsOn.recorder.schedule(node, true)
+			profile.schedule(node, true)
 		end
 		return
 	end
@@ -67,7 +68,7 @@ local function enqueue(node: Node)
 	reactor.queue[count] = node
 	if statsOn.enabled then
 		stats.bump "watchSchedules"
-		statsOn.recorder.schedule(node, false)
+		profile.schedule(node, false)
 	end
 	if not reactor.batching then
 		touch(reactor)
@@ -165,7 +166,7 @@ end
 local function drain(reactor: Reactor): { string }?
 	reactor.errors = nil
 	reactor.abandoned = false
-	local openedAt = if statsOn.enabled then statsOn.recorder.nowOrNil() else nil
+	local openedAt = if statsOn.enabled then profile.nowOrNil() else nil
 
 	local consumer, at = Evaluation.snapshot()
 	repeat
@@ -181,8 +182,8 @@ local function drain(reactor: Reactor): { string }?
 	if statsOn.enabled then
 		stats.bump("continuationPasses", cursor)
 		if openedAt ~= nil then
-			local closedAt = statsOn.recorder.nowOrNil()
-			statsOn.recorder.drain(cursor, if closedAt ~= nil then closedAt - openedAt else 0)
+			local closedAt = profile.nowOrNil()
+			profile.drain(cursor, if closedAt ~= nil then closedAt - openedAt else 0)
 		end
 	end
 
@@ -200,14 +201,7 @@ local function drain(reactor: Reactor): { string }?
 			queue[index] = nil
 		end
 	else
-		local count = reactor.count
-		if count <= 16 then
-			for index = 1, count do
-				queue[index] = nil
-			end
-		else
-			table.clear(queue)
-		end
+		table.clear(queue)
 	end
 	reactor.count = 0
 	reactor.cursor = 0

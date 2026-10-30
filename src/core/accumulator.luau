@@ -8,7 +8,12 @@ local Types = require "./reactive/types"
 local cellModule = require "./reactive/cell"
 local userSpace = require "./reactive/userSpace"
 
-export type Options<T, E> = Types.AccumulatorOptions<T, E>
+export type Options<T, E> = {
+	from: Types.ReadOnlyValue<E>,
+	reduce: (previous: T, event: E) -> T,
+	initial: T,
+	equals: Types.Equals<T>?,
+}
 
 local KNOWN_FIELDS: { [string]: true } = {
 	from = true,

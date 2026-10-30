@@ -1,7 +1,6 @@
 --!strict
 --!native
 
-local RuntimeTypes = require "../runtime/types"
 local Codec = require "./codec"
 local Diagnostics = require "../diagnostics"
 local Easing = require "./easing"
@@ -13,15 +12,27 @@ local Types = require "../reactive/types"
 local cellModule = require "../reactive/cell"
 local watchModule = require "../reactive/watch"
 
-export type ReducedMotion = RuntimeTypes.ReducedMotion
+export type ReducedMotion = Types.Value<boolean> | Types.Value<boolean> | Types.Source<boolean>
 
-export type SpringOptions = RuntimeTypes.SpringOptions
+export type SpringOptions = {
+	period: number?,
+	damping: number?,
+	tolerance: number?,
+	reducedMotion: ReducedMotion?,
+}
 
-export type Duration = RuntimeTypes.Duration
+export type Duration = Types.Input<number>
 
-export type TweenOptions = RuntimeTypes.TweenOptions
+export type TweenOptions = {
+	seconds: Duration?,
+	ease: Easing.Easing?,
+	reducedMotion: ReducedMotion?,
+}
 
-export type Motion = RuntimeTypes.Motion
+export type Motion = {
+	spring: <T>(source: Types.Body<T>, options: SpringOptions?) -> Types.ReadOnlyValue<T>,
+	tween: <T>(source: Types.Body<T>, options: TweenOptions?) -> Types.ReadOnlyValue<T>,
+}
 
 local DEFAULT_PERIOD = 0.5
 local DEFAULT_DAMPING = 1

@@ -9,6 +9,7 @@ local Host = require "../host"
 local Keys = require "./keys"
 local Nodes = require "../ownership/nodes"
 local cellModule = require "../reactive/cell"
+local profile = require "../reactive/profile"
 local stats = require "../reactive/stats"
 local statsOn = stats.state
 local Owner = require "../ownership/owner"
@@ -263,12 +264,12 @@ local function bind(target: Target, node: Node, owner: Owner.Owner, key: string,
 		end
 		written = value
 		if statsOn.enabled then
-			statsOn.recorder.hostWrite()
+			profile.hostWrite()
 		end
 	end
 	local cleanup = singleCleanup(registry, node, bindings, key, binding, clear)
 	if statsOn.enabled then
-		statsOn.recorder.naming(("%s.%s%s"):format(Host.describeNode(target.host, node), target.prefix, key))
+		profile.naming(("%s.%s%s"):format(Host.describeNode(target.host, node), target.prefix, key))
 	end
 	local dispose: () -> ()
 	if type(source) == "function" then
@@ -282,7 +283,7 @@ local function bind(target: Target, node: Node, owner: Owner.Owner, key: string,
 	end
 	binding.dispose = dispose
 	if statsOn.enabled then
-		statsOn.recorder.naming(nil)
+		profile.naming(nil)
 	end
 	previous = nil
 	if binding.remaining == 0 then
@@ -358,7 +359,7 @@ local function bindGroup(host: Host.Host, node: Node, owner: Owner.Owner, names:
 		end
 	end
 	if statsOn.enabled then
-		statsOn.recorder.naming(("%s.{%s}"):format(Host.describeNode(host, node), table.concat(names, ",")))
+		profile.naming(("%s.{%s}"):format(Host.describeNode(host, node), table.concat(names, ",")))
 	end
 	local dispose = Owner.watch(owner, function(use)
 		local values = table.pack(body(use))
@@ -394,7 +395,7 @@ local function bindGroup(host: Host.Host, node: Node, owner: Owner.Owner, names:
 			end
 			written[index] = value
 			if statsOn.enabled then
-				statsOn.recorder.hostWrite()
+				profile.hostWrite()
 			end
 		end
 		if binding.remaining == 0 and binding.dispose ~= nil then
@@ -403,7 +404,7 @@ local function bindGroup(host: Host.Host, node: Node, owner: Owner.Owner, names:
 	end, nil, cleanup)
 	binding.dispose = dispose
 	if statsOn.enabled then
-		statsOn.recorder.naming(nil)
+		profile.naming(nil)
 	end
 	table.clear(previous)
 	for index = 1, count do

@@ -13,7 +13,17 @@ export type NodeReport = Inspect.NodeReport
 export type Report = Inspect.Report
 export type OwnedCounts = Nodes.OwnedCounts
 
-export type Data = Inspect.Data
+export type Data = {
+	schemaVersion: number,
+	active: boolean,
+	outstandingMounts: number,
+	trackedNodes: number,
+	pending: number,
+	droppedOwners: number,
+	droppedNodes: number,
+	mounts: { OwnerReport },
+	detached: { OwnerReport },
+}
 
 local EMPTY: Report = {
 	active = false,

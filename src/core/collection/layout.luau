@@ -1,11 +1,18 @@
 --!strict
 
-local StructureTypes = require "../structure/types"
 local Prefix = require "./prefix"
 
 export type Kind = "list" | "grid"
 
-export type Placement = StructureTypes.Placement
+export type Placement = {
+	index: number,
+	row: number,
+	column: number,
+	offset: number,
+	size: number,
+	crossOffset: number,
+	crossSize: number,
+}
 
 export type Geometry = {
 	count: number,

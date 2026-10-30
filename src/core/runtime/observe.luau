@@ -1,13 +1,12 @@
 --!strict
 
-local RuntimeTypes = require "./types"
 local Host = require "../host"
 local Owner = require "../ownership/owner"
 local Types = require "../reactive/types"
 local Cell = require "../reactive/cell"
 local Reactor = require "../reactive/reactor"
 
-export type Options = RuntimeTypes.ObserveOptions
+export type Options = { frame: boolean?, poll: boolean?, styled: boolean? }
 
 local SETTLE_FRAMES = 3
 type Entry = { live: boolean, read: () -> unknown, value: Types.Value<unknown>, polls: boolean, quiet: number }

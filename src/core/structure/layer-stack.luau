@@ -1,17 +1,28 @@
 --!strict
 
-local StructureTypes = require "./types"
 local Children = require "../runtime/children"
 local Diagnostics = require "../diagnostics"
+local Host = require "../host"
 local Support = require "./support"
 local Types = require "../reactive/types"
+local keyed = require "./keyed"
 local retain = require "../collection/retain"
 
-export type Retention = StructureTypes.LayerStackRetention
+export type Retention = "all" | "top"
 
-export type State = StructureTypes.LayerStackState
+export type State = {
+	index: number,
+	depthFromTop: number,
+	top: boolean,
+	covered: boolean,
+}
 
-export type Options<V, K> = StructureTypes.LayerStackOptions<V, K>
+export type Options<V, K> = {
+	from: keyed.Source<V>,
+	key: ((value: V, index: number) -> K)?,
+	render: (value: Types.ReadOnlyValue<V>, state: Types.ReadOnlyValue<State>, key: K) -> Host.Node,
+	retention: Retention?,
+}
 
 local KNOWN_FIELDS: { [string]: true } = {
 	from = true,

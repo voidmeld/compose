@@ -2,7 +2,6 @@
 
 local freeze: ({}) -> {} = table.freeze
 
-local StructureTypes = require "./types"
 local Owners = require "../ownership/owner"
 local Children = require "../runtime/children"
 local Diagnostics = require "../diagnostics"
@@ -11,10 +10,16 @@ local Support = require "./support"
 local Types = require "../reactive/types"
 local keyed = require "./keyed"
 
-export type Viewport = StructureTypes.TileCollectionViewport
-export type Size = StructureTypes.TileCollectionSize
-export type Placement = StructureTypes.TileCollectionPlacement
-export type Options<V> = StructureTypes.TileCollectionOptions<V>
+export type Viewport = { x: number, y: number, width: number, height: number }
+export type Size = { width: number, height: number }
+export type Placement = { column: number, row: number, x: number, y: number, width: number, height: number }
+export type Options<V> = {
+	viewport: Types.Source<Viewport>,
+	tileSize: Size,
+	overscan: number?,
+	read: (use: Types.Use, column: number, row: number) -> V?,
+	render: (value: Types.ReadOnlyValue<V>, placement: Placement) -> Host.Node,
+}
 
 local KNOWN_FIELDS: { [string]: true } =
 	{ viewport = true, tileSize = true, overscan = true, read = true, render = true }
