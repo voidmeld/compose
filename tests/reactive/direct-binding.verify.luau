@@ -35,6 +35,32 @@ describe("direct property bindings", function()
 		expect(world.pending()):toBe(0)
 	end)
 
+	it("writes a function-bound property only when its value changes", function(own)
+		local world = Support.world()
+		local selected = Compose.cell(1)
+		local runs = 0
+		own((world.runtime.mount(function()
+			return world.create "Label" {
+				Value = function(use: Compose.Use)
+					runs += 1
+					return if use(selected) == 7 then "chosen" else "idle"
+				end,
+			}
+		end, world.root)))
+		local node = world.host.childrenOf(world.root)[1]
+		world.host.resetCounts()
+		for index = 2, 6 do
+			selected:set(index)
+			world.settle()
+		end
+		expect(runs):toBe(6)
+		expect(world.host.counts().setProperty):toBe(0)
+		selected:set(7)
+		world.settle()
+		expect(world.host.propertyOf(node, "Value")):toBe "chosen"
+		expect(world.host.counts().setProperty):toBe(1)
+	end)
+
 	it("keeps cached setters valid after flushes and value type changes", function(own)
 		local world = Support.world()
 		local source = Compose.cell(Support.erased(0))
