@@ -61,6 +61,29 @@ describe("direct property bindings", function()
 		expect(world.host.counts().setProperty):toBe(1)
 	end)
 
+	it("writes an unchanged function-bound value again after the host changed the property", function(own)
+		local world = Support.world()
+		local request = Compose.cell(1)
+		own((world.runtime.mount(function()
+			return world.create "Label" {
+				Value = function(use: Compose.Use)
+					use(request)
+					return 0
+				end,
+			}
+		end, world.root)))
+		local node = world.host.childrenOf(world.root)[1]
+		world.host.adapter.render.setProperty(node, "Value", 300)
+		world.host.resetCounts()
+		request:set(2)
+		world.settle()
+		expect(world.host.propertyOf(node, "Value")):toBe(0)
+		expect(world.host.counts().setProperty):toBe(1)
+		request:set(3)
+		world.settle()
+		expect(world.host.counts().setProperty):toBe(1)
+	end)
+
 	it("keeps cached setters valid after flushes and value type changes", function(own)
 		local world = Support.world()
 		local source = Compose.cell(Support.erased(0))
