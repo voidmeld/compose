@@ -722,14 +722,19 @@ local function apply(
 			elseif fresh then
 				local connect = mapped[value]
 				local watcher: Types.Node
-				if connect ~= nil then
-					watcher = connect(owner, function(current: unknown)
+				local written: unknown = UNWRITTEN
+				local function changed(current: unknown)
+					if written == UNWRITTEN or current ~= written then
+						written = current
 						write(node, name, current)
-					end)
+					end
+				end
+				if connect ~= nil then
+					watcher = connect(owner, changed)
 				else
 					local source = value :: Types.Body<unknown>
 					watcher = Owner.effectHeld(owner, function(use: Types.Use)
-						write(node, name, source(use))
+						changed(source(use))
 					end)
 				end
 				watcher.fastKey = name
