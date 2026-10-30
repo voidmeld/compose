@@ -4,18 +4,26 @@
 local Active = require "./ownership/active"
 local Block = require "@self/block"
 local Children = require "@self/children"
+local createClock = require "@self/clock"
+local createObserve = require "@self/observe"
+local createSequence = require "@self/sequence"
+local createSettled = require "@self/settled"
 local Diagnostics = require "./diagnostics"
 local Host = require "./host"
 local Inspect = require "./ownership/inspect"
+local Motion = require "./animation/motion"
 local Nodes = require "./ownership/nodes"
 local Owner = require "./ownership/owner"
-local Reactor = require "./reactive/reactor"
 local Props = require "@self/props"
+local Ramps = require "./animation/ramp"
+local Reactor = require "./reactive/reactor"
 local Root = require "./ownership/root"
 local RuntimeTypes = require "@self/types"
+local Schedulers = require "./scheduler"
+local shareFrames = require "./frames"
+local Timelines = require "./animation/timeline"
 local Types = require "./reactive/types"
 local Weak = require "./weak"
-local shareFrames = require "./frames"
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
@@ -605,7 +613,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made
 		end
-		local created = (require "./animation/motion").createMotion(host, requireOwner)
+		local created = Motion.createMotion(host, requireOwner)
 		motion = created
 		return created
 	end
@@ -616,7 +624,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(options)
 		end
-		local created = (require "./animation/timeline").createTimelines(host, requireOwner).timeline
+		local created = Timelines.createTimelines(host, requireOwner).timeline
 		timelines = created
 		return created(options)
 	end
@@ -627,7 +635,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(initial, options)
 		end
-		local created = (require "./animation/ramp").createRamps(motionOf().tween, requireOwner)
+		local created = Ramps.createRamps(motionOf().tween, requireOwner)
 		ramps = created
 		return created(initial, options)
 	end
@@ -638,7 +646,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(owner)
 		end
-		local created = (require "./scheduler").createSchedulers(host, requireOwner)
+		local created = Schedulers.createSchedulers(host, requireOwner)
 		schedulers = created
 		return created(owner)
 	end
@@ -649,7 +657,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(node, property, options)
 		end
-		local created = (require "@self/observe")(host, requireOwner, reactor)
+		local created = createObserve(host, requireOwner, reactor)
 		observers = created
 		return created(node, property, options)
 	end
@@ -660,7 +668,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(options)
 		end
-		local created = (require "@self/settled")(host, requireOwner)
+		local created = createSettled(host, requireOwner)
 		settles = created
 		return created(options)
 	end
@@ -671,7 +679,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(options)
 		end
-		local created = (require "@self/clock")(host, requireOwner)
+		local created = createClock(host, requireOwner)
 		clocks = created
 		return created(options)
 	end
@@ -682,7 +690,7 @@ local function createRuntime(host: Host.Host): Runtime
 		if made ~= nil then
 			return made(options)
 		end
-		local created = (require "@self/sequence")(timeline, requireOwner)
+		local created = createSequence(timeline, requireOwner)
 		sequences = created
 		return created(options)
 	end
