@@ -3,7 +3,6 @@
 local Active = require "@self/ownership/active"
 local AnimationCodec = require "@self/animation/codec"
 local AnimationEasing = require "@self/animation/easing"
-local AnimationSpring = require "@self/animation/spring"
 local AsyncShared = require "@self/async/shared"
 local ContextModule = require "@self/context"
 local Diagnostics = require "@self/diagnostics"
@@ -17,9 +16,9 @@ local Keys = require "@self/runtime/keys"
 local Props = require "@self/runtime/props"
 local OwnerModule = require "@self/ownership/owner"
 local Root = require "@self/ownership/root"
-local RootScopeModule = require "@self/ownership/root-scope"
 local ResourceTypes = require "@self/resource-types"
 local StructureTypes = require "@self/structure/types"
+local RuntimeTypes = require "@self/runtime/types"
 local RuntimeModule = require "@self/runtime"
 local Types = require "@self/reactive/types"
 local clock = require "@self/reactive/clock"
@@ -44,7 +43,7 @@ export type AccumulatorOptions<T, E> = Types.AccumulatorOptions<T, E>
 
 export type Owner = OwnerModule.Owner
 export type Context<T> = ContextModule.Context<T>
-export type RootScope = RootScopeModule.RootScope
+export type RootScope = ResourceTypes.RootScope
 export type Custody = nodes.Custody
 
 export type Node = HostProtocol.Node
@@ -82,7 +81,7 @@ export type KeyedCacheOptions<K, T> = ResourceTypes.KeyedCacheOptions<K, T>
 
 export type Easing = AnimationEasing.Easing
 export type Codec<T> = AnimationCodec.Codec<T>
-export type SpringState = AnimationSpring.State
+export type SpringState = RuntimeTypes.SpringState
 export type SpringOptions = RuntimeModule.SpringOptions
 export type TweenOptions = RuntimeModule.TweenOptions
 export type RampOptions = RuntimeModule.RampOptions
@@ -169,6 +168,12 @@ type NodesBuilder = () -> { HostProtocol.Node }
 local profileModule = once(function()
 	return require "@self/reactive/profile"
 end)
+local rootScopeModule = once(function()
+	return require "@self/ownership/root-scope"
+end)
+local springModule = once(function()
+	return require "@self/animation/spring"
+end)
 local poolModule = once(function()
 	return require "@self/pool"
 end)
@@ -232,6 +237,41 @@ end)
 local portalModule = once(function()
 	return require "@self/structure/portal"
 end)
+
+local function withRootOwner<T...>(body: (owner: OwnerModule.Owner) -> T..., reactor: Types.Reactor?): T...
+	return rootScopeModule().withRootOwner(body, reactor)
+end
+
+local function createRootOwner(body: (owner: OwnerModule.Owner) -> (), reactor: Types.Reactor?): ResourceTypes.RootScope
+	return rootScopeModule().createRootOwner(body, reactor)
+end
+
+local function createSpringState(position: { number }, arity: number): RuntimeTypes.SpringState
+	return springModule().createState(position, arity)
+end
+
+local function stepSpring(
+	state: RuntimeTypes.SpringState,
+	target: { number },
+	delta: number,
+	period: number,
+	damping: number
+): number
+	return springModule().step(state, target, delta, period, damping)
+end
+
+local function springAtRest(
+	state: RuntimeTypes.SpringState,
+	target: { number },
+	reference: { number },
+	tolerance: number
+): boolean
+	return springModule().atRest(state, target, reference, tolerance)
+end
+
+local function springCoefficients(period: number, damping: number): (number, number)
+	return springModule().coefficients(period, damping)
+end
 
 local function createPool<T>(options: ResourceTypes.PoolOptions<T>): ResourceTypes.Pool<T>
 	return poolModule()(options)
@@ -534,8 +574,8 @@ return {
 	owner = OwnerModule.api,
 	withOwner = withOwner,
 	bindOwner = bindOwner,
-	withRootOwner = RootScopeModule.withRootOwner,
-	createRootOwner = RootScopeModule.createRootOwner,
+	withRootOwner = withRootOwner,
+	createRootOwner = createRootOwner,
 	currentOwner = Active.current,
 	cleanup = cleanup,
 	custodyOf = nodes.custodyOf,
@@ -570,10 +610,10 @@ return {
 	easing = AnimationEasing,
 	registerCodec = AnimationCodec.register,
 	registeredCodecs = AnimationCodec.registered,
-	createSpringState = AnimationSpring.createState,
-	stepSpring = AnimationSpring.step,
-	springAtRest = AnimationSpring.atRest,
-	springCoefficients = AnimationSpring.coefficients,
+	createSpringState = createSpringState,
+	stepSpring = stepSpring,
+	springAtRest = springAtRest,
+	springCoefficients = springCoefficients,
 
 	createSharedResource = AsyncShared,
 	createContext = ContextModule,

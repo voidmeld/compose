@@ -1,6 +1,7 @@
 --!strict
 
 local Owner = require "./ownership/owner"
+local Types = require "./reactive/types"
 
 export type Lease<T> = {
 	value: T,
@@ -42,6 +43,12 @@ export type Slot = {
 	release: (key: unknown) -> boolean,
 	current: () -> unknown,
 	dispose: () -> (),
+}
+
+export type RootScope = {
+	owner: Owner.Owner,
+
+	dispose: Types.Dispose,
 }
 
 return {}

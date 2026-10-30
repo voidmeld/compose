@@ -3,6 +3,12 @@
 local Easing = require "../animation/easing"
 local Types = require "../reactive/types"
 
+export type SpringState = {
+	position: { number },
+	velocity: { number },
+	arity: number,
+}
+
 export type ReducedMotion = Types.Value<boolean> | Types.Value<boolean> | Types.Source<boolean>
 
 export type SpringOptions = {
