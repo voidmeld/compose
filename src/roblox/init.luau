@@ -62,45 +62,18 @@ local function animatableTypes(engine: Engine.Engine?): { string }
 	return names
 end
 
-local cleanupModule: typeof(require "@self/cleanup")? = nil
-local function cleanupOf(): typeof(require "@self/cleanup")
-	local loaded = cleanupModule
-	if loaded ~= nil then
-		return loaded
-	end
-	local required = require "@self/cleanup"
-	cleanupModule = required
-	return required
-end
+local cleanupModule = require "@self/cleanup"
 
-local viewportModule: typeof(require "@self/viewport")? = nil
-local function viewportOf(): typeof(require "@self/viewport")
-	local loaded = viewportModule
-	if loaded ~= nil then
-		return loaded
-	end
-	local required = require "@self/viewport"
-	viewportModule = required
-	return required
-end
+local viewportModule = require "@self/viewport"
 
-local inputModule: typeof(require "@self/input")? = nil
-local function inputOf(): typeof(require "@self/input")
-	local loaded = inputModule
-	if loaded ~= nil then
-		return loaded
-	end
-	local required = require "@self/input"
-	inputModule = required
-	return required
-end
+local inputModule = require "@self/input"
 
 local function cleanup(value: unknown): Compose.Dispose
-	return cleanupOf().cleanup(value)
+	return cleanupModule.cleanup(value)
 end
 
 local function createCleanup(typeName: ((value: unknown) -> string)?): (value: unknown) -> Compose.Dispose
-	return cleanupOf().createCleanup(typeName)
+	return cleanupModule.createCleanup(typeName)
 end
 
 local function createViewport(
@@ -108,22 +81,22 @@ local function createViewport(
 	engine: Engine.Engine?,
 	options: RobloxTypes.ViewportOptions?
 ): (Compose.ReadOnlyValue<RobloxTypes.Viewport>, Compose.ReadOnlyValue<boolean>)
-	return viewportOf().createViewport(camera, engine, options)
+	return viewportModule.createViewport(camera, engine, options)
 end
 
 local function usableViewportSize(size: Engine.Vector2?, minimum: number?): boolean
-	return viewportOf().usableViewportSize(size, minimum)
+	return viewportModule.usableViewportSize(size, minimum)
 end
 
 local function preferredInput(
 	inputService: { PreferredInput: unknown }?,
 	engine: Engine.Engine?
 ): Compose.Value<RobloxTypes.PreferredInputClass>
-	return inputOf().preferredInput(inputService, engine)
+	return inputModule.preferredInput(inputService, engine)
 end
 
 local function preferredInputSpec(value: unknown): RobloxTypes.PreferredInputSpec
-	return inputOf().preferredInputSpec(value)
+	return inputModule.preferredInputSpec(value)
 end
 
 local function __resetForTests()

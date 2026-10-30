@@ -149,105 +149,44 @@ export type InspectNode = Inspect.NodeReport
 export type InspectOwnedCounts = nodes.OwnedCounts
 export type InspectData = Inspect.Data
 
-local function once<T>(load: () -> T): () -> T
-	local loaded: T? = nil
-	return function(): T
-		local value = loaded
-		if value ~= nil then
-			return value
-		end
-		local made = load()
-		loaded = made
-		return made
-	end
-end
-
 type Builder = () -> HostProtocol.Node | Directive
 type NodesBuilder = () -> { HostProtocol.Node }
 
-local profileModule = once(function()
-	return require "@self/reactive/profile"
-end)
-local rootScopeModule = once(function()
-	return require "@self/ownership/root-scope"
-end)
-local springModule = once(function()
-	return require "@self/animation/spring"
-end)
-local poolModule = once(function()
-	return require "@self/pool"
-end)
-local keyedCacheModule = once(function()
-	return require "@self/keyed-cache"
-end)
-local slotModule = once(function()
-	return require "@self/slot"
-end)
-local accumulatorModule = once(function()
-	return require "@self/accumulator"
-end)
-local selectorModule = once(function()
-	return require "@self/selector"
-end)
-local boundaryModule = once(function()
-	return require "@self/async/boundary"
-end)
-local focusScopeModule = once(function()
-	return require "@self/focus-scope"
-end)
-local focusNeighborModule = once(function()
-	return require "@self/focus-neighbor"
-end)
-local reportModule = once(function()
-	return require "@self/ownership/report"
-end)
-local presenceModule = once(function()
-	return require "@self/structure/presence"
-end)
-local showModule = once(function()
-	return require "@self/structure/show"
-end)
-local switchModule = once(function()
-	return require "@self/structure/switch"
-end)
-local keyedModule = once(function()
-	return require "@self/structure/keyed"
-end)
-local indexesModule = once(function()
-	return require "@self/structure/indexes"
-end)
-local orderedCollectionModule = once(function()
-	return require "@self/structure/ordered-collection"
-end)
-local spatialCollectionModule = once(function()
-	return require "@self/structure/spatial-collection"
-end)
-local tileCollectionModule = once(function()
-	return require "@self/structure/tile-collection"
-end)
-local layerStackModule = once(function()
-	return require "@self/structure/layer-stack"
-end)
-local mountBudgetModule = once(function()
-	return require "@self/structure/mount-budget"
-end)
-local fragmentModule = once(function()
-	return require "@self/structure/fragment"
-end)
-local portalModule = once(function()
-	return require "@self/structure/portal"
-end)
+local profileModule = require "@self/reactive/profile"
+local rootScopeModule = require "@self/ownership/root-scope"
+local springModule = require "@self/animation/spring"
+local poolModule = require "@self/pool"
+local keyedCacheModule = require "@self/keyed-cache"
+local slotModule = require "@self/slot"
+local accumulatorModule = require "@self/accumulator"
+local selectorModule = require "@self/selector"
+local boundaryModule = require "@self/async/boundary"
+local focusScopeModule = require "@self/focus-scope"
+local focusNeighborModule = require "@self/focus-neighbor"
+local reportModule = require "@self/ownership/report"
+local presenceModule = require "@self/structure/presence"
+local showModule = require "@self/structure/show"
+local switchModule = require "@self/structure/switch"
+local keyedModule = require "@self/structure/keyed"
+local indexesModule = require "@self/structure/indexes"
+local orderedCollectionModule = require "@self/structure/ordered-collection"
+local spatialCollectionModule = require "@self/structure/spatial-collection"
+local tileCollectionModule = require "@self/structure/tile-collection"
+local layerStackModule = require "@self/structure/layer-stack"
+local mountBudgetModule = require "@self/structure/mount-budget"
+local fragmentModule = require "@self/structure/fragment"
+local portalModule = require "@self/structure/portal"
 
 local function withRootOwner<T...>(body: (owner: OwnerModule.Owner) -> T..., reactor: Types.Reactor?): T...
-	return rootScopeModule().withRootOwner(body, reactor)
+	return rootScopeModule.withRootOwner(body, reactor)
 end
 
 local function createRootOwner(body: (owner: OwnerModule.Owner) -> (), reactor: Types.Reactor?): ResourceTypes.RootScope
-	return rootScopeModule().createRootOwner(body, reactor)
+	return rootScopeModule.createRootOwner(body, reactor)
 end
 
 local function createSpringState(position: { number }, arity: number): RuntimeTypes.SpringState
-	return springModule().createState(position, arity)
+	return springModule.createState(position, arity)
 end
 
 local function stepSpring(
@@ -257,7 +196,7 @@ local function stepSpring(
 	period: number,
 	damping: number
 ): number
-	return springModule().step(state, target, delta, period, damping)
+	return springModule.step(state, target, delta, period, damping)
 end
 
 local function springAtRest(
@@ -266,42 +205,42 @@ local function springAtRest(
 	reference: { number },
 	tolerance: number
 ): boolean
-	return springModule().atRest(state, target, reference, tolerance)
+	return springModule.atRest(state, target, reference, tolerance)
 end
 
 local function springCoefficients(period: number, damping: number): (number, number)
-	return springModule().coefficients(period, damping)
+	return springModule.coefficients(period, damping)
 end
 
 local function createPool<T>(options: ResourceTypes.PoolOptions<T>): ResourceTypes.Pool<T>
-	return poolModule()(options)
+	return poolModule(options)
 end
 
 local function createKeyedCache<K, T>(options: ResourceTypes.KeyedCacheOptions<K, T>): ResourceTypes.KeyedCache<K, T>
-	return keyedCacheModule()(options)
+	return keyedCacheModule(options)
 end
 
 local function createSlot(explicit: OwnerModule.Owner?): ResourceTypes.Slot
-	return slotModule()(explicit)
+	return slotModule(explicit)
 end
 
 local function accumulator<T, E>(options: Types.AccumulatorOptions<T, E>): Types.ReadOnlyValue<T>
-	return accumulatorModule()(options)
+	return accumulatorModule(options)
 end
 
 local function selector<K>(source: Types.ReadOnlyValue<K>): (K) -> Types.ReadOnlyValue<boolean>
-	return selectorModule()(source)
+	return selectorModule(source)
 end
 
 local function boundary(
 	builder: () -> HostProtocol.Node,
 	fallback: (failure: unknown, retry: () -> ()) -> HostProtocol.Node
 ): Directive
-	return boundaryModule()(builder, fallback)
+	return boundaryModule(builder, fallback)
 end
 
 local function createFocusScope<V, K>(options: FocusTypes.Options<V, K>): FocusTypes.FocusScope<K>
-	return focusScopeModule()(options)
+	return focusScopeModule(options)
 end
 
 local function focusNeighbor(
@@ -309,7 +248,7 @@ local function focusNeighbor(
 	candidates: { FocusTypes.FocusRect },
 	direction: FocusTypes.Direction
 ): number?
-	return focusNeighborModule()(from, candidates, direction)
+	return focusNeighborModule(from, candidates, direction)
 end
 
 local function presence<T>(
@@ -317,75 +256,75 @@ local function presence<T>(
 	builder: StructureTypes.PresenceBuilder,
 	options: StructureTypes.PresenceOptions?
 ): Directive
-	return presenceModule()(condition, builder, options)
+	return presenceModule(condition, builder, options)
 end
 
 local function show<T>(condition: Types.Source<T>, builder: Builder, fallback: Builder?): Directive
-	return showModule()(condition, builder, fallback)
+	return showModule(condition, builder, fallback)
 end
 
 local function switch<K>(source: Types.Source<K>, branches: { [K]: Builder }, fallback: Builder?): Directive
-	return switchModule()(source, branches, fallback)
+	return switchModule(source, branches, fallback)
 end
 
 local function keyed<V, K>(options: StructureTypes.KeyedOptions<V, K>): Directive
-	return keyedModule()(options)
+	return keyedModule(options)
 end
 
 local function indexes<V>(source: Types.Source<{ V }>, render: StructureTypes.IndexedRender<V>): Directive
-	return indexesModule()(source, render)
+	return indexesModule(source, render)
 end
 
 local function orderedCollection<V, K>(options: StructureTypes.OrderedCollectionOptions<V, K>): Directive
-	return orderedCollectionModule()(options)
+	return orderedCollectionModule(options)
 end
 
 local function spatialCollection<V, K>(options: StructureTypes.SpatialCollectionOptions<V, K>): Directive
-	return spatialCollectionModule()(options)
+	return spatialCollectionModule(options)
 end
 
 local function tileCollection<V>(options: StructureTypes.TileCollectionOptions<V>): Directive
-	return tileCollectionModule()(options)
+	return tileCollectionModule(options)
 end
 
 local function layerStack<V, K>(options: StructureTypes.LayerStackOptions<V, K>): Directive
-	return layerStackModule()(options)
+	return layerStackModule(options)
 end
 
 local function mountBudget<V, K>(options: StructureTypes.MountBudgetOptions<V, K>): Directive
-	return mountBudgetModule()(options)
+	return mountBudgetModule(options)
 end
 
 local function fragment(builder: NodesBuilder): Directive
-	return fragmentModule()(builder)
+	return fragmentModule(builder)
 end
 
 local function portal(target: HostProtocol.Node, builder: NodesBuilder): Directive
-	return portalModule()(target, builder)
+	return portalModule(target, builder)
 end
 
 local function inspectSnapshot(): Inspect.Report
-	return reportModule().snapshot()
+	return reportModule.snapshot()
 end
 
 local function inspectOwner(subject: OwnerModule.Owner): Inspect.OwnerReport?
-	return reportModule().owner(subject)
+	return reportModule.owner(subject)
 end
 
 local function inspectOwned(subject: OwnerModule.Owner): nodes.OwnedCounts?
-	return reportModule().owned(subject)
+	return reportModule.owned(subject)
 end
 
 local function inspectNode(subject: HostProtocol.Node): Inspect.NodeReport
-	return reportModule().node(subject)
+	return reportModule.node(subject)
 end
 
 local function inspectFormat(report: Inspect.Report): string
-	return reportModule().format(report)
+	return reportModule.format(report)
 end
 
 local function inspectData(report: Inspect.Report): Inspect.Data
-	return reportModule().data(report)
+	return reportModule.data(report)
 end
 
 local function formula<T>(body: Types.Body<T>, equals: Types.Equals<T>?): Types.Value<T>
@@ -534,22 +473,22 @@ local inspect = {
 
 local profile = {
 	start = function(now: () -> number, options: Types.ProfileOptions?)
-		profileModule().start(now, options)
+		profileModule.start(now, options)
 	end,
 	stop = function(): Types.ProfileReport
-		return profileModule().stop()
+		return profileModule.stop()
 	end,
 	label = function(node: unknown, name: string)
-		profileModule().label(node, name)
+		profileModule.label(node, name)
 	end,
 	active = function(): boolean
-		return profileModule().isActive()
+		return profileModule.isActive()
 	end,
 	format = function(report: Types.ProfileReport, limit: number?): string
-		return profileModule().format(report, limit)
+		return profileModule.format(report, limit)
 	end,
 	data = function(report: Types.ProfileReport): Types.ProfileData
-		return profileModule().data(report)
+		return profileModule.data(report)
 	end,
 }
 
