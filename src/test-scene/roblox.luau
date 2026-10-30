@@ -80,6 +80,7 @@ export type Instance = {
 	DescendantRemoving: Signal<Instance>,
 	AncestryChanged: Signal<Instance, Instance?>,
 	Destroying: Signal<()>,
+	StyledPropertiesChanged: Signal<()>,
 	AttributeChanged: Signal<string>,
 }
 export type ClassSpec<P = { [string]: unknown }, M = { [string]: unknown }> = {
