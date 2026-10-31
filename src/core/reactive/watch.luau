@@ -180,14 +180,6 @@ local function begin(reactor: Reactor, body: Body, class: {}, label: string?, sc
 		child = nil,
 		base = nil,
 	}
-	if class == TERMINAL then
-		node.coalesced = false
-		node.run = TERMINAL.run
-		node.runIn = TERMINAL.runIn
-		node.group = true
-		node.reads = 0
-		node.retry = false
-	end
 	NodeCast.classify(node, class)
 	if statsOn.enabled then
 		statsOn.recorder.born(node, label)
