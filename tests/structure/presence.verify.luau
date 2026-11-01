@@ -266,7 +266,7 @@ describe("presence", function()
 				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
-					return { Label({}, "A"), Label({}, "B"), Label({}, "C") }
+					return { Label "A" {}, Label "B" {}, Label "C" {} }
 				end, {
 					exit = function()
 						return world.runtime.timeline { duration = 0.1 }

@@ -512,7 +512,7 @@ Frame {
 
 		it("accepts injected node children and called directives in " .. declaration, function()
 			local source = declaration
-				.. ' return Host.Frame({ Host.TextLabel { Text = "Hello" }, Compose.show { when = visible, render = Child } }, "Panel") end'
+				.. ' return Host.Frame "Panel" { Host.TextLabel { Text = "Hello" }, Compose.show { when = visible, render = Child } } end'
 			expect(consumerRules.scan(source, "screen.luau")):toEqual {}
 		end)
 	end
@@ -522,11 +522,11 @@ Frame {
 			["screen.luau"] = [[
 local Host = runtime.constructors
 local show = Compose.show
-return Host.Frame({
+return Host.Frame "Panel" {
     Host.TextLabel { Text = "Hello" },
     runtime.constructors.Frame { Name = "Child" },
     show { when = visible, render = Child },
-}, "Panel")
+}
 ]],
 		}
 		local ok, output = run()

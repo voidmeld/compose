@@ -178,7 +178,7 @@ describe("host-neutral design editor", function()
 				end,
 				slots = {
 					content = function(): unknown
-						return w.runtime.constructors.TextLabel({ Text = "Slot" }, "PreviewSlot")
+						return w.runtime.constructors.TextLabel "PreviewSlot" { Text = "Slot" }
 					end,
 				},
 			}
@@ -309,7 +309,7 @@ describe("host-neutral design editor", function()
 				},
 				slots = {
 					overlay = function(): unknown
-						return w.runtime.constructors.Frame({}, "Overlay")
+						return w.runtime.constructors.Frame "Overlay" {}
 					end,
 				},
 				outputs = {
