@@ -192,7 +192,7 @@ local function requireNodes(produced: unknown, label: string): { Node }
 				actual = Diagnostics.describe(node),
 				expected = "a node created through runtime.create, or adopted from the host",
 				fix = if kind == "function"
-					then 'if this is a named constructor, call it with a props table -- Part({}, "Ground")'
+					then 'if this is a named constructor, call it with a props table -- Part "Ground" {}'
 					else nil,
 			})
 		end
