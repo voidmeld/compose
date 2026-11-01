@@ -8,6 +8,38 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("named constructors", function()
+	it("keeps name-first constructors lazy and reusable", function()
+		local world = Support.world()
+		local named = world.runtime.constructors.Part "Ground"
+		expect(world.host.liveNodes()):toBe(1)
+		local dispose, root = world.runtime.mount(function()
+			return world.runtime.constructors.Model { named { Anchored = true }, named {} }
+		end, world.root)
+		local children = world.host.childrenOf(root)
+		expect(#children):toBe(2)
+		expect(Compose.labelOf(children[1])):toBe "Ground"
+		expect(Compose.labelOf(children[2])):toBe "Ground"
+		expect(world.host.propertyOf(children[1], "Anchored")):toBe(true)
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
+	it("rejects unapplied named constructors in trees and fragments", function()
+		local world = Support.world()
+		local named = world.create "Part" "Ground"
+		expect(function()
+			world.runtime.mount(function()
+				return world.runtime.constructors.Model { named }
+			end, world.root)
+		end):toThrow "mount/constructor-not-applied"
+		expect(function()
+			Support.invoke(world.runtime.mountFragment, function()
+				return { named }
+			end, world.root)
+		end):toThrow "mount/constructor-not-applied"
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	it("caches runtime constructors without allocating nodes", function()
 		local world = Support.world()
 		local Host = world.runtime.constructors
@@ -27,10 +59,10 @@ describe("named constructors", function()
 		local second = runtime.constructors
 		expect(first.Text == second.Text):toBe(false)
 		local disposeFirst, nodeFirst = world.runtime.mount(function()
-			return first.Text "First" { Value = 1 }
+			return first.Text({ Value = 1 }, "First")
 		end, world.root)
 		local disposeSecond, nodeSecond = runtime.mount(function()
-			return second.Text "Second" { Value = 2 }
+			return second.Text({ Value = 2 }, "Second")
 		end, other.root)
 		expect(world.host.childrenOf(world.root)):toEqual { nodeFirst }
 		expect(other.childrenOf(other.root)):toEqual { nodeSecond }
@@ -46,7 +78,7 @@ describe("named constructors", function()
 		local Host = world.runtime.constructors
 		local value = Compose.cell(1)
 		local dispose, node = world.runtime.mount(function()
-			return Host.Text "Counter" { Value = value }
+			return Host.Text({ Value = value }, "Counter")
 		end, world.root)
 		value:set(2)
 		world.settle()
@@ -65,8 +97,8 @@ describe("named constructors", function()
 		expect(function()
 			world.runtime.mount(function()
 				return Host.Panel {
-					Host.Text "Good" {},
-					Host.Text "Bad" { [Compose.event "Activated"] = 3 },
+					Host.Text({}, "Good"),
+					Host.Text({ [Compose.event "Activated"] = 3 }, "Bad"),
 				}
 			end, world.root)
 		end):toThrow()
@@ -78,7 +110,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" { Anchored = true }
+			return Part({ Anchored = true }, "Ground")
 		end, world.root)
 
 		expect(world.host.kindOf(node)):toBe "Part"
@@ -91,7 +123,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" {}
+			return Part({}, "Ground")
 		end, world.root)
 
 		expect(Compose.labelOf(node)):toBe "Ground"
@@ -115,7 +147,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" {}
+			return Part({}, "Ground")
 		end, world.root)
 
 		expect(world.host.nameOf(node)):toBe "Ground"
@@ -127,7 +159,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" { Anchored = true }
+			return Part({ Anchored = true }, "Ground")
 		end, world.root)
 
 		expect(Compose.labelOf(node)):toBe "Ground"
@@ -141,7 +173,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" { Name = "Floor" }
+			return Part({ Name = "Floor" }, "Ground")
 		end, world.root)
 
 		expect(Compose.labelOf(node)):toBe "Ground"
@@ -156,9 +188,9 @@ describe("named constructors", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Model {
-				Part "Tree" {},
-				Part "Tree" {},
-				Part "Rock" {},
+				Part({}, "Tree"),
+				Part({}, "Tree"),
+				Part({}, "Rock"),
 			}
 		end, world.root)
 
@@ -176,7 +208,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" {}
+			return Part({}, "Ground")
 		end, world.root)
 
 		local report = Compose.inspect.node(node)
@@ -189,7 +221,8 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 		expect(function()
 			world.runtime.mount(function()
-				return (Part "Ground")((Support.erased(3)) :: Compose.Props)
+				Support.invoke(Part, 3, "Ground")
+				return world.root
 			end, world.root)
 		end):toThrow "props/not-a-table"
 	end)
@@ -198,13 +231,13 @@ describe("named constructors", function()
 		local world = Support.world()
 		local Part = world.create "Part"
 		local Model = world.create "Model"
-		local escaped: Compose.Node = nil
+		local escaped: Compose.Node? = nil
 
 		local ok = pcall(function()
 			world.runtime.mount(function()
 				return Model {
-					Part "Ground" {},
-					Part "Broken" { [Compose.event "Activated"] = 3 },
+					Part({}, "Ground"),
+					Part({ [Compose.event "Activated"] = 3 }, "Broken"),
 				}
 			end, world.root)
 		end)
@@ -219,7 +252,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return Part "Ground" {}
+			return Part({}, "Ground")
 		end, world.root)
 		dispose()
 
@@ -233,7 +266,7 @@ describe("named constructors", function()
 		expect(function()
 			world.runtime.mount(function()
 				return Model {
-					Part "Ground",
+					Part,
 				}
 			end, world.root)
 		end):toThrow "mount/constructor-not-applied"
@@ -244,12 +277,12 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local before = world.host.liveNodes()
-		local escaped: Compose.Node = nil
+		local escaped: Compose.Node? = nil
 		world.host.failNext "setName"
 
 		local ok = pcall(function()
 			world.runtime.mount(function()
-				local node = Part "Ground" {}
+				local node = Part({}, "Ground")
 				escaped = node
 				return node
 			end, world.root)
@@ -268,7 +301,7 @@ describe("named constructors", function()
 		world.host.failNext "setName"
 		pcall(function()
 			world.runtime.mount(function()
-				return Part "Ground" {}
+				return Part({}, "Ground")
 			end, world.root)
 		end)
 
@@ -280,7 +313,7 @@ describe("named constructors", function()
 		local kind = "Part"
 
 		local dispose, node = world.runtime.mount(function()
-			return world.create(kind) "Ground" { Anchored = true }
+			return world.create(kind)({ Anchored = true }, "Ground")
 		end, world.root)
 
 		expect(world.host.kindOf(node)):toBe "Part"

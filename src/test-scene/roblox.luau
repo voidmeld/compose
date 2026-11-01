@@ -2,6 +2,7 @@
 
 local Compose = require "../core"
 local ComposeRoblox = require "../roblox"
+local Dynamic = require "../core/dynamic"
 
 export type Operation =
 	"createNode"
@@ -102,7 +103,7 @@ export type Environment = {
 	step: (seconds: number) -> (),
 	now: () -> number,
 	createInstance: (className: string, props: { [unknown]: unknown }?) -> Instance,
-	defineClass: <P, M>(className: string, spec: ClassSpec<P, M>, options: DefineOptions?) -> (),
+	defineClass: (className: string, spec: ClassSpec, options: DefineOptions?) -> (),
 	newSignal: <A...>() -> Signal<A...>,
 	fire: (object: Instance, event: string, ...unknown) -> (),
 	poke: (object: Instance, key: string, value: unknown) -> (),
@@ -136,7 +137,9 @@ local function create(environment: Environment, engine: ComposeRoblox.Engine): E
 	local log: { LogEntry } = {}
 
 	local function classNameOf(node: Compose.Node): string
-		return (node :: Instance).ClassName
+		local name = Dynamic.read(node, "ClassName")
+		assert(type(name) == "string")
+		return name
 	end
 
 	local function checkFailure(operation: Operation)
@@ -256,11 +259,11 @@ local function create(environment: Environment, engine: ComposeRoblox.Engine): E
 		for _, key in keys do
 			object[key] = props[key]
 		end
-		for _, child in ipairs(props :: { unknown }) do
-			(child :: Instance).Parent = object
+		for index = 1, #props do
+			Dynamic.write(props[index], "Parent", object)
 		end
 		if props.Parent ~= nil then
-			object.Parent = props.Parent :: Instance
+			Dynamic.write(object, "Parent", props.Parent)
 		end
 		return object
 	end

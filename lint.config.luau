@@ -23,7 +23,11 @@ return {
 				unused_variable = { off = true },
 				global_table_usage = {
 					options = {
-						allow = { "tests/tools/fixtures/global-table-allowed.luau" },
+						allow = {
+							"tests/tools/fixtures/global-table-allowed.luau",
+							"src/core/dynamic.luau",
+							"bench/dynamic.luau",
+						},
 					},
 				},
 			},

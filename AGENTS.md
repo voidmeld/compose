@@ -31,3 +31,6 @@ This file owns the contribution rules. Each fact has one owning document.
 Changes to this library use a pull request to `main` and the required `Gate` check. Do not push directly to `main` or bypass a failing check.
 
 Preserve license notices and exact consumer behavior when you simplify.
+
+Every maintained Luau file requires `--!strict`, zero explicit `any` and zero type assertions
+(`::`), including concrete casts. The required gate rejects violations without a baseline or exemptions.

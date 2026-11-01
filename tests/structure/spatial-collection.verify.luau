@@ -259,7 +259,7 @@ describe("SpatialCollection", function()
 		it("admits a bounded number of entities per frame", function()
 			local initialOrigin: Compose.SpatialCollectionPoint = { x = 10000, y = 0, z = 0 }
 			local origin = Compose.cell(initialOrigin)
-			local status = Compose.cell({} :: Compose.SpatialCollectionStatus)
+			local status = Support.spatialStatus()
 			local dispose, root = mount {
 				units = line(20, 10),
 				origin = origin,
@@ -286,7 +286,7 @@ describe("SpatialCollection", function()
 		it("drains, and then stops taking frames at all", function()
 			local initialOrigin: Compose.SpatialCollectionPoint = { x = 10000, y = 0, z = 0 }
 			local origin = Compose.cell(initialOrigin)
-			local status = Compose.cell({} :: Compose.SpatialCollectionStatus)
+			local status = Support.spatialStatus()
 			local dispose, root = mount {
 				units = line(9, 10),
 				origin = origin,
@@ -344,7 +344,7 @@ describe("SpatialCollection", function()
 		it("looks at its own neighbourhood rather than the whole world", function()
 			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
 			local origin = Compose.cell(initialOrigin)
-			local status = Compose.cell({} :: Compose.SpatialCollectionStatus)
+			local status = Support.spatialStatus()
 			local dispose = mount {
 				units = line(4000, 10),
 				origin = origin,
@@ -362,7 +362,7 @@ describe("SpatialCollection", function()
 		it("scans a fresh moving snapshot instead of building a one-use grid", function()
 			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
 			local origin = Compose.cell(initialOrigin)
-			local status = Compose.cell({} :: Compose.SpatialCollectionStatus)
+			local status = Support.spatialStatus()
 			local dispose, _, units = mount { units = line(200, 10), origin = origin, status = status }
 			local moved = line(200, 10)
 			for _, unit in moved do
@@ -380,7 +380,7 @@ describe("SpatialCollection", function()
 		it("reports how many entities are at each tier", function()
 			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
 			local origin = Compose.cell(initialOrigin)
-			local status = Compose.cell({} :: Compose.SpatialCollectionStatus)
+			local status = Support.spatialStatus()
 			local dispose = mount { units = line(20, 50), origin = origin, status = status }
 			local perTier = status:peek().perTier
 			expect(perTier[1]):toBe(2)

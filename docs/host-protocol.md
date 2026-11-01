@@ -8,9 +8,9 @@ The [API reference](api.md) gives the component calls.
 `runtime.constructors` supplies the `Host` constructors used by components.
 `TestScene.create()` supplies a test scene with an `adapter`.
 
-## `Node` is `unknown`, and that is the enforcement
+## `Node` is opaque
 
-Core treats each host node as `unknown`.
+Core treats each host node as an opaque reference.
 Strict type checking rejects direct access to the node representation.
 The test host uses frozen empty tables for nodes.
 It stores node data in private tables.

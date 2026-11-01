@@ -1,5 +1,6 @@
 --!strict
 
+local Dynamic = require "./dynamic"
 local Engine = require "../src/roblox/engine"
 
 export type Counters = {
@@ -199,11 +200,6 @@ local function serviceMeta(object: { GetService: (unknown, string) -> unknown },
 	setmetatable(object, meta)
 end
 
-local function tableFields(value: unknown): { [string]: unknown }
-	assert(type(value) == "table")
-	return value :: { [string]: unknown }
-end
-
 local function zeroCounters(): Counters
 	return {
 		instancesCreated = 0,
@@ -303,8 +299,8 @@ local function create(): Environment
 	local counters = zeroCounters()
 	local liveInstanceCount = 0
 	local liveConnectionCount = 0
-	type Deferred = { fn: Handler, arguments: { n: number, [number]: unknown } }
-	type Delayed = { at: number, fn: Handler, arguments: { n: number, [number]: unknown } }
+	type Deferred = { fn: unknown, arguments: { n: number, [number]: unknown } }
+	type Delayed = { at: number, fn: unknown, arguments: { n: number, [number]: unknown } }
 	local deferred: { Deferred } = {}
 	local delayed: { Delayed } = {}
 	local clock = 0
@@ -1020,7 +1016,7 @@ local function create(): Environment
 		if kind ~= "table" then
 			return kind
 		end
-		local datatype = rawget(tableFields(value), "__datatype")
+		local datatype = Dynamic.invoke(rawget, value, "__datatype")
 		if datatype ~= nil then
 			assert(type(datatype) == "string")
 			return datatype
@@ -1148,15 +1144,18 @@ local function create(): Environment
 		end,
 	})
 
-	local pack = (table.pack :: unknown) :: <A...>(A...) -> { [number]: unknown, n: number }
+	local function queued(fn: unknown, ...: unknown): Deferred
+		return { fn = fn, arguments = table.pack(...) }
+	end
 	local task = {
 		defer = function<A...>(fn: (A...) -> (), ...: A...)
 			counters.tasksDeferred += 1
-			table.insert(deferred, { fn = (fn :: unknown) :: Handler, arguments = pack(...) })
+			table.insert(deferred, queued(fn, ...))
 		end,
 		delay = function<A...>(seconds: number, fn: (A...) -> (), ...: A...)
 			counters.tasksDeferred += 1
-			table.insert(delayed, { at = clock + seconds, fn = (fn :: unknown) :: Handler, arguments = pack(...) })
+			local entry = queued(fn, ...)
+			table.insert(delayed, { at = clock + seconds, fn = entry.fn, arguments = entry.arguments })
 		end,
 		spawn = function<A...>(fn: ((A...) -> ()) | thread, ...: A...)
 			if type(fn) == "thread" then
@@ -1183,7 +1182,7 @@ local function create(): Environment
 			local batch = deferred
 			deferred = {}
 			for _, entry in batch do
-				entry.fn(table.unpack(entry.arguments, 1, entry.arguments.n))
+				Dynamic.invoke(entry.fn, table.unpack(entry.arguments, 1, entry.arguments.n))
 			end
 		end
 	end
@@ -1204,7 +1203,7 @@ local function create(): Environment
 			return left.at < right.at
 		end)
 		for _, entry in due do
-			entry.fn(table.unpack(entry.arguments, 1, entry.arguments.n))
+			Dynamic.invoke(entry.fn, table.unpack(entry.arguments, 1, entry.arguments.n))
 		end
 
 		for _, binding in table.clone(renderBindings) do
@@ -1321,21 +1320,21 @@ local function create(): Environment
 		if type(value) ~= "table" or depth > 3 then
 			return tostring(value)
 		end
-		local dictionary = tableFields(value)
-		local datatype = rawget(dictionary, "__datatype")
+		local dictionary = value
+		local datatype = Dynamic.invoke(rawget, dictionary, "__datatype")
 		if datatype == nil then
 			return tostring(value)
 		end
 		local fields: { string } = {}
 		for key in dictionary do
-			if key ~= "__datatype" then
+			if type(key) == "string" and key ~= "__datatype" then
 				table.insert(fields, key)
 			end
 		end
 		table.sort(fields)
 		local parts: { string } = {}
 		for _, key in fields do
-			local field = dictionary[key]
+			local field = Dynamic.read(dictionary, key)
 			if type(field) ~= "function" then
 				table.insert(parts, ("%s=%s"):format(key, renderValue(field, depth + 1)))
 			end

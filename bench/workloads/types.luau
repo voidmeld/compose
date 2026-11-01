@@ -75,7 +75,7 @@ local function compose<S>(case: Case<S, ComposeContext>): Case
 	return pack(case, function(context: Context): ComposeContext
 		return {
 			env = context.env,
-			library = (context.library :: unknown) :: typeof(Core),
+			library = Core,
 			extras = { runtime = assert(context.extras.runtime) },
 			container = context.container,
 			observe = context.observe,

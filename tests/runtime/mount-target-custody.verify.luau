@@ -35,12 +35,12 @@ describe("the custody of a mount target", function()
 			end, world.root)
 
 			local owned = container
-			expect(Compose.custodyOf(owned)):toBe "owned"
-			expect(world.host.childrenOf(owned)):toEqual { child }
+			expect(Compose.custodyOf(assert(owned))):toBe "owned"
+			expect(world.host.childrenOf(assert(owned))):toEqual { child }
 
 			dispose()
-			expect(world.host.isAlive(owned)):toBe(false)
-			expect(world.host.isAlive(child)):toBe(false)
+			expect(world.host.isAlive(assert(owned))):toBe(false)
+			expect(world.host.isAlive(assert(child))):toBe(false)
 			expectClean(world)
 		end)
 
@@ -84,7 +84,7 @@ describe("the custody of a mount target", function()
 
 			dispose()
 			expect(order):toEqual { "mounted-into-target", "target-scope" }
-			expect(world.host.isAlive(container)):toBe(false)
+			expect(world.host.isAlive(assert(container))):toBe(false)
 			expectClean(world)
 		end)
 
@@ -104,17 +104,17 @@ describe("the custody of a mount target", function()
 			end, world.root)
 
 			local owned = container
-			expect(#world.host.childrenOf(owned)):toBe(1)
+			expect(#world.host.childrenOf(assert(owned))):toBe(1)
 
 			world.host.resetCounts();
 			(required(detach))()
-			expect(world.host.isAlive(owned)):toBe(true)
-			expect(Compose.custodyOf(owned)):toBe "owned"
-			expect(world.host.childrenOf(owned)):toEqual {}
+			expect(world.host.isAlive(assert(owned))):toBe(true)
+			expect(Compose.custodyOf(assert(owned))):toBe "owned"
+			expect(world.host.childrenOf(assert(owned))):toEqual {}
 			expect(world.host.counts().destroyNode):toBe(1)
 
 			dispose()
-			expect(world.host.isAlive(owned)):toBe(false)
+			expect(world.host.isAlive(assert(owned))):toBe(false)
 			expectClean(world)
 		end)
 
@@ -135,11 +135,11 @@ describe("the custody of a mount target", function()
 			end, world.root)
 
 			local owned = container
-			expect(Compose.custodyOf(owned)):toBe "owned"
-			expect(#world.host.childrenOf(owned)):toBe(2)
+			expect(Compose.custodyOf(assert(owned))):toBe "owned"
+			expect(#world.host.childrenOf(assert(owned))):toBe(2)
 
 			dispose()
-			expect(world.host.isAlive(owned)):toBe(false)
+			expect(world.host.isAlive(assert(owned))):toBe(false)
 			expectClean(world)
 		end)
 	end)
@@ -361,7 +361,7 @@ describe("the custody of a mount target", function()
 		it("still refuses a target that is not a node at all", function()
 			local world = Support.world()
 			expect(function()
-				world.runtime.mount(function()
+				Support.invoke(world.runtime.mount, function()
 					return world.create "Text" {}
 				end, 7)
 			end):toThrow "mount/target-not-a-node"
@@ -389,9 +389,9 @@ describe("the custody of a mount target", function()
 
 			local owned = container
 			expect(raised):toBe(true)
-			expect(Compose.custodyOf(owned)):toBe "owned"
-			expect(world.host.isAlive(owned)):toBe(true)
-			expect(world.host.childrenOf(owned)):toEqual {}
+			expect(Compose.custodyOf(assert(owned))):toBe "owned"
+			expect(world.host.isAlive(assert(owned))):toBe(true)
+			expect(world.host.childrenOf(assert(owned))):toEqual {}
 
 			local retry = world.runtime.mount(function()
 				return world.create "Text" { Text = "second" }
@@ -399,7 +399,7 @@ describe("the custody of a mount target", function()
 			retry()
 
 			dispose()
-			expect(world.host.isAlive(owned)):toBe(false)
+			expect(world.host.isAlive(assert(owned))):toBe(false)
 			expectClean(world)
 		end)
 
@@ -423,11 +423,11 @@ describe("the custody of a mount target", function()
 
 			local owned = container
 			expect(raised):toBe(true)
-			expect(Compose.custodyOf(owned)):toBe "owned"
-			expect(world.host.childrenOf(owned)):toEqual {}
+			expect(Compose.custodyOf(assert(owned))):toBe "owned"
+			expect(world.host.childrenOf(assert(owned))):toEqual {}
 
 			dispose()
-			expect(world.host.isAlive(owned)):toBe(false)
+			expect(world.host.isAlive(assert(owned))):toBe(false)
 			expectClean(world)
 		end)
 	end)

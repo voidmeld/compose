@@ -33,7 +33,7 @@ local factory: Roblox.CaseEntryFactory = function(host)
 	for _, check in Checks do
 		table.insert(cases, named(check))
 	end
-	local environment: { [string]: string } = { runtime = host :: string }
+	local environment: { [string]: string } = { runtime = host }
 	local capabilities: { string } = {}
 	if host ~= "simulator" then
 		local engine = Roblox.experienceHost.nativeEngine()

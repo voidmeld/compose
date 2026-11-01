@@ -182,7 +182,7 @@ describe("a node under a string key", function()
 			return world.create "Frame" { Corner = Compose.static(corner) }
 		end, world.root)
 
-		expect(world.host.kindOf(world.host.propertyOf(node, "Corner"))):toBe "UICorner"
+		expect(world.host.kindOf(Support.node(world.host.propertyOf(node, "Corner")))):toBe "UICorner"
 		dispose()
 	end)
 
@@ -198,7 +198,7 @@ describe("a node under a string key", function()
 			}
 		end, world.root)
 
-		expect(world.host.kindOf(world.host.propertyOf(node, "Corner"))):toBe "UICorner"
+		expect(world.host.kindOf(Support.node(world.host.propertyOf(node, "Corner")))):toBe "UICorner"
 		dispose()
 	end)
 end)

@@ -30,7 +30,7 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 type World = {
 	emulator: Emulator.Emulator,
 	runtime: Compose.Runtime,
-	create: (kind: string) -> (props: Compose.Props) -> Compose.Node,
+	create: (kind: string) -> Compose.Constructor,
 	root: Compose.Node,
 }
 
@@ -582,7 +582,28 @@ describe("roblox adapter", function()
 	end)
 
 	describe("animation", function()
-		it("registers a codec for every datatype the engine supplies", function()
+		it("builds isolated codecs from datatype constructors without a scene engine", function()
+			local function source(offset: number): ComposeRoblox.CodecSource
+				return {
+					datatypes = {
+						Vector2 = function(x: number, y: number)
+							return { X = x + offset, Y = y }
+						end,
+					},
+				}
+			end
+			local first = ComposeRoblox.codecs(source(0))
+			local second = ComposeRoblox.codecs(source(100))
+			local components: { number } = {}
+			local codec = assert(first.Vector2)
+			codec.encode({ X = 2, Y = 4 }, components)
+			expect(codec.decode(components)):toEqual { X = 2, Y = 4 }
+			expect(assert(second.Vector2).decode(components)):toEqual { X = 102, Y = 4 }
+			expect(first.Vector3):toBeNil()
+			expect(second.CFrame):toBeNil()
+		end)
+
+		it("supplies a codec for every datatype the engine supplies", function()
 			local emulator = Support.emulator()
 			expect(ComposeRoblox.animatableTypes(emulator.engine)):toEqual {
 				"CFrame",
@@ -600,9 +621,11 @@ describe("roblox adapter", function()
 			local target = Compose.cell(UDim2(0, 0, 0, 0))
 
 			local dispose, frame = w.runtime.mount(function()
-				local smooth = w.runtime.spring(function(use)
-					return use(target)
-				end, { period = 0.2, damping = 1 })
+				local smooth = w.runtime
+					.motion(assert(ComposeRoblox.codecs(w.emulator.engine).UDim2))
+					.spring(function(use)
+						return use(target)
+					end, { period = 0.2, damping = 1 })
 				return w.create "Frame" {
 					Size = function(use)
 						return use(smooth)
@@ -616,12 +639,12 @@ describe("roblox adapter", function()
 				w.emulator.environment.step(1 / 60)
 			end
 
-			local size =
-				w.emulator.environment.propertyOf(Support.instance(frame), "Size") :: { X: { Scale: number, Offset: number }, Y: { Scale: number, Offset: number } }
-			expect(size.X.Scale):toBeCloseTo(1, 1e-6)
-			expect(size.X.Offset):toBe(100)
-			expect(size.Y.Scale):toBeCloseTo(0.5, 1e-6)
-			expect(size.Y.Offset):toBe(20)
+			local size = w.emulator.environment.propertyOf(Support.instance(frame), "Size")
+			local x, y = Support.read(size, "X"), Support.read(size, "Y")
+			expect(Support.read(x, "Scale")):toBeCloseTo(1, 1e-6)
+			expect(Support.read(x, "Offset")):toBe(100)
+			expect(Support.read(y, "Scale")):toBeCloseTo(0.5, 1e-6)
+			expect(Support.read(y, "Offset")):toBe(20)
 			dispose()
 		end)
 
@@ -631,9 +654,11 @@ describe("roblox adapter", function()
 			local target = Compose.cell(Color3(0, 0, 0))
 
 			local dispose, frame = w.runtime.mount(function()
-				local smooth = w.runtime.spring(function(use)
-					return use(target)
-				end, { period = 0.2, damping = 0.25 })
+				local smooth = w.runtime
+					.motion(assert(ComposeRoblox.codecs(w.emulator.engine).Color3))
+					.spring(function(use)
+						return use(target)
+					end, { period = 0.2, damping = 0.25 })
 				return w.create "Frame" {
 					BackgroundColor3 = function(use)
 						return use(smooth)
@@ -646,11 +671,10 @@ describe("roblox adapter", function()
 			local sawOvershoot = false
 			for _ = 1, 200 do
 				w.emulator.environment.step(1 / 60)
-				local colour =
-					w.emulator.environment.propertyOf(Support.instance(frame), "BackgroundColor3") :: { R: number, G: number, B: number }
-				expect(colour.R):toBeLessThanOrEqual(1)
-				expect(colour.R):toBeGreaterThanOrEqual(0)
-				if colour.R == 1 then
+				local colour = w.emulator.environment.propertyOf(Support.instance(frame), "BackgroundColor3")
+				expect(Support.read(colour, "R")):toBeLessThanOrEqual(1)
+				expect(Support.read(colour, "R")):toBeGreaterThanOrEqual(0)
+				if Support.read(colour, "R") == 1 then
 					sawOvershoot = true
 				end
 			end
@@ -704,7 +728,7 @@ describe("roblox adapter", function()
 			local cleanup = ComposeRoblox.createCleanup(w.emulator.engine.typeName)
 			local button = Support.instance(w.emulator.engine.new "TextButton")
 			local dispose = w.runtime.mount(function()
-				local connection = ((Support.instance(button)).Activated :: Emulator.Signal<()>):Connect(function() end)
+				local connection = Support.invokeMethod(Support.instance(button).Activated, "Connect", function() end)
 				cleanup(connection)
 				return w.create "Frame" {}
 			end, w.root)

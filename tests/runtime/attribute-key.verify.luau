@@ -11,6 +11,44 @@ end
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
+describe("attribute writer lifetime", function()
+	it("uses the current host writer for new bindings while preserving earlier bindings", function(own)
+		local world = Support.world()
+		local owner = Compose.createOwner(world.runtime.reactor)
+		own(function()
+			Compose.owner.dispose(owner)
+		end)
+		local render = world.host.adapter.render
+		local original = assert(render.setAttribute)
+		local replacementWrites = 0
+		local source = Compose.cell(1)
+		local first = Compose.withOwner(owner, function()
+			return world.create "Frame" { Attributes = { Value = source } }
+		end)
+		render.setAttribute = function(node, name, value)
+			replacementWrites += 1
+			return original(node, name, value)
+		end
+		local second = Compose.withOwner(owner, function()
+			return world.create "Frame" { Attributes = { Value = source } }
+		end)
+		expect(replacementWrites):toBe(1)
+		source:set(2)
+		world.settle()
+		expect(replacementWrites):toBe(2)
+		expect(world.host.attributeOf(first, "Value")):toBe(2)
+		expect(world.host.attributeOf(second, "Value")):toBe(2)
+		render.setAttribute = original
+		local third = Compose.withOwner(owner, function()
+			return world.create "Frame" { Attributes = { Value = source } }
+		end)
+		source:set(3)
+		world.settle()
+		expect(replacementWrites):toBe(3)
+		expect(world.host.attributeOf(third, "Value")):toBe(3)
+	end)
+end)
+
 local function parse(body: () -> ()): Compose.Diagnostic
 	local ok, err: unknown = pcall(body)
 	expect(ok):toBe(false)

@@ -14,7 +14,7 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 
 local OUT = "build/bundle-test.luau"
 
-local function build(strip: boolean): typeof(Compose)
+local function build(strip: boolean): unknown
 	local argv = {
 		"lute",
 		"run",
@@ -37,7 +37,7 @@ local function build(strip: boolean): typeof(Compose)
 
 	local source = fs.readFileToString(OUT)
 	local chunk = luau.load(luau.compile(source), "@" .. OUT)
-	return (Support.erased(chunk())) :: typeof(Compose)
+	return chunk()
 end
 
 describe("bundle", function()
@@ -103,59 +103,54 @@ assert(type(Editor.roblox3DLibrary) == "function")
 
 	it("mounts, updates, and disposes exactly like the module tree", function()
 		local bundled = build(false)
-
 		local host = TestScene.create()
-		local runtime = bundled.createRuntime(host.adapter)
-		local count = bundled.cell(0)
-
-		local dispose, root = runtime.mount(function()
-			return runtime.create "Frame" {
-				Label = function(use)
-					return "n=" .. tostring(use(count))
+		local runtime = Support.invoke(Support.read(bundled, "createRuntime"), host.adapter)
+		local count = Support.invoke(Support.read(bundled, "cell"), 0)
+		local dispose, root = Support.invoke(Support.read(runtime, "mount"), function()
+			local frame = Support.invoke(Support.read(runtime, "create"), "Frame")
+			return Support.invoke(frame, {
+				Label = function(use: unknown)
+					return "n=" .. tostring((Support.invoke(use, count)))
 				end,
-			}
+			})
 		end, host.root)
-
-		expect(host.propertyOf(root, "Label")):toBe "n=0"
-		count:set(7)
-		runtime:settle()
-		expect(host.propertyOf(root, "Label")):toBe "n=7"
-
-		dispose()
+		expect(host.propertyOf(Support.node(root), "Label")):toBe "n=0"
+		Support.invokeMethod(count, "set", 7)
+		Support.invokeMethod(runtime, "settle")
+		expect(host.propertyOf(Support.node(root), "Label")):toBe "n=7"
+		Support.invoke(dispose)
 		expect(host.leaked()):toEqual { "Root#1" }
 	end)
 
 	it("keeps its behaviour when comments are stripped", function()
 		local bundled = build(true)
-
 		local host = TestScene.create()
-		local runtime = bundled.createRuntime(host.adapter)
-		local rows = bundled.cell { "a", "b", "c" }
-
-		local dispose, frame = runtime.mount(function()
-			return runtime.create "Frame" {
-				bundled.keyed {
+		local runtime = Support.invoke(Support.read(bundled, "createRuntime"), host.adapter)
+		local rows = Support.invoke(Support.read(bundled, "cell"), { "a", "b", "c" })
+		local function create(kind: string, props: unknown): unknown
+			return (Support.invoke(Support.invoke(Support.read(runtime, "create"), kind), props))
+		end
+		local dispose, frame = Support.invoke(Support.read(runtime, "mount"), function()
+			return create("Frame", {
+				Support.invoke(Support.read(bundled, "keyed"), {
 					from = rows,
-					render = function(value)
-						return runtime.create "Row" {
-							Id = function(use)
-								return use(value)
+					render = function(value: unknown)
+						return create("Row", {
+							Id = function(use: unknown)
+								return Support.invoke(use, value)
 							end,
-						}
+						})
 					end,
-				},
-			}
+				}),
+			})
 		end, host.root)
-
-		local before = host.childrenOf(frame)
-		rows:set { "c", "a", "b" }
-		runtime:settle()
-		local after = host.childrenOf(frame)
-
+		local before = host.childrenOf(Support.node(frame))
+		Support.invokeMethod(rows, "set", { "c", "a", "b" })
+		Support.invokeMethod(runtime, "settle")
+		local after = host.childrenOf(Support.node(frame))
 		expect(after[1]):toBe(before[3])
 		expect(after[2]):toBe(before[1])
-
-		dispose()
+		Support.invoke(dispose)
 		expect(host.leaked()):toEqual { "Root#1" }
 	end)
 

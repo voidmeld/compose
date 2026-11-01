@@ -1,5 +1,6 @@
 --!strict
 
+local Support = require "../support"
 local Compose = require "../../src/core"
 local ComposeRoblox = require "../../src/roblox"
 local Design = require "../../src/design"
@@ -155,7 +156,7 @@ local function world(space: string?)
 		assert(bridge.layout).step()
 	end
 	local function read(node: unknown, key: string): unknown
-		return assert(runtime.host.observation).readProperty(node, key)
+		return assert(runtime.host.observation).readProperty(Support.node(node), key)
 	end
 	local function number(node: unknown, key: string): number
 		local value = read(node, key)
@@ -215,4 +216,4 @@ local function world(space: string?)
 	}
 end
 
-return { world = world, instance = instance }
+return { world = world, instance = instance, node = Support.node }

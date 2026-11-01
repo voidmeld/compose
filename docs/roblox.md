@@ -112,6 +112,10 @@ These shapes have no Compose animation codec:
 
 [`src/roblox/engine.luau`](../src/roblox/engine.luau) defines an injected engine table.
 It provides instance construction, frame signals, `typeof` and datatype constructors.
+Its optional `readProperty` and `writeProperty` capabilities provide typed property access for
+engines that own a checked instance registry. The native engine registers its created instances
+for direct access; borrowed references retain checked dynamic access. Engines without these
+capabilities use the checked member boundary.
 Tests can run the real adapter without Roblox.
 [The Roblox tests](../tests/roblox) connect it through [`src/test-scene/roblox.luau`](../src/test-scene/roblox.luau).
 They check event classification, default sampling, connection release and frame animation.

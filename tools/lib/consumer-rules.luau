@@ -414,16 +414,11 @@ local function scan(contents: string, relativePath: string?, masked: string?): {
 	end
 	for constructor in constructors do
 		local forms = callForms(source, {}, { [constructor] = true }, "", "{")
-		local labelled = "%f[%w_]" .. escapePattern(constructor) .. "%s*['\"][^'\"]*['\"]%s*{"
-		local from = 1
-		while true do
-			local start, stop = string.find(source, labelled, from)
-			if start == nil then
-				break
+		for _, call in callForms(source, {}, { [constructor] = true }, "", "(") do
+			local _, open = string.find(source, "^%s*{", call.open + 1)
+			if open ~= nil then
+				table.insert(forms, { offset = call.offset, open = open })
 			end
-			local open = requireNumber(string.find(source, "{", requireNumber(start), true))
-			table.insert(forms, { offset = requireNumber(start), open = open })
-			from = (requireNumber(stop)) + 1
 		end
 		for _, form in forms do
 			for _, entry in tableEntries(source, form.open) do

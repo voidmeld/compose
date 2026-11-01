@@ -31,7 +31,7 @@ local function fixture(body: (string) -> number): number
 		end
 		local dependency = ".lute/dependencies/verify/src"
 		for _, path in Walk.paths(dependency, { ".luau" }) do
-			fs.createDirectory(root .. "/" .. (string.match(path, "^(.*)/") :: string), { makeParents = true })
+			fs.createDirectory(root .. "/" .. assert(string.match(path, "^(.*)/")), { makeParents = true })
 			fs.writeStringToFile(root .. "/" .. path, fs.readFileToString(path))
 		end
 		for _, path in

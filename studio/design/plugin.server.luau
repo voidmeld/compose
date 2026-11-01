@@ -41,7 +41,7 @@ local function provided(module: Instance): DesignEditor.Kit?
 	if not made or type(kit) ~= "table" or type(kit.name) ~= "string" or type(kit.edit) ~= "function" then
 		return nil
 	end
-	return kit :: DesignEditor.Kit
+	return kit
 end
 
 local function findKit(): DesignEditor.Kit

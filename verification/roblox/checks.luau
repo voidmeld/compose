@@ -5,11 +5,8 @@ local Compose = require "../../src/core"
 local ComposeRoblox = require "../../src/roblox"
 local Scenes = require "./checks-scenes"
 
-type Readable<T> = { peek: (self: Readable<T>) -> T }
-type OptionalNumberCell = Readable<number?> & {
-	set: (self: OptionalNumberCell, value: number?) -> (),
-	update: (self: OptionalNumberCell, body: (number?) -> number?) -> (),
-}
+type Readable<T> = Compose.ReadOnlyValue<T>
+type OptionalNumberCell = Compose.Value<number?>
 
 export type Check = {
 	id: string,
@@ -17,6 +14,32 @@ export type Check = {
 	requires: { string }?,
 	run: (container: Instance) -> string,
 }
+
+local function reserve<T>(count: number): { T }
+	local create: (number, T?) -> { T } = table.create
+	return create(count)
+end
+
+local function instance(value: unknown): Instance
+	assert(typeof(value) == "Instance", "expected a native Instance")
+	return value
+end
+
+local function gui(value: unknown): GuiObject
+	local object = instance(value)
+	assert(object:IsA "GuiObject", "expected a native GuiObject")
+	return object
+end
+
+local function font(value: unknown): Font
+	assert(typeof(value) == "Font", "expected a native Font")
+	return value
+end
+
+local function vector2(value: unknown): Vector2
+	assert(typeof(value) == "Vector2", "expected a native Vector2")
+	return value
+end
 
 local function assertThat(condition: boolean, message: string)
 	if not condition then
@@ -64,7 +87,7 @@ local checks: { Check } = {
 				settled(23)
 				local raw = runtime.observe(label, "TextSize")
 				local size = runtime.observe(label, "TextSize", { styled = true })
-				local font = runtime.observe(label, "FontFace", { styled = true })
+				local fontValue = runtime.observe(label, "FontFace", { styled = true })
 				assertThat(raw ~= size, "raw and styled observations shared a cache entry")
 				assertThat(
 					size == runtime.observe(label, "TextSize", { styled = true }),
@@ -75,7 +98,7 @@ local checks: { Check } = {
 				settled(31)
 				assertThat(size:peek() == 31, "a stylesheet write did not update TextSize")
 				assertThat(
-					(font:peek() :: Font).Family == (label:GetStyled "FontFace" :: Font).Family,
+					font(fontValue:peek()).Family == font(label:GetStyled "FontFace").Family,
 					"FontFace did not update"
 				)
 				assertThat(raw:peek() == label.TextSize, "style changes corrupted the raw observation")
@@ -102,21 +125,20 @@ local checks: { Check } = {
 				Compose.cleanup(function()
 					runtime:dispose()
 				end)
-				for _, class in { "StringValue", "NumberValue" } do
-					local node = Instance.new(class)
+				local nodes: { StringValue | NumberValue } = { Instance.new "StringValue", Instance.new "NumberValue" }
+				for _, node in nodes do
+					local class = node.ClassName
 					runtime.adopt(node)
 					node.Parent = container
 					local originalName = node.Name
-					local originalValue: unknown = if class == "StringValue"
-						then (node :: StringValue).Value
-						else (node :: NumberValue).Value
+					local originalValue = node:GetStyled "Value"
 					local name = runtime.observe(node, "Name", { styled = true })
 					local value = runtime.observe(node, "Value", { styled = true })
 					node.Name = "ChangedName"
-					if class == "StringValue" then
-						(node :: StringValue).Value = "changed value"
-					else
-						(node :: NumberValue).Value = 42
+					if node:IsA "StringValue" then
+						node.Value = "changed value"
+					elseif node:IsA "NumberValue" then
+						node.Value = 42
 					end
 					game:GetService("RunService").Heartbeat:Wait()
 					assertThat(name:peek() == "ChangedName", class .. " Name write was missed")
@@ -125,11 +147,7 @@ local checks: { Check } = {
 						class .. " Value write was missed"
 					)
 					node:ResetPropertyToDefault "Name"
-					if class == "StringValue" then
-						(node :: StringValue):ResetPropertyToDefault "Value"
-					else
-						(node :: NumberValue):ResetPropertyToDefault "Value"
-					end
+					node:ResetPropertyToDefault "Value"
 					game:GetService("RunService").Heartbeat:Wait()
 					assertThat(name:peek() == originalName, class .. " Name reset was missed")
 					assertThat(value:peek() == originalValue, class .. " Value reset was missed")
@@ -171,7 +189,7 @@ local checks: { Check } = {
 							.. tostring(read(node, "AbsolutePosition"))
 					end,
 					ready = function(): boolean
-						return (read(node, "TextBounds") :: Vector2).X > 0
+						return vector2(read(node, "TextBounds")).X > 0
 					end,
 				}
 				for _ = 1, 120 do
@@ -206,9 +224,9 @@ local checks: { Check } = {
 			end, container)
 
 			assertThat(typeof(frame) == "Instance", "expected an Instance, got " .. typeof(frame))
-			assertThat((frame :: Frame).Parent == container, "the frame was not parented to the container")
+			assertThat(instance(frame).Parent == container, "the frame was not parented to the container")
 			dispose()
-			assertThat((frame :: Instance).Parent == nil, "the frame survived disposal")
+			assertThat(instance(frame).Parent == nil, "the frame survived disposal")
 			assertThat(container.Parent ~= nil, "Compose destroyed the mount target")
 			return "Instance created, parented, and destroyed; mount target untouched"
 		end,
@@ -266,7 +284,8 @@ local checks: { Check } = {
 		name = "the Attributes key writes, clears and refuses on a real Instance",
 		run = function(container: Instance): string
 			local runtime: Compose.Runtime = ComposeRoblox.createRuntime()
-			local tier = Compose.cell(1 :: number?) :: OptionalNumberCell
+			local initial: number? = 1
+			local tier = Compose.cell(initial)
 
 			local dispose, frame = runtime.mount(function()
 				return runtime.constructors.Frame {
@@ -274,16 +293,16 @@ local checks: { Check } = {
 				}
 			end, container)
 
-			assertThat((frame :: Frame):GetAttribute "Tier" == 1, "the attribute was not written")
-			assertThat((frame :: Frame):GetAttribute "Faction" == "north", "the static attribute was not written")
+			assertThat(instance(frame):GetAttribute "Tier" == 1, "the attribute was not written")
+			assertThat(instance(frame):GetAttribute "Faction" == "north", "the static attribute was not written")
 
 			tier:set(7)
 			runtime:settle()
-			assertThat((frame :: Frame):GetAttribute "Tier" == 7, "the attribute did not follow its cell")
+			assertThat(instance(frame):GetAttribute "Tier" == 7, "the attribute did not follow its cell")
 
 			tier:set(nil)
 			runtime:settle()
-			assertThat((frame :: Frame):GetAttribute "Tier" == nil, "nil did not clear the attribute")
+			assertThat(instance(frame):GetAttribute "Tier" == nil, "nil did not clear the attribute")
 			dispose()
 
 			local before = #container:GetChildren()
@@ -319,8 +338,10 @@ local checks: { Check } = {
 				}
 			end, container)
 
+			local nativeButton = instance(button)
+			assert(nativeButton:IsA "TextButton")
 			assertThat(
-				typeof((button :: TextButton).Activated) == "RBXScriptSignal",
+				typeof(nativeButton.Activated) == "RBXScriptSignal",
 				"Activated was written as a property instead of being connected"
 			)
 			dispose()
@@ -374,10 +395,10 @@ local checks: { Check } = {
 						render = function(value, index)
 							return runtime.constructors.TextLabel {
 								Size = UDim2.new(1, 0, 0, 20),
-								Text = function(use)
+								Text = function(use: Compose.Use)
 									return use(value)
 								end,
-								LayoutOrder = function(use)
+								LayoutOrder = function(use: Compose.Use)
 									return use(index)
 								end,
 							}
@@ -392,7 +413,7 @@ local checks: { Check } = {
 			task.wait()
 
 			local byText: { [string]: number } = {}
-			for _, child in (frame :: Instance):GetChildren() do
+			for _, child in instance(frame):GetChildren() do
 				if child:IsA "TextLabel" then
 					byText[child.Text] = child.LayoutOrder
 				end
@@ -400,9 +421,9 @@ local checks: { Check } = {
 			assertThat(byText.c == 1 and byText.a == 2 and byText.b == 3, "LayoutOrder did not follow the keyed index")
 
 			local positions: { { text: string, y: number } } = {}
-			for _, child in (frame :: Instance):GetChildren() do
+			for _, child in instance(frame):GetChildren() do
 				if child:IsA "TextLabel" then
-					table.insert(positions, { text = child.Text, y = (child :: TextLabel).AbsolutePosition.Y })
+					table.insert(positions, { text = child.Text, y = (child).AbsolutePosition.Y })
 				end
 			end
 			table.sort(positions, function(left: { text: string, y: number }, right: { text: string, y: number })
@@ -429,11 +450,11 @@ local checks: { Check } = {
 			local runtime: Compose.Runtime = ComposeRoblox.createRuntime()
 			local target = Compose.cell(UDim2.fromScale(0, 0))
 			local dispose, frame = runtime.mount(function()
-				local smooth = runtime.spring(function(use)
+				local smooth = runtime.motion(assert(ComposeRoblox.codecs().UDim2)).spring(function(use: Compose.Use)
 					return use(target)
 				end, { period = 0.2, damping = 1 })
 				return runtime.constructors.Frame {
-					Size = function(use)
+					Size = function(use: Compose.Use)
 						return use(smooth)
 					end,
 				}
@@ -444,20 +465,20 @@ local checks: { Check } = {
 
 			local frames = 0
 			local deadline = os.clock() + 5
-			while os.clock() < deadline and (frame :: Frame).Size ~= UDim2.fromScale(1, 0.5) do
+			while os.clock() < deadline and gui(frame).Size ~= UDim2.fromScale(1, 0.5) do
 				frames += 1
 				task.wait()
 			end
 			assertThat(
-				(frame :: Frame).Size == UDim2.fromScale(1, 0.5),
-				("the spring did not settle: %s"):format(tostring((frame :: Frame).Size))
+				gui(frame).Size == UDim2.fromScale(1, 0.5),
+				("the spring did not settle: %s"):format(tostring(gui(frame).Size))
 			)
 
-			local settledSize = (frame :: Frame).Size
+			local settledSize = gui(frame).Size
 			for _ = 1, 5 do
 				task.wait()
 			end
-			assertThat((frame :: Frame).Size == settledSize, "the spring kept moving after settling")
+			assertThat(gui(frame).Size == settledSize, "the spring kept moving after settling")
 			dispose()
 			return ("settled exactly on target after %d frames, then stopped"):format(frames)
 		end,
@@ -504,9 +525,9 @@ local checks: { Check } = {
 			local function settle(): number
 				local lowest = collectgarbage "count"
 				for _ = 1, 40 do
-					local junk: { { number } }? = table.create(2000) :: { { number } }
+					local junk: { { number } }? = reserve<<{ number }>>(2000)
 					for index = 1, 2000 do
-						(junk :: { { number } })[index] = { index }
+						assert(junk)[index] = { index }
 					end
 					junk = nil
 					task.wait()
@@ -544,8 +565,8 @@ local checks: { Check } = {
 			local function race(first: () -> (), second: () -> ()): (number, number)
 				first()
 				second()
-				local firstSamples: { number } = table.create(ROUNDS) :: { number }
-				local secondSamples: { number } = table.create(ROUNDS) :: { number }
+				local firstSamples: { number } = reserve<<number>>(ROUNDS)
+				local secondSamples: { number } = reserve<<number>>(ROUNDS)
 				for index = 1, ROUNDS do
 					local startedFirst = os.clock()
 					first()
@@ -585,7 +606,7 @@ local checks: { Check } = {
 			local text = Compose.cell "value 0"
 			local disposeBound = runtime.mount(function()
 				return runtime.constructors.TextLabel {
-					Text = function(use)
+					Text = function(use: Compose.Use)
 						return use(text)
 					end,
 				}

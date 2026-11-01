@@ -6,9 +6,12 @@ local function measure<T>(spec: Lute.MemorySpec<T>, plantedBytes: number?): Lute
 	local bytes = plantedBytes or 0
 	assert(bytes >= 0 and bytes <= 16 * 1024 * 1024 and bytes % 1 == 0)
 	local retained: buffer? = nil
+	local setups = 0
+	local rehearsals = spec.rehearsals or 0
 	local result = Lute.memory.measure({
 		setup = function(): T
-			if bytes > 0 then
+			setups += 1
+			if bytes > 0 and setups > rehearsals then
 				retained = buffer.create(bytes)
 			end
 			return spec.setup()
@@ -18,6 +21,7 @@ local function measure<T>(spec: Lute.MemorySpec<T>, plantedBytes: number?): Lute
 		teardown = spec.teardown,
 		warmup = spec.warmup,
 		iterations = spec.iterations,
+		rehearsals = rehearsals,
 	}, { cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 })
 	if retained ~= nil then
 		assert(buffer.len(retained) == bytes)

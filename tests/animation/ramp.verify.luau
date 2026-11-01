@@ -98,9 +98,9 @@ describe("ramp", function()
 		local ramp = Compose.withOwner(owner, function()
 			return world.runtime.ramp(0)
 		end)
-		for _, bad in { math.huge - math.huge, math.huge, (Support.erased "1") :: number } do
+		for _, bad in { math.huge - math.huge, math.huge, "1" } do
 			expect(function()
-				ramp.retarget(1, bad)
+				Support.invoke(ramp.retarget, 1, bad)
 			end):toThrow "ramp/invalid-seconds"
 		end
 		Compose.owner.dispose(owner)

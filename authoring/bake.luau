@@ -47,21 +47,28 @@ local function attributePlan(entry: Entry, mapping: AttributeMapping): Attribute
 			if row.optional == true then
 				continue
 			end
-			Diagnostics.raise("bake/missing-field", ("entry has no %q field to bake"):format(row.field), {
+			return Diagnostics.raise("bake/missing-field", ("entry has no %q field to bake"):format(row.field), {
 				key = row.field,
 				expected = ("a value for attribute %q"):format(row.attribute),
 				fix = "add the field, or mark the mapping row optional",
 			})
 		end
-		if not Diagnostics.isScalar(value) then
-			Diagnostics.raise("bake/not-attribute-shaped", ("field %q cannot become an attribute"):format(row.field), {
-				key = row.field,
-				actual = Diagnostics.describe(value),
-				expected = "a string, finite number, or boolean",
-				contract = "an attribute carries a scalar, never a structure",
-			})
+		if
+			(type(value) ~= "string" and type(value) ~= "number" and type(value) ~= "boolean")
+			or not Diagnostics.isScalar(value)
+		then
+			return Diagnostics.raise(
+				"bake/not-attribute-shaped",
+				("field %q cannot become an attribute"):format(row.field),
+				{
+					key = row.field,
+					actual = Diagnostics.describe(value),
+					expected = "a string, finite number, or boolean",
+					contract = "an attribute carries a scalar, never a structure",
+				}
+			)
 		end
-		table.insert(plan, { key = row.attribute, value = value :: AttributeValue })
+		table.insert(plan, { key = row.attribute, value = value })
 	end
 	return plan
 end
@@ -82,15 +89,15 @@ local function isDataValue(value: unknown): boolean
 	if type(value) ~= "table" then
 		return false
 	end
-	local candidate = value :: { [unknown]: unknown }
+	local candidate = value
 	local arrayCount = #candidate
 	local totalCount = 0
 	for _ in candidate do
 		totalCount += 1
 	end
 	if arrayCount == totalCount then
-		for index = 1, arrayCount do
-			if not isDataValue(candidate[index]) then
+		for _, item in candidate do
+			if not isDataValue(item) then
 				return false
 			end
 		end
@@ -116,7 +123,7 @@ local function renderDataValue(value: unknown, indent: string): string
 		return tostring(value)
 	end
 
-	local candidate = value :: { [unknown]: unknown }
+	local candidate = assert(Diagnostics.fields(value))
 	local arrayCount = #candidate
 	local totalCount = 0
 	for _ in candidate do
@@ -137,7 +144,8 @@ local function renderDataValue(value: unknown, indent: string): string
 
 	local keys: { string } = {}
 	for key in candidate do
-		table.insert(keys, key :: string)
+		assert(type(key) == "string")
+		table.insert(keys, key)
 	end
 	table.sort(keys)
 	local pieces: { string } = {}
@@ -152,25 +160,25 @@ end
 
 local function dataModule(spec: DataSpec, outPath: string?): string
 	if type(spec) ~= "table" then
-		Diagnostics.raise("bake/not-a-spec", "Author.bake.dataModule was not given a spec table", {
+		return Diagnostics.raise("bake/not-a-spec", "Author.bake.dataModule was not given a spec table", {
 			actual = Diagnostics.describe(spec),
 			expected = "a table with name, idKey, and entries",
 		})
 	end
 	if type(spec.name) ~= "string" or spec.name == "" then
-		Diagnostics.raise("bake/missing-name", "the spec has no name", {
+		return Diagnostics.raise("bake/missing-name", "the spec has no name", {
 			actual = Diagnostics.describe(spec.name),
 			expected = "a non-empty string",
 		})
 	end
 	if type(spec.idKey) ~= "string" or spec.idKey == "" then
-		Diagnostics.raise("bake/missing-id-key", "the spec has no idKey", {
+		return Diagnostics.raise("bake/missing-id-key", "the spec has no idKey", {
 			actual = Diagnostics.describe(spec.idKey),
 			expected = "the name of the record field that carries the identity",
 		})
 	end
 	if type(spec.entries) ~= "table" then
-		Diagnostics.raise("bake/missing-entries", "the spec has no entries array", {
+		return Diagnostics.raise("bake/missing-entries", "the spec has no entries array", {
 			actual = Diagnostics.describe(spec.entries),
 			expected = "an array of plain record tables",
 		})
@@ -182,44 +190,56 @@ local function dataModule(spec: DataSpec, outPath: string?): string
 
 	for index, entry in ipairs(spec.entries) do
 		if type(entry) ~= "table" then
-			Diagnostics.raise("bake/entry-not-a-table", ("entry %d is not a table"):format(index), {
+			return Diagnostics.raise("bake/entry-not-a-table", ("entry %d is not a table"):format(index), {
 				index = index,
 				actual = Diagnostics.describe(entry),
 				expected = "a plain record table",
 			})
 		end
-		local record = entry :: DataRecord
+		local record = entry
 		local id = record[spec.idKey]
 		if type(id) ~= "string" or id == "" then
-			Diagnostics.raise("bake/entry-missing-id", ("entry %d has no %q id field"):format(index, spec.idKey), {
-				index = index,
-				key = spec.idKey,
-				actual = Diagnostics.describe(id),
-				expected = "a non-empty string",
-				contract = "a data module dispatches on ids of its own",
-			})
+			return Diagnostics.raise(
+				"bake/entry-missing-id",
+				("entry %d has no %q id field"):format(index, spec.idKey),
+				{
+					index = index,
+					key = spec.idKey,
+					actual = Diagnostics.describe(id),
+					expected = "a non-empty string",
+					contract = "a data module dispatches on ids of its own",
+				}
+			)
 		end
-		local recordId = id :: string
+		local recordId = id
 		if seen[recordId] ~= nil then
-			Diagnostics.raise("bake/duplicate-id", ("id %q appears more than once in %q"):format(recordId, spec.name), {
-				entryId = recordId,
-				contract = "a data module dispatches on unique ids",
-				fix = "remove or rename the duplicate entry",
-			})
+			return Diagnostics.raise(
+				"bake/duplicate-id",
+				("id %q appears more than once in %q"):format(recordId, spec.name),
+				{
+					entryId = recordId,
+					contract = "a data module dispatches on unique ids",
+					fix = "remove or rename the duplicate entry",
+				}
+			)
 		end
 		seen[recordId] = true
 		table.insert(ids, recordId)
 
 		for key, fieldValue in record do
 			if type(key) ~= "string" then
-				Diagnostics.raise("bake/not-data-shaped", ("entry %q has a non-string field key"):format(recordId), {
-					entryId = recordId,
-					actual = Diagnostics.describe(key),
-					expected = "a string field name",
-				})
+				return Diagnostics.raise(
+					"bake/not-data-shaped",
+					("entry %q has a non-string field key"):format(recordId),
+					{
+						entryId = recordId,
+						actual = Diagnostics.describe(key),
+						expected = "a string field name",
+					}
+				)
 			end
 			if not isDataValue(fieldValue) then
-				Diagnostics.raise(
+				return Diagnostics.raise(
 					"bake/not-data-shaped",
 					("field %q of entry %q cannot become data"):format(key, recordId),
 					{
@@ -271,12 +291,16 @@ local function registryModule(spec: RegistrySpec, outPath: string?): string
 	for _, entry in set.entries do
 		local id = set:idOf(entry)
 		if seen[id] ~= nil then
-			Diagnostics.raise("bake/duplicate-id", ("id %q appears more than once in set %q"):format(id, set.name), {
-				set = set.name,
-				entryId = id,
-				contract = "a registry dispatches on unique ids",
-				fix = "run Author.validate with unique = true and fix the authored data",
-			})
+			return Diagnostics.raise(
+				"bake/duplicate-id",
+				("id %q appears more than once in set %q"):format(id, set.name),
+				{
+					set = set.name,
+					entryId = id,
+					contract = "a registry dispatches on unique ids",
+					fix = "run Author.validate with unique = true and fix the authored data",
+				}
+			)
 		end
 		seen[id] = true
 		table.insert(ids, id)
@@ -317,7 +341,7 @@ local function registryModule(spec: RegistrySpec, outPath: string?): string
 	}
 
 	for _, id in ids do
-		local entry = set:byId(id) :: Entry
+		local entry = assert(set:byId(id))
 		table.insert(bodyLines, ("\t[%q] = {"):format(id))
 		for _, planned in attributePlan(entry, spec.mapping) do
 			table.insert(bodyLines, ("\t\t{ key = %q, value = %s },"):format(planned.key, renderValue(planned.value)))

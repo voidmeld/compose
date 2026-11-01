@@ -1,20 +1,34 @@
 --!strict
 
+local Support = require "../support"
 local Design = require "../../src/design"
 local Core = require "../../src/core"
 local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
-type Built = { kind: string, props: { [string]: Design.Resolved }, children: { unknown }, name: string }
+type Built = { kind: string, props: { [string]: Design.Resolved }, children: { Built }, name: string }
 
 local built: { Built } = {}
+
+local function builtNode(value: unknown): Built
+	for _, record in built do
+		if record == value then
+			return record
+		end
+	end
+	error("Expected a node made by this fixture", 0)
+end
 
 local function builder(
 	kind: string
 ): (props: { [string]: Design.Resolved }, children: { unknown }, name: string) -> unknown
 	return function(props: { [string]: Design.Resolved }, children: { unknown }, name: string): unknown
-		local record: Built = { kind = kind, props = props, children = children, name = name }
+		local nodes: { Built } = {}
+		for _, child in children do
+			table.insert(nodes, builtNode(child))
+		end
+		local record: Built = { kind = kind, props = props, children = nodes, name = name }
 		table.insert(built, record)
 		return record
 	end
@@ -128,7 +142,7 @@ end
 
 describe("Compose Design documents", function()
 	it("passes live rows to template kinds without snapshotting them", function()
-		local rows = Core.cell({ ada } :: { Design.Row })
+		local rows = Core.cell { ada }
 		local value = sample()
 		table.clear(built)
 		Design.render(value, library, {
@@ -565,15 +579,16 @@ describe("Compose Design documents", function()
 		local made = assert(grid)
 		expect(#made.children):toBe(0)
 		table.clear(built)
-		local cells = made.props.columns.value :: Cells
-		cells[1].render(Core.cell(alpha))
+		local cells = Support.record(made.props.columns.value)
+		Support.invoke(Support.read(cells[1], "render"), Core.cell(alpha))
 		expect(built[1].kind):toBe "Label"
 		table.clear(built)
-		cells[2].render(Core.cell(alpha))
+		Support.invoke(Support.read(cells[2], "render"), Core.cell(alpha))
 		local scoreText = assert(built[1].props.text.readable)
 		expect(scoreText:peek()):toBe "3"
-		local rowActions = made.props.actions.value :: Actions
-		rowActions(Core.cell(alpha))[1].onActivate()
+		local rowActions = made.props.actions.value
+		local rowChoices = Support.record(Support.invoke(rowActions, Core.cell(alpha)))
+		Support.invoke(Support.read(rowChoices[1], "onActivate"))
 		expect(chosen[1]):toBe(alpha)
 		library.kinds = kinds
 	end)
@@ -604,8 +619,8 @@ describe("Compose Design documents", function()
 		end
 		expect(type(icon)):toBe "function"
 		table.clear(built)
-		local builder = icon :: () -> unknown
-		builder()
+		local builder = icon
+		Support.invoke(builder)
 		expect(built[1].kind):toBe "Label"
 		value = Design.document.change(value, library, buttonId, "icon", nil)
 		local found = Design.document.find(value.root, buttonId)
@@ -695,11 +710,11 @@ describe("Compose Design documents", function()
 			Design.document.insert(value, library, "n1", "Label")
 		end):toThrow()
 		table.clear(built)
-		local panel = Design.render(value, library) :: Built
+		local panel = builtNode(Design.render(value, library))
 		expect(#built):toBe(1)
 		expect(#panel.children):toBe(0)
 		local slot = assert(panel.props.content.slot)
-		local inside = slot() :: Built
+		local inside = builtNode(slot())
 		expect(inside.kind):toBe "Label"
 		expect(inside.props.text.literal):toBe "Inside"
 		local code = Design.emit(value, library)
@@ -749,7 +764,7 @@ describe("Compose Design documents", function()
 			end
 		end
 		local template = assert(assert(listRecord).props.render.template)
-		local button = template(Core.cell(bo)) :: Built
+		local button = builtNode(template(Core.cell(bo)))
 		assert(button.props.onActivate.callback)()
 		expect(picked):toEqual { "b" }
 		local code = Design.emit(value, library)
@@ -812,7 +827,7 @@ describe("Compose Design documents", function()
 			Design.document.nameFrom(current, library, "n1", "name")
 		end):toThrow "outside a collection template"
 		table.clear(built)
-		local root = Design.render(value, library) :: Built
+		local root = builtNode(Design.render(value, library))
 		expect(root.name):toBe(value.root.name)
 		local listRecord: Built? = nil
 		for _, record in built do
@@ -821,7 +836,7 @@ describe("Compose Design documents", function()
 			end
 		end
 		local template = assert(assert(listRecord).props.render.template)
-		expect((template(Core.cell(bo)) :: Built).name):toBe "Bo"
+		expect(builtNode(template(Core.cell(bo))).name):toBe "Bo"
 		local code = Design.emit(value, library)
 		expect(string.find(code, "UI.Label(tostring(current:peek().name)) {", 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, library)):toEqual(value)
@@ -1153,12 +1168,12 @@ describe("Compose Design views as code", function()
 		table.clear(built)
 		local supplied: { [string]: Design.Literal } = { name = "Picker", offered = false }
 		local context: Design.RenderContext = { inputs = supplied }
-		local root = Design.render(value, toy, context) :: Built
+		local root = builtNode(Design.render(value, toy, context))
 		expect(root.name):toBe "Picker"
 		expect(#root.children):toBe(2)
-		local rows = root.children[1] :: Built
+		local rows = root.children[1]
 		expect(#rows.children):toBe(2)
-		local toggle = root.children[2] :: Built
+		local toggle = root.children[2]
 		local visible = toggle.props.Visible.readable
 		expect(visible ~= nil and visible:peek()):toBe(true)
 	end)
@@ -1210,8 +1225,8 @@ describe("Compose Design views as code", function()
 		table.clear(built)
 		local supplied: { [string]: Design.Literal } = { name = "Picker" }
 		local context: Design.RenderContext = { inputs = supplied }
-		local root = Design.render(value, toy, context) :: Built
-		expect(#(root.children[1] :: Built).children):toBe(3)
+		local root = builtNode(Design.render(value, toy, context))
+		expect(#(root.children[1]).children):toBe(3)
 	end)
 
 	it("binds outputs inside literal records and accepts declared extra literal kinds", function()

@@ -184,7 +184,7 @@ describe("focus neighbour", function()
 
 	it("rejects an unknown direction instead of selecting to the left", function()
 		expect(function()
-			Compose.focusNeighbor(r(0, 0, 100, 100), {}, (Support.erased "diagonal") :: Compose.FocusDirection)
+			Support.invoke(Compose.focusNeighbor, r(0, 0, 100, 100), {}, "diagonal")
 		end):toThrow "focus-neighbor/unknown-direction"
 	end)
 end)

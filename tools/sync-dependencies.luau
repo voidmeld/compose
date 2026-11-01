@@ -4,13 +4,13 @@ local fs = require "@std/fs"
 local process = require "@lute/process"
 
 type Dependency = {
-	name: string,
-	repository: string,
-	commit: string,
-	tree: string,
-	rights: string,
-	notices: { string }?,
-	surfaces: { { root: string, role: "runtime" | "tooling" | "verification" } },
+	read name: string,
+	read repository: string,
+	read commit: string,
+	read tree: string,
+	read rights: string,
+	read notices: { string }?,
+	read surfaces: { { root: string, role: string } },
 }
 
 type Lock = {
@@ -23,7 +23,7 @@ local LOCAL_SOURCE_ROOT = "COMPOSE_DEPENDENCY_SOURCE_ROOT"
 local REVIEWED_RIGHTS: { [string]: true } = {
 	MIT = true,
 }
-local lock = require "../dependencies.lock" :: Lock
+local lock = (require "../dependencies.lock")
 
 local function notices(dependency: Dependency): { string }
 	return dependency.notices or {}

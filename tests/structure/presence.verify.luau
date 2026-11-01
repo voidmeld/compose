@@ -235,13 +235,13 @@ describe("presence", function()
 
 		local dispose, root = world.runtime.mount(function()
 			return Frame {
-				Compose.presence(function(use: Compose.Use)
+				Support.invoke(Compose.presence, function(use: Compose.Use)
 					return use(open)
 				end, function()
 					return Frame {}
 				end, {
 					exit = function()
-						return (Support.erased(3)) :: Compose.Exiting
+						return 3
 					end,
 				}),
 			}
@@ -266,7 +266,7 @@ describe("presence", function()
 				Compose.presence(function(use: Compose.Use)
 					return use(open)
 				end, function()
-					return { Label "A" {}, Label "B" {}, Label "C" {} }
+					return { Label({}, "A"), Label({}, "B"), Label({}, "C") }
 				end, {
 					exit = function()
 						return world.runtime.timeline { duration = 0.1 }

@@ -33,18 +33,13 @@ describe("the mount boundary", function()
 		local rows = Compose.cell(ROWS)
 
 		local refusal = refusalOf(function()
-			world.runtime.mount(
-				(
-						Support.erased(Compose.keyed {
-							from = rows,
-							key = idOf,
-							render = function()
-								return Row {}
-							end,
-						})
-					) :: Compose.Component,
-				world.root
-			)
+			Support.invoke(world.runtime.mount, (Compose.keyed {
+				from = rows,
+				key = idOf,
+				render = function()
+					return Row {}
+				end,
+			}), world.root)
 		end)
 
 		expect(refusal.code):toBe "structure/directive-needs-a-mount-point"
@@ -74,7 +69,7 @@ describe("the mount boundary", function()
 
 		expect(function()
 			Support.owned(function(): unknown?
-				directive((Support.erased(nil)) :: Compose.MountPoint)
+				Support.invoke(directive, nil)
 				return nil
 			end)
 		end):toThrow "structure/directive-needs-a-mount-point"
@@ -93,7 +88,7 @@ describe("the mount boundary", function()
 
 		local refusal = refusalOf(function()
 			Support.owned(function(): unknown?
-				directive((Support.erased(world.root)) :: Compose.MountPoint)
+				Support.invoke(directive, world.root)
 				return nil
 			end)
 		end)
@@ -163,7 +158,7 @@ describe("the mount boundary", function()
 
 		for _, case in cases do
 			local refusal = refusalOf(function()
-				world.runtime.mount((Support.erased(case.directive)) :: Compose.Component, world.root)
+				Support.invoke(world.runtime.mount, case.directive, world.root)
 			end)
 			expect(refusal.code):toBe "structure/directive-needs-a-mount-point"
 			expect(refusal.summary):toBe(("%s was called without a mount point"):format(case.name))
@@ -197,7 +192,7 @@ describe("structural options that used to fail later", function()
 		local refusal = refusalOf(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.portal(nil, function(): { Compose.Node }
+					Support.invoke(Compose.portal, nil, function(): { Compose.Node }
 						return {}
 					end),
 				}
@@ -214,7 +209,7 @@ describe("structural options that used to fail later", function()
 		expect(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.portal(world.root, (Support.erased "not a function") :: () -> { Compose.Node }),
+					Support.invoke(Compose.portal, world.root, "not a function"),
 				}
 			end, world.root)
 		end):toThrow "structure/builder-not-a-function"
@@ -225,7 +220,7 @@ describe("structural options that used to fail later", function()
 		expect(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.fragment((Support.erased "not a function") :: () -> { Compose.Node }),
+					Support.invoke(Compose.fragment, "not a function"),
 				}
 			end, world.root)
 		end):toThrow "structure/builder-not-a-function"
@@ -237,9 +232,9 @@ describe("structural options that used to fail later", function()
 		expect(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.presence(Compose.cell(true), function()
+					Support.invoke(Compose.presence, Compose.cell(true), function()
 						return Row {}
-					end, (Support.erased "on-exit") :: Compose.PresenceOptions),
+					end, "on-exit"),
 				}
 			end, world.root)
 		end):toThrow "structure/options-not-a-table"
@@ -251,9 +246,9 @@ describe("structural options that used to fail later", function()
 		expect(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.presence(Compose.cell(true), function()
+					Support.invoke(Compose.presence, Compose.cell(true), function()
 						return Row {}
-					end, (Support.erased { onExit = function() end }) :: Compose.PresenceOptions),
+					end, { onExit = function() end }),
 				}
 			end, world.root)
 		end):toThrow "structure/unknown-option"
@@ -265,9 +260,9 @@ describe("structural options that used to fail later", function()
 		expect(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.presence(Compose.cell(true), function()
+					Support.invoke(Compose.presence, Compose.cell(true), function()
 						return Row {}
-					end, { exit = (Support.erased "fade") :: ({ Compose.Node }) -> Compose.Exiting }),
+					end, { exit = "fade" }),
 				}
 			end, world.root)
 		end):toThrow "structure/builder-not-a-function"
@@ -281,34 +276,34 @@ describe("structural options that used to fail later", function()
 			return Row {}
 		end
 
-		local cases: { { name: string, build: () -> Compose.Directive } } = {
+		local cases: { { name: string, build: () -> ...unknown } } = {
 			{
 				name = "MountBudget",
 				build = function()
-					return Compose.MountBudget {
+					return Support.invoke(Compose.MountBudget, {
 						from = rows,
 						key = idOf,
 						render = render,
 						mountsPerFrame = 1,
-						status = (Support.erased "not a cell") :: Compose.Value<Compose.MountBudgetStatus>,
-					}
+						status = "not a cell",
+					})
 				end,
 			},
 			{
 				name = "OrderedCollection",
 				build = function()
-					return Compose.OrderedCollection {
+					return Support.invoke(Compose.OrderedCollection, {
 						from = rows,
 						key = idOf,
 						render = render,
-						status = (Support.erased "not a cell") :: Compose.Value<Compose.OrderedCollectionStatus>,
-					}
+						status = "not a cell",
+					})
 				end,
 			},
 			{
 				name = "SpatialCollection",
 				build = function()
-					return Compose.SpatialCollection {
+					return Support.invoke(Compose.SpatialCollection, {
 						from = rows,
 						key = idOf,
 						render = render,
@@ -321,8 +316,8 @@ describe("structural options that used to fail later", function()
 							end) { x = 0, y = 0, z = 0 }
 						),
 						tiers = { { name = "full", radius = 100 } },
-						status = (Support.erased "not a cell") :: Compose.Value<Compose.SpatialCollectionStatus>,
-					}
+						status = "not a cell",
+					})
 				end,
 			},
 		}
@@ -345,14 +340,14 @@ describe("structural options that used to fail later", function()
 		local refusal = refusalOf(function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
-					Compose.OrderedCollection {
+					Support.invoke(Compose.OrderedCollection, {
 						from = Compose.cell(ROWS),
 						key = idOf,
 						render = function()
 							return Row {}
 						end,
-						controls = (Support.erased "not a table") :: Compose.OrderedCollectionControls<string>,
-					},
+						controls = "not a table",
+					}),
 				}
 			end, world.root)
 		end)

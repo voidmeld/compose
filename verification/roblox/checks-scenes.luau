@@ -6,16 +6,9 @@ local ComposeRoblox = require "../../src/roblox"
 local Design = require "../../src/design"
 local DesignEditor = require "../../src/design-editor"
 
-type Readable<T> = { peek: (self: Readable<T>) -> T }
-type Use = <T>(value: Readable<T>) -> T
-type Layout = {
-	kind: ("list" | "grid")?,
-	columns: number?,
-	itemSize: number?,
-	gap: number?,
-	crossSize: number?,
-	crossGap: number?,
-}
+type Readable<T> = Compose.ReadOnlyValue<T>
+type Use = Compose.Use
+type Layout = Compose.OrderedCollectionLayout
 
 export type Check = {
 	id: string,
@@ -23,6 +16,11 @@ export type Check = {
 	requires: { string }?,
 	run: (container: Instance) -> string,
 }
+
+local function reserve<T>(count: number): { T }
+	local create: (number, T?) -> { T } = table.create
+	return create(count)
+end
 
 local function assertThat(condition: boolean, message: string)
 	if not condition then
@@ -39,7 +37,7 @@ local checks: { Check } = {
 			local FRAMES = 60
 
 			local function perFrame(body: (number) -> ()): number
-				local samples: { number } = table.create(FRAMES) :: { number }
+				local samples: { number } = reserve<<number>>(FRAMES)
 				for tick = 1, FRAMES do
 					local started = os.clock()
 					body(tick)
@@ -63,8 +61,8 @@ local checks: { Check } = {
 						local source = if index % 3 == 0 then level elseif index % 3 == 1 then mana else cast
 						bars[index] = runtime.constructors.Frame {
 							LayoutOrder = index,
-							Transparency = function(use)
-								return (use(source) :: number) / 100
+							Transparency = function(use: Compose.Use)
+								return (use(source)) / 100
 							end,
 						}
 					end
@@ -93,7 +91,7 @@ local checks: { Check } = {
 			do
 				local COUNT = 200
 				type LevelItem = { id: number, level: typeof(Compose.cell(0)) }
-				local units: { LevelItem } = table.create(COUNT) :: { LevelItem }
+				local units: { LevelItem } = reserve<<LevelItem>>(COUNT)
 				for index = 1, COUNT do
 					units[index] = { id = index, level = Compose.cell(index % 100) }
 				end
@@ -110,8 +108,8 @@ local checks: { Check } = {
 								local unit = value:peek()
 								return runtime.constructors.Frame {
 									LayoutOrder = index,
-									Transparency = function(use)
-										return (use(unit.level) :: number) / 100
+									Transparency = function(use: Compose.Use)
+										return (use(unit.level)) / 100
 									end,
 								}
 							end,
@@ -142,7 +140,7 @@ local checks: { Check } = {
 
 			do
 				local TOTAL, VISIBLE = 2000, 40
-				local pool = table.create(TOTAL) :: { { id: number, label: number } }
+				local pool = reserve<<{ id: number, label: number }>>(TOTAL)
 				for index = 1, TOTAL do
 					pool[index] = { id = index, label = index }
 				end
@@ -157,7 +155,7 @@ local checks: { Check } = {
 							viewport = function(use: Compose.Use): Compose.OrderedCollectionViewport
 								return { offset = use(first) - 1, size = VISIBLE }
 							end,
-							layout = { itemSize = 1 } :: Layout,
+							layout = { itemSize = 1 },
 							key = function(item: { id: number, label: number })
 								return item.id
 							end,
@@ -169,7 +167,7 @@ local checks: { Check } = {
 									LayoutOrder = function(use: Use)
 										return use(placement).index
 									end,
-									Name = function(use): string
+									Name = function(use: Compose.Use): string
 										return ("row-%d"):format(use(value).label)
 									end,
 								}
@@ -197,7 +195,7 @@ local checks: { Check } = {
 
 			do
 				local COUNT = 100
-				local targets: { typeof(Compose.cell(0)) } = table.create(COUNT) :: { typeof(Compose.cell(0)) }
+				local targets: { typeof(Compose.cell(0)) } = reserve<<typeof(Compose.cell(0))>>(COUNT)
 				for index = 1, COUNT do
 					targets[index] = Compose.cell(0)
 				end
@@ -205,13 +203,13 @@ local checks: { Check } = {
 				local dispose = runtime.mount(function()
 					local panels = table.create(COUNT)
 					for index = 1, COUNT do
-						local moved = runtime.spring(function(use): number
-							return use(targets[index]) :: number
+						local moved = runtime.spring(function(use: Compose.Use): number
+							return (use(targets[index]))
 						end, { period = 0.3, damping = 1 })
 						panels[index] = runtime.constructors.Frame {
 							LayoutOrder = index,
-							Transparency = function(use)
-								return math.clamp(use(moved) :: number, 0, 1)
+							Transparency = function(use: Compose.Use)
+								return math.clamp((use(moved)), 0, 1)
 							end,
 						}
 					end
@@ -254,7 +252,7 @@ local checks: { Check } = {
 			local FRAMES = 60
 
 			local function perFrame(body: (number) -> ()): number
-				local samples: { number } = table.create(FRAMES) :: { number }
+				local samples: { number } = reserve<<number>>(FRAMES)
 				for tick = 1, FRAMES do
 					local started = os.clock()
 					body(tick)
@@ -273,7 +271,7 @@ local checks: { Check } = {
 				visible: typeof(Compose.cell(false)),
 				selected: typeof(Compose.cell(false)),
 			}
-			local units: { Unit } = table.create(COUNT) :: { Unit }
+			local units: { Unit } = reserve<<Unit>>(COUNT)
 			for index = 1, COUNT do
 				units[index] = {
 					id = index,
@@ -312,20 +310,20 @@ local checks: { Check } = {
 									Name = "Body",
 									Anchored = true,
 									Transparency = function(use: Use)
-										return math.clamp((use(use(value).distance) :: number) / 800, 0, 1)
+										return math.clamp((use(use(value).distance)) / 800, 0, 1)
 									end,
 								},
 								runtime.constructors.Attachment {
 									Name = "Anchor",
 									Compose.show(function(use: Use)
-										return use(use(value).visible) :: boolean
+										return (use(use(value).visible))
 									end, function()
 										return runtime.constructors.BillboardGui {
 											Name = "Plate",
 											AlwaysOnTop = true,
 											runtime.constructors.TextLabel {
 												Name = "Health",
-												Text = function(use)
+												Text = function(use: Compose.Use)
 													return tostring(use(use(value).level))
 												end,
 											},
@@ -333,7 +331,7 @@ local checks: { Check } = {
 									end),
 								},
 								Compose.show(function(use: Use)
-									return use(use(value).selected) :: boolean
+									return (use(use(value).selected))
 								end, function()
 									return runtime.constructors.Highlight {
 										Name = "Selected",
@@ -403,14 +401,14 @@ local checks: { Check } = {
 			local FRAMES = 60
 
 			type Entity = { id: number, depth: number }
-			local entities: { Entity } = table.create(POPULATION) :: { Entity }
+			local entities: { Entity } = reserve<<Entity>>(POPULATION)
 			for index = 1, POPULATION do
 				entities[index] = { id = index, depth = index % 8 }
 			end
 
 			local function windowAt(tick: number): { Entity }
 				local first = ((tick * 8) % (POPULATION - VISIBLE)) + 1
-				local shown: { Entity } = table.create(VISIBLE) :: { Entity }
+				local shown: { Entity } = reserve<<Entity>>(VISIBLE)
 				for offset = 0, VISIBLE - 1 do
 					shown[offset + 1] = entities[first + offset]
 				end
@@ -418,7 +416,7 @@ local checks: { Check } = {
 			end
 
 			local visible = Compose.cell(windowAt(0))
-			local positions: { typeof(Compose.cell(0)) } = table.create(POPULATION) :: { typeof(Compose.cell(0)) }
+			local positions: { typeof(Compose.cell(0)) } = reserve<<typeof(Compose.cell(0))>>(POPULATION)
 			for index = 1, POPULATION do
 				positions[index] = Compose.cell(0)
 			end
@@ -439,11 +437,11 @@ local checks: { Check } = {
 							return runtime.constructors.ImageLabel {
 								Name = ("Sprite%d"):format(entity.id),
 								BackgroundTransparency = 1,
-								LayoutOrder = function(use)
-									return use(index) :: number
+								LayoutOrder = function(use: Compose.Use)
+									return (use(index))
 								end,
-								ImageTransparency = function(use)
-									return math.clamp((use(offset) :: number) / 100, 0, 1)
+								ImageTransparency = function(use: Compose.Use)
+									return math.clamp((use(offset)) / 100, 0, 1)
 								end,
 							}
 						end,
@@ -452,7 +450,7 @@ local checks: { Check } = {
 			end, container)
 			local cold = os.clock() - started
 
-			local samples: { number } = table.create(FRAMES) :: { number }
+			local samples: { number } = reserve<<number>>(FRAMES)
 			for tick = 1, FRAMES do
 				local at = os.clock()
 				runtime:batch(function()

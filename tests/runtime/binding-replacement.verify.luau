@@ -7,6 +7,63 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("binding replacement", function()
+	it("owns constant bindings like literal properties", function(own)
+		local world = Support.world()
+		local literal = Compose.createOwner(world.runtime.reactor)
+		local bound = Compose.createOwner(world.runtime.reactor)
+		own(function()
+			Compose.owner.dispose(bound)
+			Compose.owner.dispose(literal)
+		end)
+		Compose.withOwner(literal, function()
+			world.create "Frame" { X = 12 }
+		end)
+		Compose.withOwner(bound, function()
+			world.create "Frame" {
+				X = function()
+					return 12
+				end,
+			}
+		end)
+		expect(Compose.owner.size(bound)):toBe(Compose.owner.size(literal))
+	end)
+
+	it("releases a constant binding callback and permits a reactive replacement", function(own)
+		local world = Support.world()
+		local owner = Compose.createOwner(world.runtime.reactor)
+		own(function()
+			Compose.owner.dispose(owner)
+		end)
+		local weak: { { number } } = {}
+		Support.weakValues(weak)
+		local node = Compose.withOwner(owner, function()
+			local payload = { 12 }
+			weak[1] = payload
+			return world.create "Frame" {
+				X = function()
+					return payload[1]
+				end,
+			}
+		end)
+		for _ = 1, 200 do
+			local garbage = table.create(4000)
+			for index = 1, 4000 do
+				garbage[index] = { index, index + 1 }
+			end
+		end
+		expect(weak[1]):toBe(nil)
+		expect(world.host.propertyOf(node, "X")):toBe(12)
+		local replacement = Compose.cell(12)
+		Compose.withOwner(owner, function()
+			world.runtime.decorate(node, { X = replacement })
+		end)
+		replacement:set(21)
+		world.settle()
+		expect(world.host.propertyOf(node, "X")):toBe(21)
+		Compose.owner.dispose(owner)
+		expect(world.host.isAlive(node)):toBe(false)
+	end)
+
 	it("replaces attributes independently from properties with the same name", function(own)
 		local world = Support.world()
 		local owner = Compose.createOwner(world.runtime.reactor)

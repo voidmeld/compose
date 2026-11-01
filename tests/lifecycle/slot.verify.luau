@@ -212,7 +212,7 @@ describe("replacement slot", function()
 			Compose.createSlot()
 		end):toThrow "slot/no-active-owner"
 		expect(function()
-			Compose.createSlot((Support.erased {}) :: Compose.Owner)
+			Support.invoke(Compose.createSlot, {})
 		end):toThrow "slot/invalid-owner"
 	end)
 
@@ -222,7 +222,7 @@ describe("replacement slot", function()
 			slot.bind(nil, function() end)
 		end):toThrow "slot/invalid-key"
 		expect(function()
-			slot.bind("a", (Support.erased(nil)) :: (Compose.Owner, () -> ()) -> ())
+			Support.invoke(slot.bind, "a", nil)
 		end):toThrow "slot/invalid-attach"
 		Compose.owner.dispose(owner)
 	end)

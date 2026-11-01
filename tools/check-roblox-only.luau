@@ -38,6 +38,7 @@ local function main(): number
 	local arguments = {
 		"luau-lsp",
 		"analyze",
+		"--flag:LuauSolverV2=true",
 		"--platform=roblox",
 		"--definitions=" .. CACHE,
 		"--base-luaurc=.luaurc",
@@ -52,6 +53,7 @@ local function main(): number
 	local plugin = {
 		"luau-lsp",
 		"analyze",
+		"--flag:LuauSolverV2=true",
 		"--platform=roblox",
 		"--definitions=" .. CACHE,
 		"--base-luaurc=.luaurc",
@@ -62,12 +64,8 @@ local function main(): number
 		if not checked(command) then
 			return 1
 		end
-		table.insert(command, 3, "--flag:LuauSolverV2=true")
-		if not checked(command) then
-			return 1
-		end
 	end
-	print "check-roblox-only: native verification type-checks under both solvers with the Studio plugin; engine checks have not run"
+	print "check-roblox-only: native verification and the Studio plugin type-check with Solver V2; engine checks have not run"
 	return 0
 end
 

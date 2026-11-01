@@ -31,7 +31,7 @@ describe("MountBudget", function()
 		local items = Compose.cell((function(value: { Item }): { Item }
 			return value
 		end) {})
-		local status = Compose.cell({} :: Compose.MountBudgetStatus)
+		local status: Compose.Value<Compose.MountBudgetStatus> = Compose.cell { total = 0, mounted = 0, pending = 0 }
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Root" {
 				Compose.MountBudget {
@@ -80,7 +80,7 @@ describe("MountBudget", function()
 			initial[index] = { id = index, priority = 0 }
 		end
 		items:set(initial)
-		local status = Compose.cell({} :: Compose.MountBudgetStatus)
+		local status: Compose.Value<Compose.MountBudgetStatus> = Compose.cell { total = 0, mounted = 0, pending = 0 }
 		local dispose, root = world.runtime.mount(function()
 			return world.create "Root" {
 				Compose.MountBudget {

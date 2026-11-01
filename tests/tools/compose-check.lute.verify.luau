@@ -478,18 +478,19 @@ Frame {
 	for _, constructor in
 		{
 			"Host.Frame",
-			'Host.Frame "Panel"',
+			"Host.Frame(",
 			"runtime.constructors.Frame",
-			'runtime.constructors.Frame "Panel"',
+			"runtime.constructors.Frame(",
 			"Cached",
-			'Cached "Panel"',
+			"Cached(",
 		}
 	do
 		it("checks callback children and directives in " .. constructor, function()
 			stage {
 				["screen.luau"] = "local Host = runtime.constructors\nlocal Cached = Host.Frame\nlocal show = Compose.show\n"
 					.. constructor
-					.. " { function() return Child {} end, show }\n",
+					.. " { function() return Child {} end, show }"
+					.. (if string.sub(constructor, -1) == "(" then ', "Panel")\n' else "\n"),
 			}
 			local ok, output = run()
 			process.run { "rm", "-rf", STAGE }
@@ -511,7 +512,7 @@ Frame {
 
 		it("accepts injected node children and called directives in " .. declaration, function()
 			local source = declaration
-				.. ' return Host.Frame "Panel" { Host.TextLabel { Text = "Hello" }, Compose.show { when = visible, render = Child } } end'
+				.. ' return Host.Frame({ Host.TextLabel { Text = "Hello" }, Compose.show { when = visible, render = Child } }, "Panel") end'
 			expect(consumerRules.scan(source, "screen.luau")):toEqual {}
 		end)
 	end
@@ -521,11 +522,11 @@ Frame {
 			["screen.luau"] = [[
 local Host = runtime.constructors
 local show = Compose.show
-return Host.Frame "Panel" {
+return Host.Frame({
     Host.TextLabel { Text = "Hello" },
     runtime.constructors.Frame { Name = "Child" },
     show { when = visible, render = Child },
-}
+}, "Panel")
 ]],
 		}
 		local ok, output = run()

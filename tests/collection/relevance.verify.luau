@@ -101,19 +101,13 @@ describe("relevance", function()
 
 		it("rejects a tier with no name", function()
 			expect(function()
-				Relevance.checkTiers(
-					{ (Support.erased { name = 4, radius = 10 }) :: Relevance.Tier },
-					"SpatialCollection"
-				)
+				Support.invoke(Relevance.checkTiers, { { name = 4, radius = 10 } }, "SpatialCollection")
 			end):toThrow "collection/tier-unnamed"
 		end)
 
 		it("rejects a tier with no usable radius", function()
 			expect(function()
-				Relevance.checkTiers(
-					{ (Support.erased { name = "full", radius = "near" }) :: Relevance.Tier },
-					"SpatialCollection"
-				)
+				Support.invoke(Relevance.checkTiers, { { name = "full", radius = "near" } }, "SpatialCollection")
 			end):toThrow "collection/tier-radius"
 		end)
 	end)

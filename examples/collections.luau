@@ -26,7 +26,20 @@ local function log(): (number, number)
 	local history = cell(messages)
 	local initialViewport: Compose.OrderedCollectionViewport = { offset = 10000 * ROW - 120, size = 120 }
 	local viewport = cell(initialViewport)
-	local status = cell({} :: Compose.OrderedCollectionStatus)
+	local status = cell<<Compose.OrderedCollectionStatus>> {
+		mode = "all",
+		direction = "vertical",
+		total = 0,
+		retained = 0,
+		first = 0,
+		last = 0,
+		firstRow = 0,
+		lastRow = 0,
+		rowCount = 0,
+		extent = 0,
+		following = false,
+		measured = 0,
+	}
 
 	local dispose, root = runtime.mount(function()
 		return Host.Frame {
@@ -100,7 +113,14 @@ local function field(): (number, number)
 	local camera = cell(initialCamera)
 	local initialPinned: { [number]: boolean } = {}
 	local pinned = cell(initialPinned)
-	local status = cell({} :: Compose.SpatialCollectionStatus)
+	local status = cell<<Compose.SpatialCollectionStatus>> {
+		total = 0,
+		retained = 0,
+		queried = 0,
+		pending = 0,
+		perTier = {},
+		cells = 0,
+	}
 
 	local dispose, field = runtime.mount(function()
 		return Host.Frame {

@@ -49,6 +49,18 @@ describe("diagnostics", function()
 end)
 
 describe("cells", function()
+	it("stores a function value without running it", function()
+		local runs = 0
+		local function stored(): number
+			runs += 1
+			return 42
+		end
+		local value = Compose.cell(stored)
+		expect(value:peek()):toBe(stored)
+		expect(runs):toBe(0)
+		expect(value:peek()()):toBe(42)
+		expect(runs):toBe(1)
+	end)
 	it("reads and writes", function()
 		local count = Compose.cell(0)
 		expect(count:peek()):toBe(0)
@@ -66,7 +78,7 @@ describe("cells", function()
 
 	it("does not run a thunk until the first read", function()
 		local ran = 0
-		local lazy = Compose.cell(function(): number
+		local lazy = Compose.lazyCell(function(): number
 			ran += 1
 			return 42
 		end)
@@ -79,7 +91,7 @@ describe("cells", function()
 
 	it("runs a thunk on a first write, so update sees the real value", function()
 		local ran = 0
-		local makeNumber: (number | (() -> number), Compose.Equals<number>?) -> Compose.Value<number> = Compose.cell
+		local makeNumber: (() -> number, Compose.Equals<number>?) -> Compose.Value<number> = Compose.lazyCell
 		local lazy = makeNumber(function(): number
 			ran += 1
 			return 10
@@ -89,6 +101,36 @@ describe("cells", function()
 		end)
 		expect(ran):toBe(1)
 		expect(lazy:peek()):toBe(15)
+	end)
+
+	it("caches nil initializers and derived results", function()
+		local initialized = 0
+		local source = Compose.lazyCell(function(): number?
+			initialized += 1
+			return nil
+		end)
+		local evaluated = 0
+		local compared = 0
+		local derived = Compose.formula(function(use): number?
+			evaluated += 1
+			return use(source)
+		end, function(current: number?, incoming: number?): boolean
+			compared += 1
+			return current == incoming
+		end)
+		expect(derived:peek()):toBe(nil)
+		expect(derived:peek()):toBe(nil)
+		expect(initialized):toBe(1)
+		expect(evaluated):toBe(1)
+		expect(compared):toBe(0)
+		source:set(3)
+		expect(derived:peek()):toBe(3)
+		source:set(nil)
+		expect(derived:peek()):toBe(nil)
+		expect(initialized):toBe(1)
+		expect(evaluated):toBe(3)
+		expect(compared):toBe(2)
+		derived:dispose()
 	end)
 
 	it("suppresses a write that does not change the value", function()

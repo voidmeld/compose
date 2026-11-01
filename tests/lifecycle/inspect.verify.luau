@@ -27,7 +27,7 @@ describe("inspector activation", function()
 		expect(report.active):toBe(false)
 		expect(#report.mounts):toBe(0)
 		expect(Compose.inspect.format(report)):toBe "compose inspect: not running\n"
-		expect(Compose.inspect.owner((Support.erased {}) :: Compose.Owner)):toBe(nil)
+		expect(Support.invoke(Compose.inspect.owner, {})):toBe(nil)
 	end)
 end)
 
@@ -115,13 +115,13 @@ describe("inspector attribution", function()
 		local world = Support.world()
 		Compose.inspect.start()
 
-		local made: Compose.Node = nil
+		local made: Compose.Node? = nil
 		local dispose = world.runtime.mount(function()
 			made = world.create "Frame" { Name = "Panel" }
 			return made
 		end, world.root)
 
-		local answer = Compose.inspect.node(made)
+		local answer = Compose.inspect.node(assert(made))
 		expect(answer.custody):toBe "owned"
 		expect(answer.ownerId ~= nil):toBe(true)
 		expect(string.find(answer.because, "disposed", 1, true) ~= nil):toBe(true)
@@ -136,14 +136,14 @@ describe("inspector attribution", function()
 
 	it("admits when it was not running for the thing being asked about", function()
 		local world = Support.world()
-		local made: Compose.Node = nil
+		local made: Compose.Node? = nil
 		local dispose = world.runtime.mount(function()
 			made = world.create "Frame" { Name = "Early" }
 			return made
 		end, world.root)
 
 		Compose.inspect.start()
-		local answer = Compose.inspect.node(made)
+		local answer = Compose.inspect.node(assert(made))
 		expect(answer.custody):toBe "owned"
 		expect(answer.ownerId):toBe(nil)
 		expect(string.find(answer.because, "not recorded", 1, true) ~= nil):toBe(true)
@@ -361,7 +361,7 @@ describe("inspector per-owner counts", function()
 	it("reports zero for an owner it never saw", function()
 		Compose.__resetForTests()
 		Compose.inspect.start()
-		expect(Compose.inspect.owned((Support.erased {}) :: Compose.Owner)):toEqual { ownedNodes = 0, borrowedNodes = 0 }
+		expect(Support.invoke(Compose.inspect.owned, {})):toEqual { ownedNodes = 0, borrowedNodes = 0 }
 		Compose.inspect.stop()
 	end)
 end)
@@ -371,17 +371,17 @@ describe("trackedNodes as a diagnostic", function()
 		Compose.__resetForTests()
 		local world = Support.world()
 		local priorOwner = Compose.createOwner(world.runtime.reactor)
-		local prior: Compose.Node = nil
+		local prior: Compose.Node? = nil
 		Compose.withOwner(priorOwner, function()
 			prior = world.create "Frame" { Name = "Prior" }
 		end)
 		expect(Compose.inspect.active()):toBe(false)
-		expect(Compose.custodyOf(prior)):toBe "owned"
+		expect(Compose.custodyOf(assert(prior))):toBe "owned"
 
 		Compose.__resetForTests()
 		Compose.inspect.start()
 		expect(Compose.inspect.snapshot().trackedNodes):toBe(0)
-		expect(Compose.custodyOf(prior)):toBe "borrowed"
+		expect(Compose.custodyOf(assert(prior))):toBe "borrowed"
 
 		local currentOwner = Compose.createOwner(world.runtime.reactor)
 		Compose.withOwner(currentOwner, function()
@@ -421,7 +421,7 @@ describe("inspector failure", function()
 				error "hostile owner"
 			end,
 		})
-		Compose.inspect.label(hostile, "hostile")
+		Support.invoke(Compose.inspect.label, hostile, "hostile")
 
 		local owner = Compose.createOwner()
 		local ran = 0

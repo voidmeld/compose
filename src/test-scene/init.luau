@@ -1,6 +1,7 @@
 --!strict
 
 local Compose = require "./core"
+local Dynamic = require "./core/dynamic"
 
 type Node = Compose.Node
 
@@ -301,7 +302,10 @@ local function create(options: Options?): TestScene
 			bucket = {}
 			record.handlers[event] = bucket
 		end
-		table.insert(bucket, (handler :: unknown) :: Handler)
+		local function relay(...: unknown)
+			Dynamic.invoke(handler, ...)
+		end
+		table.insert(bucket, relay)
 
 		local disconnected = false
 		return function()
@@ -315,7 +319,7 @@ local function create(options: Options?): TestScene
 				return
 			end
 			for index, candidate in current do
-				if candidate == handler then
+				if candidate == relay then
 					table.remove(current, index)
 					break
 				end

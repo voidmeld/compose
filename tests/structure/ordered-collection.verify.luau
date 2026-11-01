@@ -241,13 +241,13 @@ describe("OrderedCollection", function()
 			expect(function()
 				world.runtime.mount(function()
 					return world.create "Frame" {
-						Compose.OrderedCollection {
+						Support.invoke(Compose.OrderedCollection, {
 							from = Compose.cell(rows(3)),
-							mode = (Support.erased "virtual") :: Compose.OrderedCollectionMode,
+							mode = "virtual",
 							render = function()
 								return world.create "Row" {}
 							end,
-						},
+						}),
 					}
 				end, world.root)
 			end):toThrow "collection/unknown-mode"
@@ -333,7 +333,7 @@ describe("OrderedCollection", function()
 				function()
 					local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 20 }
 					local viewport = Compose.cell(initialViewport)
-					local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+					local status = Support.orderedStatus()
 					local dispose, root, items =
 						mount { count = 10, mode = "windowed", viewport = viewport, status = status }
 					local reordered = rows(10)
@@ -373,7 +373,7 @@ describe("OrderedCollection", function()
 		it("honors an unchanged explicit offset in the same batch as a permutation", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 20, offsetRevision = 1 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root, items = mount { count = 10, mode = "windowed", viewport = viewport, status = status }
 			world.batch(function()
 				local reordered = rows(10)
@@ -392,7 +392,7 @@ describe("OrderedCollection", function()
 			local columns = Compose.cell(2)
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 22, size = 10 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local layout = Compose.formula(function(use): Compose.OrderedCollectionLayout
 				return { kind = "grid", columns = use(columns), itemSize = 10 }
 			end)
@@ -428,7 +428,7 @@ describe("OrderedCollection", function()
 			local layout = Compose.cell(initialLayout)
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 82, size = 10 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root, items = mount {
 				count = 20,
 				mode = "windowed",
@@ -457,7 +457,7 @@ describe("OrderedCollection", function()
 			local layout = Compose.cell(initialLayout)
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 80, size = 20 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root = mount {
 				count = 10,
 				mode = "windowed",
@@ -481,7 +481,7 @@ describe("OrderedCollection", function()
 			local initialLayout: Compose.OrderedCollectionLayout =
 				{ kind = "grid", columns = 2, itemSize = 10, crossSize = 20 }
 			local layout = Compose.cell(initialLayout)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local states: { [string]: Compose.Value<number> } = {}
 			local dispose, root = world.runtime.mount(function()
 				return world.runtime.constructors.Frame {
@@ -540,7 +540,7 @@ describe("OrderedCollection", function()
 				local viewport = Compose.cell(initialViewport)
 				local initialLayout: Compose.OrderedCollectionLayout = { kind = "grid", columns = 2, itemSize = 10 }
 				local layout = Compose.cell(initialLayout)
-				local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+				local status = Support.orderedStatus()
 				local controls: Compose.OrderedCollectionControls<string> = {}
 				local dispose, root = mount {
 					count = 40,
@@ -576,7 +576,7 @@ describe("OrderedCollection", function()
 			local size = Compose.cell(10)
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 42, size = 20 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root = mount {
 				count = 30,
 				mode = "windowed",
@@ -606,7 +606,7 @@ describe("OrderedCollection", function()
 			local layout = Compose.cell(initialLayout)
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 42, size = 20 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root =
 				mount { count = 30, mode = "windowed", viewport = viewport, status = status, layout = layout }
 			world.batch(function()
@@ -624,7 +624,7 @@ describe("OrderedCollection", function()
 			local layout = Compose.cell(initialLayout)
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 80, size = 20 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root, items = mount {
 				count = 10,
 				mode = "windowed",
@@ -653,7 +653,7 @@ describe("OrderedCollection", function()
 			local layout = Compose.cell(initialLayout)
 			local initialMeasured: { [string]: number } = { r1 = 40, r3 = 30 }
 			local measured = Compose.cell(initialMeasured)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose = mount { count = 6, mode = "all", layout = layout, measured = measured, status = status }
 			expect(status:peek().extent):toBe(80)
 			layout:set { kind = "grid", columns = 3, itemSize = 20, gap = 5 }
@@ -673,7 +673,7 @@ describe("OrderedCollection", function()
 			local dispose, root = mount { count = 3, mode = "all", layout = layout }
 			local before = table.clone(world.host.childrenOf(root))
 			expect(function()
-				layout:set((Support.erased { kind = "unknown" }) :: Compose.OrderedCollectionLayout)
+				Support.invokeMethod(layout, "set", { kind = "unknown" })
 				world.settle()
 			end):toThrow "collection/unknown-layout"
 			expect(world.host.childrenOf(root)):toEqual(before)
@@ -706,7 +706,7 @@ describe("OrderedCollection", function()
 			local viewport = Compose.cell(initialViewport)
 			local initialMeasured: { [string]: number } = {}
 			local measured = Compose.cell(initialMeasured)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose = mount {
 				count = 50,
 				mode = "windowed",
@@ -726,7 +726,7 @@ describe("OrderedCollection", function()
 			local viewport = Compose.cell(initialViewport)
 			local initialMeasured: { [string]: number } = { r1 = 25 }
 			local measured = Compose.cell(initialMeasured)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, root = mount {
 				count = 50,
 				mode = "windowed",
@@ -748,7 +748,7 @@ describe("OrderedCollection", function()
 		it("drops measurements for keys that leave the population", function()
 			local initialMeasured: { [string]: number } = { r1 = 25 }
 			local measured = Compose.cell(initialMeasured)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, _, items = mount {
 				count = 2,
 				mode = "all",
@@ -770,7 +770,7 @@ describe("OrderedCollection", function()
 		it("asks to move to the end while the viewport is at it", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 70, size = 30 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, _, items =
 				mount { count = 10, mode = "windowed", viewport = viewport, follow = "end", status = status }
 			expect(status:peek().following):toBe(true)
@@ -787,7 +787,7 @@ describe("OrderedCollection", function()
 		it("lets go once the reader scrolls away from the end", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 70, size = 30 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose = mount {
 				count = 10,
 				mode = "windowed",
@@ -807,7 +807,7 @@ describe("OrderedCollection", function()
 		it("re-engages when the reader returns to the end", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 10, size = 30 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose = mount {
 				count = 10,
 				mode = "windowed",
@@ -827,7 +827,7 @@ describe("OrderedCollection", function()
 		it("asks to shift the view by exactly what was inserted above it", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 40, size = 30 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose, _, items = mount { count = 20, mode = "windowed", viewport = viewport, status = status }
 			expect(status:peek().first):toBe(5)
 
@@ -850,7 +850,7 @@ describe("OrderedCollection", function()
 		it("publishes the retained range and the full extent", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose = mount { count = 50, mode = "windowed", viewport = viewport, status = status }
 			local published = status:peek()
 			expect(published.total):toBe(50)
@@ -949,7 +949,7 @@ describe("OrderedCollection", function()
 		it("leaves the status alone while every published field stays the same", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 100 }
 			local viewport = Compose.cell(initialViewport)
-			local status = Compose.cell({} :: Compose.OrderedCollectionStatus)
+			local status = Support.orderedStatus()
 			local dispose = mount { count = 10000, mode = "windowed", viewport = viewport, status = status }
 			viewport:set { offset = 1, size = 100 }
 			world.settle()
@@ -1091,13 +1091,13 @@ describe("OrderedCollection", function()
 			expect(function()
 				world.runtime.mount(function()
 					return world.create "Frame" {
-						Compose.OrderedCollection {
+						Support.invoke(Compose.OrderedCollection, {
 							from = Compose.cell(rows(3)),
-							layout = (Support.erased { rowHeight = 10 }) :: Compose.OrderedCollectionLayout,
+							layout = { rowHeight = 10 },
 							render = function()
 								return world.create "Row" {}
 							end,
-						},
+						}),
 					}
 				end, world.root)
 			end):toThrow "structure/unknown-option"

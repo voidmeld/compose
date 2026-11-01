@@ -198,6 +198,7 @@ describe("Author.bake.dataModule", function()
 		local firstEntry = spec.entries[1]
 		local position = Support.record(firstEntry.position)
 		position.x = 999
+		firstEntry.position = position
 		local after = Author.bake.dataModule(spec)
 
 		expect(before == after):toBe(false)

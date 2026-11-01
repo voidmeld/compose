@@ -19,6 +19,41 @@ end
 
 describe("ownership", function()
 	describe("owners", function()
+		it("releases a dependency-free watch callback while preserving its cleanup", function()
+			for _, cleanup in { false, true } do
+				local root = Compose.createOwner()
+				local weak: { { number } } = {}
+				Support.weakValues(weak)
+				local runs, released = 0, 0
+				local function register(): () -> ()
+					local payload = { 1 }
+					weak[1] = payload
+					return Compose.owner.watch(root, function()
+						runs += payload[1]
+						if cleanup then
+							Compose.cleanup(function()
+								released += 1
+							end)
+						end
+					end)
+				end
+				local stop = register()
+				for _ = 1, 200 do
+					local garbage = table.create(4000)
+					for index = 1, 4000 do
+						garbage[index] = { index, index + 1 }
+					end
+				end
+				expect(weak[1]):toBe(nil)
+				expect(runs):toBe(1)
+				expect(released):toBe(0)
+				stop()
+				stop()
+				Compose.owner.dispose(root)
+				expect(released):toBe(if cleanup then 1 else 0)
+			end
+		end)
+
 		it("releases cleanup captures even while a used disposer is retained", function()
 			for _, method in { "release", "dispose", "rollback" } do
 				for _, after in { false, true } do
@@ -457,7 +492,7 @@ describe("ownership", function()
 			Compose.owner.dispose(newer)
 			expect(childOk):toBe(true)
 			expect(childCause):toBe(nil)
-			expect(world.host.isAlive(node)):toBe(true)
+			expect(world.host.isAlive(assert(node))):toBe(true)
 			expect(releases):toBe(0)
 			source:set(2)
 			expect(releases):toBe(1)
@@ -517,7 +552,7 @@ describe("ownership", function()
 					expect(childOk):toBe(true)
 					expect(afterOlder):toBe(1)
 					expect(releases):toBe(1)
-					expect(world.host.isAlive(node)):toBe(false)
+					expect(world.host.isAlive(assert(node))):toBe(false)
 				end
 				expect(world.host.isAlive(borrowed)):toBe(true)
 				expect(world.host.liveSubscriptions()):toBe(0)
@@ -556,7 +591,7 @@ describe("ownership", function()
 			end)
 			pulse:set(1)
 			Compose.owner.dispose(owner)
-			local retained = world.host.isAlive(node)
+			local retained = world.host.isAlive(assert(node))
 			local retainedSubscriptions = world.host.liveSubscriptions()
 			local prematureReleases = releases
 			local release = required(dispose)
@@ -679,12 +714,12 @@ describe("ownership", function()
 			expect(Compose.outstandingMounts()):toBe(2)
 
 			secondDispose()
-			expect(world.host.isAlive(lateNode)):toBe(true)
+			expect(world.host.isAlive(assert(lateNode))):toBe(true)
 			expect(world.host.liveSubscriptions()):toBe(1)
 
 			local releaseFirst = required(firstDispose)
 			releaseFirst()
-			expect(world.host.isAlive(lateNode)):toBe(false)
+			expect(world.host.isAlive(assert(lateNode))):toBe(false)
 			expectClean(world)
 		end)
 
@@ -739,9 +774,9 @@ describe("ownership", function()
 				return world.create "Frame" {}
 			end, world.root)
 
-			expect(world.host.isAlive(inner)):toBe(true)
+			expect(world.host.isAlive(assert(inner))):toBe(true)
 			dispose()
-			expect(world.host.isAlive(inner)):toBe(false)
+			expect(world.host.isAlive(assert(inner))):toBe(false)
 			expectClean(world)
 		end)
 
@@ -814,7 +849,7 @@ describe("ownership", function()
 			local owner = Compose.createOwner()
 			expect(function()
 				Compose.withOwner(owner, function()
-					Compose.bindOwner((Support.erased(42)) :: () -> ())
+					Support.invoke(Compose.bindOwner, 42)
 				end)
 			end):toThrow "owner/bind-body-not-a-function"
 			Compose.owner.dispose(owner)

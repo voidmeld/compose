@@ -47,13 +47,13 @@ describe("accumulators", function()
 		local _, owner = domain()
 		expect(function()
 			Compose.withOwner(owner, function()
-				Compose.accumulator {
-					from = (Support.erased { latest = 1 }) :: Compose.ReadOnlyValue<number>,
+				Support.invoke(Compose.accumulator, {
+					from = { latest = 1 },
 					reduce = function(previous: number, _event: number): number
 						return previous
 					end,
 					initial = 0,
-				}
+				})
 			end)
 		end):toThrow "cell or a formula"
 		Compose.owner.dispose(owner)
@@ -63,11 +63,11 @@ describe("accumulators", function()
 		local _, owner = domain()
 		expect(function()
 			Compose.withOwner(owner, function()
-				Compose.accumulator {
+				Support.invoke(Compose.accumulator, {
 					from = Compose.cell(0),
-					reduce = (Support.erased(5)) :: (number, number) -> number,
+					reduce = 5,
 					initial = 0,
-				}
+				})
 			end)
 		end):toThrow "reduce"
 		Compose.owner.dispose(owner)
@@ -77,13 +77,13 @@ describe("accumulators", function()
 		local _, owner = domain()
 		expect(function()
 			Compose.withOwner(owner, function()
-				Compose.accumulator((Support.erased {
+				Support.invoke(Compose.accumulator, {
 					from = Compose.cell(0),
 					reduce = function(previous: number, _event: number): number
 						return previous
 					end,
 					reducer = true,
-				}) :: Compose.AccumulatorOptions<number, number>)
+				})
 			end)
 		end):toThrow "option"
 		Compose.owner.dispose(owner)

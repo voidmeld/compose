@@ -39,7 +39,7 @@ describe("setYieldChecking", function()
 
 	it("reports a lazy cell initialiser that yields as an error, not a suspension", function()
 		Compose.setYieldChecking(true)
-		local lazy = Compose.cell(function(): number
+		local lazy = Compose.lazyCell(function(): number
 			coroutine.yield()
 			return 1
 		end)
@@ -113,7 +113,7 @@ describe("setYieldChecking", function()
 
 	it("names the remedy: work that waits belongs in an async resource", function()
 		Compose.setYieldChecking(true)
-		local lazy = Compose.cell(function(): number
+		local lazy = Compose.lazyCell(function(): number
 			coroutine.yield()
 			return 1
 		end)

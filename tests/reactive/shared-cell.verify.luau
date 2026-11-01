@@ -30,13 +30,13 @@ describe("shared cells", function()
 		expect(anchor:peek()):toBe "south"
 	end)
 
-	it("is readable, by the same metatable test as a cell", function()
+	it("is registered as a readable like a cell", function()
 		expect(Compose.isValue(Compose.sharedCell(0))):toBe(true)
 	end)
 
-	it("defers a thunk until the first read, exactly as a cell does", function()
+	it("uses the explicit lazy constructor for shared deferred state", function()
 		local ran = 0
-		local lazy = Compose.sharedCell(function(): number
+		local lazy = Compose.lazyCell(function(): number
 			ran += 1
 			return 42
 		end)

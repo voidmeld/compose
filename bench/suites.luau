@@ -226,9 +226,9 @@ local function workloadEntry(workload: Workloads.Workload, position: number, obs
 		memory = function(plantedBytes: number?): Lute.MemoryResult
 			local framework = composeFramework()
 			local case = assert(workload.cases.compose)
+			local environment, context = makeContext(framework)
 			return measureRetained({
 				setup = function()
-					local environment, context = makeContext(framework)
 					local state = case.prepare(context)
 					environment.drain()
 					return { environment = environment, context = context, state = state }
@@ -245,6 +245,7 @@ local function workloadEntry(workload: Workloads.Workload, position: number, obs
 				end,
 				warmup = workload.warmup,
 				iterations = 1,
+				rehearsals = 1,
 			}, plantedBytes)
 		end,
 	}
@@ -450,9 +451,9 @@ local function scenarioEntry(scenario: Types.Scenario, scale: Types.Scale, posit
 		memory = function(plantedBytes: number?): Lute.MemoryResult
 			local framework = composeFramework()
 			local case = assert(scenario.cases.compose)
+			local environment, context = makeContext(framework)
 			return measureRetained({
 				setup = function(): { environment: Environment.Environment, context: Types.Context, state: Types.State }
-					local environment, context = makeContext(framework)
 					local state = case.build(context, scale)
 					environment.drain()
 					return { environment = environment, context = context, state = state }
@@ -477,6 +478,7 @@ local function scenarioEntry(scenario: Types.Scenario, scale: Types.Scale, posit
 					sample.environment.drain()
 				end,
 				iterations = 1,
+				rehearsals = 1,
 			}, plantedBytes)
 		end,
 	}

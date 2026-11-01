@@ -214,20 +214,20 @@ describe("owner scheduler", function()
 			world.runtime.scheduler()
 		end):toThrow "owner/no-active-owner"
 		expect(function()
-			world.runtime.scheduler((Support.erased {}) :: Compose.Owner)
+			Support.invoke(world.runtime.scheduler, {})
 		end):toThrow "scheduler/invalid-owner"
 	end)
 
 	it("refuses bad delays and bodies without scheduling", function()
 		local world = Support.world()
 		local scheduler, owner = owned(world)
-		for _, bad in { -1, math.huge - math.huge, math.huge, (Support.erased "1") :: number } do
+		for _, bad in { -1, math.huge - math.huge, math.huge, "1" } do
 			expect(function()
-				scheduler.after(bad, function() end)
+				Support.invoke(scheduler.after, bad, function() end)
 			end):toThrow "scheduler/invalid-delay"
 		end
 		expect(function()
-			scheduler.after(0.1, (Support.erased(nil)) :: () -> ())
+			Support.invoke(scheduler.after, 0.1, nil)
 		end):toThrow "scheduler/invalid-body"
 		expect(scheduler.pending()):toBe(0)
 		expect(world.host.counts().frameListeners):toBe(0)
