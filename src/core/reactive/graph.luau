@@ -64,9 +64,9 @@ local function resumeSet(producer: Node)
 		if edge ~= nil then
 			local consumer = edge[2]
 			if consumer ~= nil then
-				consumer.coalesced = nil
+				consumer.coalesced = false
 			else
-				edge.coalesced = nil
+				edge.coalesced = false
 			end
 		end
 		producer.coalescing = nil
@@ -691,7 +691,9 @@ local function listenEdge(
 			nil,
 			version = producer.version,
 			reactor = reactor,
+			queued = false,
 			listener = listener,
+			coalesced = false,
 			subject = subject,
 			fastKey = key,
 		}
@@ -702,7 +704,9 @@ local function listenEdge(
 			nil,
 			version = producer.version,
 			reactor = reactor,
+			queued = false,
 			listener = listener,
+			coalesced = false,
 			subject = subject,
 			fastKey = key,
 			transform = transform,
@@ -739,7 +743,9 @@ local function listen(reactor: Types.Reactor, producer: Node, listener: (unknown
 		nil,
 		version = producer.version,
 		reactor = reactor,
+		queued = false,
 		listener = listener,
+		coalesced = false,
 	}
 	Nodes.classify(edge, class)
 	if statsOn.enabled then

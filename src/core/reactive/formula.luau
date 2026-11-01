@@ -139,7 +139,11 @@ function FORMULA.refresh(self: Node)
 		end
 		return
 	end
-	Dynamic.cache(self, incoming)
+	if previousCache ~= nil then
+		previousCache.value = incoming
+	else
+		Dynamic.cache(self, incoming)
+	end
 	local version = clockState.now + 1
 	clockState.now = version
 	self.version = version
