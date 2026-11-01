@@ -3,6 +3,7 @@
 
 local Evaluation = require "./evaluation"
 local stats = Evaluation.stats
+local Dynamic = require "../dynamic"
 local Graph = require "./graph"
 local Nodes = require "./node"
 local Types = require "./types"
@@ -260,9 +261,7 @@ local function terminalNode(reactor: Reactor, body: Body, guarded: boolean?): No
 end
 
 local function watchStatic<T>(reactor: Reactor, value: Types.ReadOnlyValue<T>, body: (value: T) -> ()): Dispose
-	return Graph.listen(reactor, Graph.nodeOf(value), function(_incoming: unknown)
-		body(Nodes.readCached(value))
-	end)
+	return Graph.listen(reactor, Graph.nodeOf(value), Dynamic.listener(body))
 end
 
 local function sample<T>(body: () -> T): T

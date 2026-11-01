@@ -35,6 +35,7 @@ local dynamicWrite = erase<<(object: unknown, key: unknown, value: unknown) -> (
 local entries = erase<<(props: unknown) -> { [number]: Host.Child? }>>(identity)
 local props = erase<<(source: unknown) -> Host.PropTable>>(identity)
 local handler = erase<<(callback: Host.PropFunction) -> (...unknown) -> ()>>(identity)
+local listener = erase<<(callback: unknown) -> (unknown) -> ()>>(identity)
 local node = erase<<(subject: unknown) -> Types.Node>>(identity)
 local valueNode = erase<<(subject: unknown) -> Types.Node & Types.ReadOnlyValue<unknown>>>(identity)
 local nodeList = erase<<(produced: unknown) -> { Host.Node }>>(identity)
@@ -52,6 +53,7 @@ return {
 	valueNode = valueNode,
 	entries = entries,
 	handler = handler,
+	listener = listener,
 	props = props,
 	invoke = dynamicInvoke,
 	raw = dynamicRaw,
