@@ -39,7 +39,7 @@ local function validate(set: EntrySet, rules: Rules): (boolean, { Violation })
 	if refs ~= nil then
 		for index, rule in ipairs(refs) do
 			if rule.into == nil and rule.oneOf == nil then
-				Diagnostics.raise(
+				return Diagnostics.raise(
 					"rules/refs-without-target",
 					("refs rule %d has neither into nor oneOf"):format(index),
 					{

@@ -35,14 +35,12 @@ local function clock()
 	local hour = Compose.formula(function(use): number
 		return use(now) % 24
 	end)
-	local phase = (
-		Compose.formula(function(use): Phase
-			return phaseAt(use(hour))
-		end) :: unknown
-	) :: Compose.Value<Phase>
+	local phase = (Compose.formula(function(use): Phase
+		return phaseAt(use(hour))
+	end))
 	local tide = (Compose.formula(function(use): Tide
 		return tideAt(use(hour))
-	end) :: unknown) :: Compose.Value<Tide>
+	end))
 	local result: Clock = {
 		now = now,
 		hour = hour,

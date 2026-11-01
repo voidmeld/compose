@@ -2,6 +2,7 @@
 
 local Design = require "../../src/design"
 local DesignEditor = require "../../src/design-editor"
+local EditorUI = require "../../src/design-editor/ui"
 local Compose = require "../../src/core"
 local Support = require "./editor-support"
 local Test = require "../harness"
@@ -9,6 +10,16 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("reads native vector components without treating the value as an Instance", function()
+		local w = Support.world()
+		local ui = EditorUI.create(w.runtime, w.environment)
+		local value = vector.create(3, 4, 5)
+		expect(ui.vector(value)):toEqual { X = 3, Y = 4, Z = 5 }
+		expect(ui.point(value)):toEqual { X = 3, Y = 4 }
+		ui.dispose()
+		w.close()
+	end)
+
 	it("renders resolved datatype components through the host and releases reactive bindings", function()
 		local w = Support.world()
 		local kind = w.library.kinds[w.document.root.kind]
@@ -39,12 +50,12 @@ describe("host-neutral design editor", function()
 		)
 		local initial: Design.Literal? = 48
 		local height = Compose.cell(initial)
-		local dispose, root = w.runtime.mount(function(): unknown
-			return Design.render(value, w.library, {
+		local dispose, root = w.runtime.mount(function(): Compose.Node
+			return Support.node(Design.render(value, w.library, {
 				resolveToken = function(name: string): Design.Resolved
 					return if name == "size.pill" then { readable = height } else { literal = 240 }
 				end,
-			})
+			}))
 		end, w.screen)
 		w.settle()
 		expect(w.point(root, "AbsoluteSize")):toEqual { X = 240, Y = 48 }
@@ -167,7 +178,7 @@ describe("host-neutral design editor", function()
 				end,
 				slots = {
 					content = function(): unknown
-						return w.runtime.constructors.TextLabel "PreviewSlot" { Text = "Slot" }
+						return w.runtime.constructors.TextLabel({ Text = "Slot" }, "PreviewSlot")
 					end,
 				},
 			}
@@ -281,12 +292,12 @@ describe("host-neutral design editor", function()
 		value, hint = Design.document.insert(value, library, "n1", "Choice")
 		value = Design.document.rename(value, library, hint, "Hint")
 		value = Design.document.showWhen(value, library, hint, "hint")
-		local rows = Compose.cell({ { id = "a", label = "First", index = 1 } } :: { Design.Row })
-		local shown = Compose.cell(true :: Design.Literal?)
+		local rows = Compose.cell { { id = "a", label = "First", index = 1 } }
+		local shown = Compose.cell(true)
 		local width = Compose.cell(200)
 		local selected: Design.Literal? = nil
-		local function render(): unknown
-			return Design.render(value, library, {
+		local function render(): Compose.Node
+			return Support.node(Design.render(value, library, {
 				bindings = {
 					size = {
 						value = function(use: Compose.Use): unknown
@@ -298,7 +309,7 @@ describe("host-neutral design editor", function()
 				},
 				slots = {
 					overlay = function(): unknown
-						return w.runtime.constructors.Frame "Overlay" {}
+						return w.runtime.constructors.Frame({}, "Overlay")
 					end,
 				},
 				outputs = {
@@ -306,7 +317,7 @@ describe("host-neutral design editor", function()
 						selected = args[1]
 					end,
 				},
-			})
+			}))
 		end
 		local dispose, root = w.runtime.mount(render, w.screen)
 		w.settle()
@@ -349,7 +360,7 @@ describe("host-neutral design editor", function()
 			if key == "Name" and value == "NodeName" then
 				error "inspector construction failed"
 			end
-			write(node, key, value)
+			write(Support.node(node), key, value)
 		end
 		expect(function()
 			w.mount()

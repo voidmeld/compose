@@ -543,10 +543,10 @@ describe("keyed below the root", function()
 	local function listOf(world: Support.World, items: Compose.ReadOnlyValue<{ { id: number } }>)
 		local Label = world.create "Label"
 		return Compose.keyed {
-			from = function(use)
+			from = function(use: Compose.Use)
 				return use(items)
 			end,
-			render = function(item)
+			render = function(item: Compose.ReadOnlyValue<{ id: number }>)
 				return Label {
 					Text = function(use)
 						return tostring(use(item).id)

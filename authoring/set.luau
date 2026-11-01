@@ -45,7 +45,9 @@ local function byRole(self: EntrySet, role: string): { Entry }
 end
 
 local function idOf(self: EntrySet, entry: Entry): string
-	return entry[self.idKey] :: string
+	local id = entry[self.idKey]
+	assert(type(id) == "string")
+	return id
 end
 
 local function roleOf(self: EntrySet, entry: Entry): string?
@@ -65,34 +67,34 @@ end
 
 local function set(options: SetOptions): EntrySet
 	if type(options) ~= "table" then
-		Diagnostics.raise("set/not-a-declaration", "Author.set was not given a declaration table", {
+		return Diagnostics.raise("set/not-a-declaration", "Author.set was not given a declaration table", {
 			actual = Diagnostics.describe(options),
 			expected = "a table with name, idKey, and entries",
 		})
 	end
 	if type(options.name) ~= "string" or options.name == "" then
-		Diagnostics.raise("set/missing-name", "the declaration has no name", {
+		return Diagnostics.raise("set/missing-name", "the declaration has no name", {
 			actual = Diagnostics.describe(options.name),
 			expected = "a non-empty string",
 			contract = "violations, digests, and generated headers all name their set",
 		})
 	end
 	if type(options.idKey) ~= "string" or options.idKey == "" then
-		Diagnostics.raise("set/missing-id-key", "the declaration has no idKey", {
+		return Diagnostics.raise("set/missing-id-key", "the declaration has no idKey", {
 			set = options.name,
 			actual = Diagnostics.describe(options.idKey),
 			expected = "the name of the entry field that carries the identity",
 		})
 	end
 	if options.role ~= nil and options.roleKey ~= nil then
-		Diagnostics.raise("set/role-conflict", "the declaration names both a fixed role and a roleKey", {
+		return Diagnostics.raise("set/role-conflict", "the declaration names both a fixed role and a roleKey", {
 			set = options.name,
 			contract = "an entry's role comes from exactly one place",
 			fix = "keep role for a homogeneous set, roleKey for a mixed one",
 		})
 	end
 	if type(options.entries) ~= "table" then
-		Diagnostics.raise("set/missing-entries", "the declaration has no entries array", {
+		return Diagnostics.raise("set/missing-entries", "the declaration has no entries array", {
 			set = options.name,
 			actual = Diagnostics.describe(options.entries),
 			expected = "an array of plain entry tables",
@@ -100,23 +102,27 @@ local function set(options: SetOptions): EntrySet
 	end
 	for index, entry in ipairs(options.entries) do
 		if type(entry) ~= "table" then
-			Diagnostics.raise("set/entry-not-a-table", ("entry %d is not a table"):format(index), {
+			return Diagnostics.raise("set/entry-not-a-table", ("entry %d is not a table"):format(index), {
 				set = options.name,
 				index = index,
 				actual = Diagnostics.describe(entry),
 				expected = "a plain table of authored fields",
 			})
 		end
-		local id = (entry :: Entry)[options.idKey]
+		local id = (entry)[options.idKey]
 		if type(id) ~= "string" or id == "" then
-			Diagnostics.raise("set/entry-missing-id", ("entry %d has no %q id field"):format(index, options.idKey), {
-				set = options.name,
-				index = index,
-				key = options.idKey,
-				actual = Diagnostics.describe(id),
-				expected = "a non-empty string",
-				contract = "every entry carries its idKey as a string",
-			})
+			return Diagnostics.raise(
+				"set/entry-missing-id",
+				("entry %d has no %q id field"):format(index, options.idKey),
+				{
+					set = options.name,
+					index = index,
+					key = options.idKey,
+					actual = Diagnostics.describe(id),
+					expected = "a non-empty string",
+					contract = "every entry carries its idKey as a string",
+				}
+			)
 		end
 	end
 

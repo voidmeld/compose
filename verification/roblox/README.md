@@ -7,7 +7,7 @@ Cases test native property rejection, failed construction, class defaults, layou
 Each case requires `roblox-engine`.
 The entry declares that capability only on a native host.
 Simulation reports these cases as unsupported.
-The gate checks their types under both solvers with the official Roblox declarations pinned in `dependencies.lock.luau`.
+The gate checks their types with Solver V2 and the official Roblox declarations pinned in `dependencies.lock.luau`.
 Type checking does not run the engine.
 
 ## Run the checks

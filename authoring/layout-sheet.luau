@@ -78,42 +78,47 @@ local function escape(value: string): string
 end
 
 local function refuse(code: string, summary: string, set: EntrySet?, id: string?, fields: Diagnostics.Fields?): never
-	local details: Diagnostics.Fields = if fields == nil then {} else table.clone(fields)
-	if set ~= nil then
-		details.set = set.name
-	end
-	if id ~= nil then
-		details.entryId = id
-	end
+	local original: Diagnostics.Fields = fields or {}
+	local details: Diagnostics.Fields = {
+		set = if set ~= nil then set.name else original.set,
+		entryId = id or original.entryId,
+		key = original.key,
+		index = original.index,
+		expected = original.expected,
+		actual = original.actual,
+		contract = original.contract,
+		fix = original.fix,
+		detail = original.detail,
+	}
 	return Diagnostics.raise("layout-sheet/" .. code, summary, details)
 end
 
 local function requireText(value: unknown, key: string): string
 	if type(value) ~= "string" or value == "" then
-		refuse("invalid-spec", ("layout sheet has no %s"):format(key), nil, nil, {
+		return refuse("invalid-spec", ("layout sheet has no %s"):format(key), nil, nil, {
 			key = key,
 			actual = Diagnostics.describe(value),
 			expected = "a non-empty string",
 		})
 	end
-	return value :: string
+	return value
 end
 
 local function requireFinite(value: unknown, key: string, set: EntrySet?, id: string?): number
-	if not isFinite(value) then
-		refuse("nonfinite-geometry", ("%s is not finite"):format(key), set, id, {
+	if type(value) ~= "number" or not isFinite(value) then
+		return refuse("nonfinite-geometry", ("%s is not finite"):format(key), set, id, {
 			key = key,
 			actual = Diagnostics.describe(value),
 			expected = "a finite number",
 		})
 	end
-	return value :: number
+	return value
 end
 
 local function requirePositive(value: unknown, key: string, set: EntrySet?, id: string?): number
 	local finite = requireFinite(value, key, set, id)
 	if finite <= 0 then
-		refuse("nonpositive-extent", ("%s must be positive"):format(key), set, id, {
+		return refuse("nonpositive-extent", ("%s must be positive"):format(key), set, id, {
 			key = key,
 			actual = Diagnostics.describe(value),
 			expected = "a finite number greater than zero",
@@ -125,13 +130,13 @@ end
 local function requireLabel(entry: Entry, set: EntrySet, id: string): string?
 	local label = entry.label
 	if label ~= nil and type(label) ~= "string" then
-		refuse("invalid-label", ("entry %q has a non-string label"):format(id), set, id, {
+		return refuse("invalid-label", ("entry %q has a non-string label"):format(id), set, id, {
 			key = "label",
 			actual = Diagnostics.describe(label),
 			expected = "a string when present",
 		})
 	end
-	return label :: string?
+	return label
 end
 
 local function requireCoordinateSpace(entry: Entry, declared: string, set: EntrySet, id: string)
@@ -148,17 +153,17 @@ end
 
 local function requirePoints(value: unknown, set: EntrySet, id: string): { Point }
 	if type(value) ~= "table" then
-		refuse("invalid-polyline", ("polyline %q has no points array"):format(id), set, id, {
+		return refuse("invalid-polyline", ("polyline %q has no points array"):format(id), set, id, {
 			key = "points",
 			actual = Diagnostics.describe(value),
 			expected = "an array of at least two { x, y } points",
 		})
 	end
-	local source = value :: { [unknown]: unknown }
+	local source = assert(Diagnostics.fields(value))
 	local count = 0
 	for key in source do
 		if type(key) ~= "number" or key < 1 or key ~= math.floor(key) then
-			refuse("invalid-polyline", ("polyline %q points are not an array"):format(id), set, id, {
+			return refuse("invalid-polyline", ("polyline %q points are not an array"):format(id), set, id, {
 				key = "points",
 				expected = "an array of at least two { x, y } points",
 			})
@@ -166,25 +171,27 @@ local function requirePoints(value: unknown, set: EntrySet, id: string): { Point
 		count += 1
 	end
 	if count ~= #source or count < 2 then
-		refuse("short-polyline", ("polyline %q needs at least two points"):format(id), set, id, {
+		return refuse("short-polyline", ("polyline %q needs at least two points"):format(id), set, id, {
 			key = "points",
 			actual = ("%d point(s)"):format(count),
 			expected = "at least two points",
 		})
 	end
 	local points: { Point } = {}
-	for index, point in ipairs(source :: { unknown }) do
+	for index = 1, count do
+		local point = source[index]
 		if type(point) ~= "table" then
-			refuse("invalid-polyline", ("polyline %q point %d is not a point"):format(id, index), set, id, {
+			return refuse("invalid-polyline", ("polyline %q point %d is not a point"):format(id, index), set, id, {
 				key = "points",
 				index = index,
 				actual = Diagnostics.describe(point),
 				expected = "a table with finite x and y numbers",
 			})
 		end
+		local coordinates = assert(Diagnostics.fields(point))
 		table.insert(points, {
-			x = requireFinite((point :: { [string]: unknown }).x, ("points[%d].x"):format(index), set, id),
-			y = requireFinite((point :: { [string]: unknown }).y, ("points[%d].y"):format(index), set, id),
+			x = requireFinite(coordinates.x, ("points[%d].x"):format(index), set, id),
+			y = requireFinite(coordinates.y, ("points[%d].y"):format(index), set, id),
 		})
 	end
 	return points
@@ -192,7 +199,7 @@ end
 
 local function layoutSheet(spec: LayoutSheetSpec): LayoutSheet
 	if type(spec) ~= "table" then
-		refuse("invalid-spec", "Author.bake.layoutSheet was not given a specification table", nil, nil, {
+		return refuse("invalid-spec", "Author.bake.layoutSheet was not given a specification table", nil, nil, {
 			actual = Diagnostics.describe(spec),
 			expected = "a layout sheet specification",
 		})
@@ -201,13 +208,13 @@ local function layoutSheet(spec: LayoutSheetSpec): LayoutSheet
 	local coordinateSpace = requireText(spec.coordinateSpace, "coordinateSpace")
 	local unit = requireText(spec.unit, "unit")
 	if type(spec.bounds) ~= "table" then
-		refuse("invalid-bounds", "layout sheet has no bounds", nil, nil, {
+		return refuse("invalid-bounds", "layout sheet has no bounds", nil, nil, {
 			actual = Diagnostics.describe(spec.bounds),
 			expected = "finite x and y with positive width and height",
 		})
 	end
 	if type(spec.set) ~= "table" or type(spec.set.entries) ~= "table" or type(spec.set.idOf) ~= "function" then
-		refuse("invalid-set", "layout sheet has no semantic entry set", nil, nil, {
+		return refuse("invalid-set", "layout sheet has no semantic entry set", nil, nil, {
 			actual = Diagnostics.describe(spec.set),
 			expected = "an EntrySet returned by Author.set",
 		})
@@ -236,7 +243,7 @@ local function layoutSheet(spec: LayoutSheetSpec): LayoutSheet
 	for _, entry in set.entries do
 		local id = set:idOf(entry)
 		if entries[id] ~= nil then
-			refuse("duplicate-id", ("id %q appears more than once in set %q"):format(id, set.name), set, id, {
+			return refuse("duplicate-id", ("id %q appears more than once in set %q"):format(id, set.name), set, id, {
 				contract = "each SVG element has one semantic id",
 				fix = "run Author.validate with unique = true and fix the authored data",
 			})
@@ -367,7 +374,7 @@ local function layoutSheet(spec: LayoutSheetSpec): LayoutSheet
 				table.insert(annotations, { id = id, label = label, x = firstX, y = firstY })
 			end
 		else
-			refuse("unknown-kind", ("entry %q has unknown geometry kind"):format(id), set, id, {
+			return refuse("unknown-kind", ("entry %q has unknown geometry kind"):format(id), set, id, {
 				key = "kind",
 				actual = Diagnostics.describe(kind),
 				expected = '"rect", "point", or "polyline"',

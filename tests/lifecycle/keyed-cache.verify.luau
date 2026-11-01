@@ -166,12 +166,12 @@ describe("keyed cache", function()
 		local owner = Compose.createOwner()
 		expect(function()
 			Compose.withOwner(owner, function()
-				Compose.createKeyedCache((Support.erased {
+				Support.invoke(Compose.createKeyedCache, {
 					build = function(key: string)
 						return key
 					end,
 					destroy = function() end,
-				}) :: Compose.KeyedCacheOptions<string, string>)
+				})
 			end)
 		end):toThrow "retained-entry bound"
 		Compose.owner.dispose(owner)

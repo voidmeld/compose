@@ -7,6 +7,34 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("one host driving several runtimes", function()
+	it("defers compaction until the outer frame completes after a nested frame removes a listener", function(own)
+		local host = TestScene.create()
+		local runtime = Compose.createRuntime(host.adapter)
+		local owner = Compose.createOwner(runtime.reactor)
+		local seen = 0
+		local timeline = Compose.withOwner(owner, function()
+			runtime.scheduler().after(0, function()
+				host.step(0.01)
+			end)
+			runtime.scheduler().after(0, function()
+				seen += 1
+			end)
+			return runtime.timeline { duration = 1 }
+		end)
+		own(function()
+			Compose.owner.dispose(owner)
+			runtime:dispose()
+		end)
+		expect(function()
+			host.step(0.01)
+		end).never:toThrow()
+		expect(seen):toBe(1)
+		expect(timeline.elapsed:peek()):toBe(0.02)
+		expect(host.counts().frameListeners):toBe(1)
+		Compose.owner.dispose(owner)
+		expect(host.counts().frameListeners):toBe(0)
+	end)
+
 	it("continues frame work after a callback failure and releases the shared subscription", function()
 		local host = TestScene.create()
 		local runtime = Compose.createRuntime(host.adapter)

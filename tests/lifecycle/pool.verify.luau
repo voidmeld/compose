@@ -135,12 +135,12 @@ describe("resource pool", function()
 		local owner = Compose.createOwner()
 		expect(function()
 			Compose.withOwner(owner, function()
-				Compose.createPool((Support.erased {
+				Support.invoke(Compose.createPool, {
 					create = function()
 						return {}
 					end,
 					destroy = function() end,
-				}) :: Compose.PoolOptions<{}>)
+				})
 			end)
 		end):toThrow "retained-memory bound"
 		Compose.owner.dispose(owner)

@@ -35,14 +35,10 @@ describe("structural arguments", function()
 		expect(function()
 			world.runtime.mount(function()
 				return (world.create "Frame") {
-					Compose.keyed {
-						from = (Support.erased(3)) :: Compose.ReadOnlyValue<{ unknown }>,
-						render = (Support.erased(function() end)) :: (
-							Compose.ReadOnlyValue<unknown>,
-							Compose.ReadOnlyValue<number>,
-							unknown
-						) -> Compose.Node,
-					},
+					Support.invoke(Compose.keyed, {
+						from = 3,
+						render = function() end,
+					}),
 				}
 			end, world.root)
 		end):toThrow "structure/source-not-readable"
@@ -53,14 +49,10 @@ describe("structural arguments", function()
 		expect(function()
 			world.runtime.mount(function()
 				return (world.create "Frame") {
-					Compose.keyed {
+					Support.invoke(Compose.keyed, {
 						from = Compose.cell {},
-						render = (Support.erased "not a function") :: (
-							Compose.ReadOnlyValue<unknown>,
-							Compose.ReadOnlyValue<number>,
-							unknown
-						) -> Compose.Node,
-					},
+						render = "not a function",
+					}),
 				}
 			end, world.root)
 		end):toThrow "structure/builder-not-a-function"
@@ -72,11 +64,7 @@ describe("structural arguments", function()
 		expect(function()
 			world.runtime.mount(function()
 				return (world.create "Frame") {
-					(
-						(
-							Support.erased(Compose.keyed)
-						) :: (Compose.ReadOnlyValue<{ unknown }>, () -> ()) -> Compose.Directive
-					)(rows, function() end),
+					Support.invoke(Compose.keyed, rows, function() end),
 				}
 			end, world.root)
 		end):toThrow "structure/options-not-a-table"
@@ -87,15 +75,11 @@ describe("structural arguments", function()
 		expect(function()
 			world.runtime.mount(function()
 				return (world.create "Frame") {
-					Compose.keyed {
+					Support.invoke(Compose.keyed, {
 						from = Compose.cell {},
-						render = (Support.erased(function() end)) :: (
-							Compose.ReadOnlyValue<unknown>,
-							Compose.ReadOnlyValue<number>,
-							unknown
-						) -> Compose.Node,
+						render = function() end,
 						keyOf = function() end,
-					},
+					}),
 				}
 			end, world.root)
 		end):toThrow "structure/unknown-option"
@@ -106,7 +90,7 @@ describe("structural arguments", function()
 		expect(function()
 			world.runtime.mount(function()
 				return (world.create "Frame") {
-					Compose.show((Support.erased(3)) :: Compose.Source<boolean>, function()
+					Support.invoke(Compose.show, 3, function()
 						return world.create "Frame" {}
 					end),
 				}
@@ -119,7 +103,7 @@ describe("structural arguments", function()
 		expect(function()
 			world.runtime.mount(function()
 				return (world.create "Frame") {
-					Compose.show(Compose.cell(true), (Support.erased {}) :: () -> Compose.Node),
+					Support.invoke(Compose.show, Compose.cell(true), {}),
 				}
 			end, world.root)
 		end):toThrow "structure/builder-not-a-function"

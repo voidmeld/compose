@@ -8,7 +8,7 @@ local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
-local function emulatorWithCamera(): (Emulator.Emulator, Emulator.Instance & { ViewportSize: { X: number, Y: number } })
+local function emulatorWithCamera(): (Emulator.Emulator, Emulator.Instance)
 	Compose.__resetForTests()
 	ComposeRoblox.__resetForTests()
 	local emulator = Support.emulator()
@@ -17,7 +17,7 @@ local function emulatorWithCamera(): (Emulator.Emulator, Emulator.Instance & { V
 		properties = { ViewportSize = { X = 1280, Y = 720 } },
 	})
 	local camera = emulator.createInstance "Camera"
-	return emulator, (Support.erased(camera)) :: Emulator.Instance & { ViewportSize: { X: number, Y: number } }
+	return emulator, camera
 end
 
 describe("ComposeRoblox.usableViewportSize", function()
@@ -36,7 +36,7 @@ describe("ComposeRoblox.usableViewportSize", function()
 		expect(ComposeRoblox.usableViewportSize(nil)):toBe(false)
 		expect(ComposeRoblox.usableViewportSize { X = math.huge - math.huge, Y = 720 }):toBe(false)
 		expect(ComposeRoblox.usableViewportSize { X = math.huge, Y = 720 }):toBe(false)
-		expect(ComposeRoblox.usableViewportSize { X = (Support.erased "1280") :: number, Y = 720 }):toBe(false)
+		expect(Support.invoke(ComposeRoblox.usableViewportSize, { X = "1280", Y = 720 })):toBe(false)
 	end)
 
 	it("takes the threshold from its second argument", function()

@@ -264,36 +264,36 @@ describe("Author.placement numeric and space refusals", function()
 			)
 		end):toThrow "placement/unsupported-space"
 		expect(function()
-			Placement.distanceToPath({ x = 5, y = 100, z = 0 }, path, (Support.erased "xyz") :: "xz")
+			Support.invoke(Placement.distanceToPath, { x = 5, y = 100, z = 0 }, path, "xyz")
 		end):toThrow "placement/unsupported-space"
 		expect(function()
-			Placement.alongLateral({ x = 5, y = 100, z = 0 }, origin, path[2], (Support.erased "xyz") :: "xz")
+			Support.invoke(Placement.alongLateral, { x = 5, y = 100, z = 0 }, origin, path[2], "xyz")
 		end):toThrow "placement/unsupported-space"
 	end)
 
 	it("refuses an unknown space everywhere it is accepted", function()
 		expect(function()
-			Placement.distance(origin, origin, (Support.erased "xy") :: Author.PlacementSpace)
+			Support.invoke(Placement.distance, origin, origin, "xy")
 		end):toThrow "placement/unknown-space"
 		expect(function()
-			Placement.check({ a = origin, b = origin }, {
+			Support.invoke(Placement.check, { a = origin, b = origin }, {
 				{
 					kind = "within",
 					subject = "a",
 					anchor = "b",
 					radius = 1,
-					space = (Support.erased "plane") :: Author.PlacementSpace,
+					space = "plane",
 				},
 			})
 		end):toThrow "placement/unknown-space"
 		expect(function()
-			Placement.check({ a = origin }, {
+			Support.invoke(Placement.check, { a = origin }, {
 				{
 					kind = "path",
 					subject = "a",
 					path = { origin, { x = 1, y = 0, z = 0 } },
 					halfWidth = 1,
-					space = (Support.erased "plane") :: Author.PlacementSpace,
+					space = "plane",
 				},
 			})
 		end):toThrow "placement/unknown-space"
@@ -482,7 +482,7 @@ describe("Author.placement authoring errors", function()
 
 	it("refuses constraints that cannot constrain anything", function()
 		local function refused(constraint: unknown, field: string)
-			local ok, message = pcall(Placement.check, points, { constraint :: Author.PlacementConstraint })
+			local ok, message = pcall(Support.invoke, Placement.check, points, { constraint })
 			expect(ok):toBe(false)
 			expect(tostring(message)):toContain "placement/bad-constraint"
 			expect(tostring(message)):toContain "constraint 1"
@@ -501,13 +501,13 @@ describe("Author.placement authoring errors", function()
 
 	it("refuses non-table points and constraints", function()
 		expect(function()
-			Placement.check(points, (Support.erased "none") :: { Author.PlacementConstraint })
+			Support.invoke(Placement.check, points, "none")
 		end):toThrow "placement/bad-constraint"
 		expect(function()
-			Placement.check((Support.erased(nil)) :: { [string]: Author.PlacementPosition }, {})
+			Support.invoke(Placement.check, nil, {})
 		end):toThrow "placement/bad-constraint"
 		expect(function()
-			Placement.check(points, { (Support.erased "x") :: Author.PlacementConstraint })
+			Support.invoke(Placement.check, points, { "x" })
 		end):toThrow "placement/bad-constraint"
 	end)
 
@@ -523,10 +523,10 @@ describe("Author.placement authoring errors", function()
 
 	it("refuses a malformed resolve spec and names spreadDistance", function()
 		expect(function()
-			Placement.resolve((Support.erased(nil)) :: Author.PlacementResolveSpec)
+			Support.invoke(Placement.resolve, nil)
 		end):toThrow "placement/bad-rule"
 		expect(function()
-			Placement.resolve((Support.erased { entries = "x" }) :: Author.PlacementResolveSpec)
+			Support.invoke(Placement.resolve, { entries = "x" })
 		end):toThrow "placement/bad-rule"
 		expect(function()
 			Placement.resolve {

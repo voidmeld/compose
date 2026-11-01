@@ -16,6 +16,27 @@ local function cellAsReadable<T>(value: Compose.ReadOnlyValue<T>): Compose.ReadO
 end
 
 describe("falsifiers", function()
+	it("keeps dependencies after a watch normalizes its own source during its first run", function()
+		Support.world()
+		local _, owner = domain()
+		local revision, size = Compose.cell(0), Compose.cell(48)
+		local measured = Compose.formula(function(use)
+			return use(size)
+		end)
+		local seen = 0
+		Compose.owner.watch(owner, function(use)
+			if use(revision) == 0 then
+				revision:set(1)
+			end
+			seen = use(measured)
+		end)
+		expect(seen):toBe(48)
+		size:set(66)
+		expect(seen):toBe(66)
+		Compose.owner.dispose(owner)
+		measured:dispose()
+	end)
+
 	it("shares consecutive reads and trims the next dependency after a branch changes", function()
 		Support.world()
 		local _, owner = domain()

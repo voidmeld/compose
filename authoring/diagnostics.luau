@@ -1,15 +1,15 @@
 --!strict
 
 export type Fields = {
-	set: string?,
-	entryId: string?,
-	key: string?,
-	index: number?,
-	expected: string?,
-	actual: string?,
-	contract: string?,
-	fix: string?,
-	detail: string?,
+	read set: string?,
+	read entryId: string?,
+	read key: string?,
+	read index: number?,
+	read expected: string?,
+	read actual: string?,
+	read contract: string?,
+	read fix: string?,
+	read detail: string?,
 }
 
 export type RojoValue = string | number | boolean | { number } | { [string]: RojoValue }
@@ -37,14 +37,14 @@ local function format(code: string, summary: string, fields: Fields?): string
 	return table.concat(lines, "\n")
 end
 
-local function raise(code: string, summary: string, fields: Fields?): never
+local function raise<R...>(code: string, summary: string, fields: Fields?): R...
 	error(format(code, summary, fields), 0)
 end
 
 local function describe(value: unknown): string
 	local kind = type(value)
-	if kind == "string" then
-		return string.format("%q", value :: string)
+	if type(value) == "string" then
+		return string.format("%q", value)
 	elseif kind == "number" or kind == "boolean" then
 		return tostring(value)
 	end
@@ -57,13 +57,27 @@ local function isScalar(value: unknown): boolean
 		return true
 	end
 	if kind == "number" then
-		local number = value :: number
+		local number = value
 		return number == number and number ~= math.huge and number ~= -math.huge
 	end
 	return false
 end
 
-local function isFiniteNumberArray(value: { [unknown]: unknown }): boolean
+local function fields(value: unknown): { [unknown]: unknown }?
+	if type(value) ~= "table" then
+		return nil
+	end
+	local result: { [unknown]: unknown } = {}
+	for key, item in value do
+		result[key] = item
+	end
+	return result
+end
+
+local function isFiniteNumberArray(value: unknown): boolean
+	if type(value) ~= "table" then
+		return false
+	end
 	local count = 0
 	for key, element in value do
 		if type(key) ~= "number" or key ~= math.floor(key) or key < 1 then
@@ -84,7 +98,7 @@ local function isRojoValue(value: unknown): boolean
 	if type(value) ~= "table" then
 		return false
 	end
-	local candidate = value :: { [unknown]: unknown }
+	local candidate = value
 	if isFiniteNumberArray(candidate) then
 		return true
 	end
@@ -105,17 +119,26 @@ local function copyRojoValue(value: RojoValue): RojoValue
 	if type(value) ~= "table" then
 		return value
 	end
-	local copy: { [string | number]: RojoValue } = {}
-	for key, element in value :: { [unknown]: unknown } do
-		copy[key :: string | number] = copyRojoValue(element :: RojoValue)
+	local array: { number } = {}
+	local object: { [string]: RojoValue } = {}
+	local isArray = false
+	for key, element in value do
+		if type(key) == "number" then
+			assert(type(element) == "number")
+			array[key] = element
+			isArray = true
+		else
+			object[key] = copyRojoValue(element)
+		end
 	end
-	return (copy :: unknown) :: RojoValue
+	return if isArray then array else object
 end
 
 return {
-	format = format,
 	raise = raise,
+	format = format,
 	describe = describe,
+	fields = fields,
 	isScalar = isScalar,
 	isRojoValue = isRojoValue,
 	copyRojoValue = copyRojoValue,

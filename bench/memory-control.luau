@@ -5,7 +5,8 @@ local Suites = require "./suites"
 
 local bytes = assert(tonumber(process.args[2]))
 assert(bytes == 0 or bytes == 4 * 1024 * 1024)
-local entry = Suites.entries({ suite = "workloads", filter = "mount-dispose" })[1]
+local entry = Suites.entries({ suite = "workloads", filter = "cold-mount-100" })[1]
+assert(entry.id == "cold-mount-100")
 entry.memory()
 for _ = 1, 3 do
 	local result = entry.memory(bytes)

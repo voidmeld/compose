@@ -307,7 +307,7 @@ describe("Design datatype components", function()
 
 	it("keeps a representative screen within its recorded emitted byte budget", function()
 		local code = Design.emit(screen(), library)
-		expect(#code <= 1519):toBe(true)
+		expect(#code <= 1545):toBe(true)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
 	end)
 

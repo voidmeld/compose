@@ -67,15 +67,20 @@ If a constant is a mistake for the field, use `Source`. If a constant is correct
 
 ### Type checking
 
-Every maintained Luau source begins with `--!strict` and uses no explicit `any` type, including casts, type packs, tests and tooling.
-The gate parses types and checks both Luau solvers.
+Every maintained Luau source begins with `--!strict` and uses no explicit `any` type or type assertion.
+The gate parses all maintained source, tests and tooling and checks the current Luau solver.
 Dynamic host properties and decoded input remain `unknown` until their protocol or an existing validation supplies a concrete shape.
 Generic callbacks keep their argument and result types.
 
-Three habits keep consumer code checking under both solvers:
+The private dynamic-operation boundary uses the host's protected-call intrinsic for raw property
+callbacks and native member access. It returns `unknown`, preserves failure payloads and multiple
+results, and is the sole production bootstrap allowed to read the global intrinsic table. This
+does not exempt it from the strict, explicit-any or cast policy.
+
+These habits keep consumer code checking:
 
 - Annotate `use` in a body that you pass where a `Source` or `Value` is expected. The new solver does not infer a function parameter from a union that also holds a readable.
-- Assert the type of a cell whose initial value is a function. A function argument also matches a function-valued `T`.
+- Use `cell` for an initial value and `lazyCell` to defer a function that produces the initial value.
 - Annotate a table literal when the call cannot infer its type. Examples include an empty `initial` table and a `layout` passed to a union-typed option.
 
 ```luau
@@ -83,25 +88,23 @@ Compose.show(function(use: Compose.Use)
     return use(progress) > 0
 end, Overlay)
 
-local settings = Compose.cell(loadSettings) :: Compose.Value<Settings>
+local settings = Compose.lazyCell(loadSettings)
+local layout: Compose.OrderedCollectionLayout = { itemSize = 24 }
 
 Compose.OrderedCollection {
     from = rows,
-    layout = { itemSize = 24 } :: Compose.OrderedCollectionLayout,
+    layout = layout,
     render = Row,
 }
 ```
 
-The old solver widens the singleton string union of a formula body before instantiation.
-The literal-union compiler fixture projects the resulting formula back to its explicitly declared body return type. The same fixture also checks under the new solver.
-Production readable receivers keep their concrete contracts.
+Formula return values retain their declared literal unions. Readable receivers keep their concrete contracts.
 
 ### `Compose.cell`
 
 `cell(initial, equals?) -> Cell`
 
-Stores a writable value in the reactive graph. `initial` can be a value or a function.
-Compose calls an initial-value function only on the first read or write.
+Stores a writable value in the reactive graph. A function argument is stored without calling it.
 
 ```luau
 local progress = Compose.cell(100)
@@ -115,6 +118,15 @@ end)
 
 `equals` decides what counts as a change. The default is `==`.
 Compose suppresses a write that `equals` calls equal. Nothing downstream is marked, and no watch runs.
+
+### `Compose.lazyCell`
+
+`lazyCell(initialize, equals?) -> Cell`
+
+Calls `initialize` on the first read or write and stores its result. Later reads reuse that value.
+An update reads the initialized value before calling its transform. Keep initializers small and
+free of side effects. Initialization uses the same yield checks as other reactive callbacks.
+The resulting cell has the same comparison, ownership and write rules as `cell`.
 
 ### `Compose.sharedCell`
 
@@ -131,7 +143,7 @@ local presses = Compose.sharedCell(0)
 return { presses = presses }
 ```
 
-It uses the same runtime behavior and execution paths as `cell`, with an additional metatable identity flag.
+It uses the same runtime behavior and execution paths as `cell`.
 Diagnostics identify it as a cell. `Compose.cell` remains valid at module scope.
 `sharedCell` declares intent for consumer lint. It adds no reactive capability.
 
@@ -260,12 +272,13 @@ Tracks one readable source. On each change, it calls `reduce(previous, event)` t
 This state can retain information that the event source does not carry.
 
 ```luau
+local initial: Seen = {}
 local seen = Compose.accumulator {
     from = signalFired,                     -- a cell or formula; each change is one event
     reduce = function(previous, event)      -- merge one event into the running state
         return withSignal(previous, event)
     end,
-    initial = {} :: Seen,                   -- the state before any event
+    initial = initial,
 }
 ```
 
@@ -330,7 +343,7 @@ Compose calls a body with an untracked reader. Thus `sample(function(use) return
 
 `isValue(value) -> boolean`
 
-True for a cell, a formula or a keyed projection returned by a selector. Compose decides by metatable. An ordinary table that you pass as a property value is therefore never mistaken for something reactive.
+True for a registered cell, formula or keyed projection returned by a selector. An ordinary table that you pass as a property value is never mistaken for something reactive.
 
 ---
 
@@ -579,8 +592,9 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `mountFragment(fragment, target)` | Mounts top-level sibling nodes and structural directives. Returns `(dispose, staticRoots)`. |
 | `adopt(node)` | Takes responsibility for destroying an existing node. |
 | `borrow(node)` | States that Compose must never destroy this node. |
-| `spring(source, options?)` | Follows `source` with spring physics. |
-| `tween(source, options?)` | Follows `source` along an easing curve. `seconds` is a number or a source of seconds that Compose samples at each retarget. |
+| `motion(codec)` | Selects typed `spring`, `tween` and `ramp` methods for the codec's value type. |
+| `spring(source, options?)` | Follows a numeric `source` with spring physics. |
+| `tween(source, options?)` | Follows a numeric `source` along an easing curve. `seconds` is a number or a source of seconds that Compose samples at each retarget. |
 | `timeline(options?)` | Creates one owned clock that many properties can read. |
 | `ramp(initial, options?)` | Creates a value that moves to each new target over a duration that you choose for each retarget. See [Ramp](#ramp). |
 | `scheduler(owner?)` | Creates owner-bound delayed work with cancellation and keyed replacement. See [Owner scheduler](#owner-scheduler). |
@@ -588,6 +602,8 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `settled(options)` | Reports when a sampled snapshot stays equal for consecutive frames. |
 | `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
 | `sequence(options)` | Owns a choreography of waits, callbacks, tweens, timelines and parallel groups. |
+
+A fragment can return a typed array of native nodes or a mixture of nodes and directives. Compose reads the array without changing it. Nil entries omit children.
 
 The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
 
@@ -701,6 +717,8 @@ local dispose, root = runtime.mount(function()
 end, test.root)
 ```
 
+Pass an optional label as the second argument: `Host.Frame({ ... }, "Summary")`, or use `Host.Frame "Summary" { ... }`. The name-first call returns a reusable constructor and creates no node until it receives props. `create(kind)` returns the same constructor contract.
+
 `Host.Frame { ... }` is ordinary Luau. The single table argument permits omitting parentheses, so it is exactly `Host.Frame({ ... })`.
 For a dynamic kind, use `runtime.create(className) { ... }`.
 
@@ -742,7 +760,7 @@ See the [mount-target example](../examples/mount-target.luau) for a complete lif
 
 `labelOf(node) -> string?`
 
-Returns the label under which a node was built, `Part "Ground" { }`, or nil if it was built anonymously.
+Returns the label under which a node was built, `Part "Ground" {}`, or nil if it was built anonymously.
 
 A label belongs to Compose. Compose records it whether or not the host has any notion of a name.
 It is the name that a node uses in a diagnostic, in the profiler and in [`Compose.inspect.node`](#composeinspect).
@@ -1361,6 +1379,7 @@ local panel = Compose.geometry.fit(area, { width = 420, height = 600 }, { max = 
 `fragment(builder) -> directive`
 
 Places several nodes where one child is expected, without a container that the layout did not ask for.
+The builder may return a typed array of native nodes. Compose reads this array without changing it.
 
 ### `Compose.portal`
 
@@ -1369,6 +1388,7 @@ Places several nodes where one child is expected, without a container that the l
 A subtree that lives elsewhere in the host tree, such as tooltips, modals and world-space markers.
 Its own slot stays empty. Its nodes go into `target`.
 Its lifetime is unchanged. If you dispose the component that wrote the portal, Compose removes exactly what the portal added and leaves `target` standing.
+The builder may return a typed array of native nodes. Compose reads this array without changing it.
 
 ### `Compose.boundary`
 
@@ -1495,32 +1515,32 @@ runtime.spring(progress, { period = 0.3, reducedMotion = calm })
 Compose reads the policy. It does not discover the setting, because core cannot read an accessibility preference.
 Read the preference in your application and write it into a cell.
 
-### `Compose.registerCodec`
+#### `runtime.motion`
 
-`registerCodec(typeName, codec) -> ()`
+`runtime.motion(codec: Compose.Codec<T>) -> Motion<T>`
 
-Registers a datatype codec for animation without a core dependency on that type.
-A codec has `arity`, `encode(value, out)`, `decode(components)` and an optional `normalise(components)`.
+Selects a typed codec for `spring`, `tween` and `ramp`. Each method retains the selected value type. The runtime's direct `spring`, `tween` and `ramp` methods animate numbers using `Compose.numberCodec`.
+
+A codec has `arity`, `encode(value, out)`, `decode(components)` and an optional `normalise(components)`. Its arity is a positive integer. `encode` writes into an existing buffer; `decode` returns the same type accepted by `encode`. Selecting a codec creates no owned work or frame subscription. Animations retain the runtime's ownership, shared clock and reduced-motion behavior.
 
 ```luau
-Compose.registerCodec("Colour", {
-    arity = 3,
-    encode = function(value, out) out[1], out[2], out[3] = value.r, value.g, value.b end,
-    decode = function(c) return Colour.new(c[1], c[2], c[3]) end,
-    normalise = function(c)
-        c[1], c[2], c[3] = math.clamp(c[1], 0, 1), math.clamp(c[2], 0, 1), math.clamp(c[3], 0, 1)
-    end,
-})
+local motion = runtime.motion(assert(ComposeRoblox.codecs().Color3))
+local colour = motion.spring(function(use)
+    return use(targetColour)
+end, { period = 0.3 })
 ```
 
-`encode` writes into a buffer that the consumer owns, because an animation encodes on every frame, and a per-frame allocation is a per-frame collection.
-Core registers exactly one codec: `number`. `ComposeRoblox` registers the Roblox datatypes.
+### `Compose.numberCodec`
 
-### `Compose.registeredCodecs`
+`numberCodec: Compose.Codec<number>`
 
-`registeredCodecs() -> { string }`
+The numeric codec used by the direct runtime motion methods.
 
-Returns every registered type name, sorted.
+### `ComposeRoblox.codecs`
+
+`codecs(source?: ComposeRoblox.CodecSource) -> ComposeRoblox.Codecs`
+
+Returns typed optional codecs for `Vector2`, `Vector3`, `Color3`, `UDim`, `UDim2` and `CFrame`. The source supplies `datatypes` constructors and an optional `readCFrame` function. It can be a complete engine or a record of the required datatype capabilities. Without a source it uses the ambient Roblox engine. Each codec uses its source's constructors and is passed explicitly to the runtime. `ComposeRoblox.animatableTypes(engine?)` lists the engine's available datatype names, sorted.
 
 ### `Compose.createSpringState`
 
@@ -2215,4 +2235,4 @@ Returns the `Model` and `Part` kinds with `space = "3d"`. Its ownership and runt
 
 `designEnvironment(options?) -> DesignEditor.Environment`
 
-Without options, resolves the ambient Roblox datatype constructors and services through the Roblox engine boundary. It raises outside Roblox. With `{ values: DesignEditor.Values, service: (name: string) -> unknown }`, uses those injected constructors and services and supplies method dispatch and descendant traversal for Roblox-shaped nodes and values. The injected form runs against the simulated engine without an ambient Roblox engine. The factory creates no scene nodes and owns no services.
+Without options, resolves the ambient Roblox datatype constructors and services through the Roblox engine boundary. It raises outside Roblox. With `{ values: DesignEditor.Values, service: (name: string) -> unknown, read?: (subject: unknown, property: string) -> unknown }`, uses those injected constructors and services and supplies property access, method dispatch and descendant traversal for Roblox-shaped nodes and values. Omit `read` to use native property access. The injected form runs against the simulated engine without an ambient Roblox engine. The factory creates no scene nodes and owns no services.

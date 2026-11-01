@@ -40,7 +40,7 @@ local function run(): string
 		return group
 	end, test.root)
 
-	local group = container
+	local group = assert(container)
 	assert(Compose.custodyOf(group) == "owned", "the mount target was demoted to borrowed")
 	assert(Compose.custodyOf(clonedRig) == "adopted", "the clone should be adopted")
 

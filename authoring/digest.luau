@@ -7,15 +7,18 @@ type EntrySet = Set.EntrySet
 
 local function canonical(value: unknown): string
 	local kind = type(value)
-	if kind == "string" then
-		local text = value :: string
+	if type(value) == "string" then
+		local text = value
 		return ("s%d:%s"):format(#text, text)
-	elseif kind == "number" then
-		return ("n:%.17g"):format(value :: number)
-	elseif kind == "boolean" then
+	elseif type(value) == "number" then
+		return ("n:%.17g"):format(value)
+	elseif type(value) == "boolean" then
 		return "b:" .. tostring(value)
-	elseif kind == "table" then
-		local subject = value :: { [unknown]: unknown }
+	elseif type(value) == "table" then
+		local subject: { [unknown]: unknown } = {}
+		for key, item in value do
+			subject[key] = item
+		end
 		local pieces: { string } = { "[" }
 		local count = #subject
 		for index = 1, count do
@@ -35,11 +38,14 @@ local function canonical(value: unknown): string
 		table.insert(pieces, "]")
 		return table.concat(pieces)
 	end
-	Diagnostics.raise("set/not-digestable", "a value of this type has no canonical form", {
-		actual = kind,
-		expected = "string, number, boolean, or a table of them",
-		contract = "authored content is plain data",
-	})
+	error(
+		Diagnostics.format("set/not-digestable", "a value of this type has no canonical form", {
+			actual = kind,
+			expected = "string, number, boolean, or a table of them",
+			contract = "authored content is plain data",
+		}),
+		0
+	)
 	return ""
 end
 

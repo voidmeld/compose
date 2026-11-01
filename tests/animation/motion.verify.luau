@@ -61,15 +61,22 @@ local function stepFor(world: Support.World, seconds: number)
 	end
 end
 
+local function curveValue(curve: unknown, progress: number): number
+	local value = Support.invoke(curve, progress)
+	assert(type(value) == "number")
+	return value
+end
+
 describe("easing", function()
 	it("pins both ends of every curve", function()
-		local curves = (Support.erased(Compose.easing)) :: { [string]: (number) -> number }
+		local curves = Support.record(Compose.easing)
 		for name, curve in curves do
-			if math.abs(curve(0)) > 1e-9 then
-				error(("curve %s starts at %s, not 0"):format(name, tostring(curve(0))))
+			assert(type(name) == "string")
+			if math.abs(curveValue(curve, 0)) > 1e-9 then
+				error(("curve %s starts at %s, not 0"):format(name, tostring(curveValue(curve, 0))))
 			end
-			if math.abs(curve(1) - 1) > 1e-9 then
-				error(("curve %s ends at %s, not 1"):format(name, tostring(curve(1))))
+			if math.abs(curveValue(curve, 1) - 1) > 1e-9 then
+				error(("curve %s ends at %s, not 1"):format(name, tostring(curveValue(curve, 1))))
 			end
 		end
 	end)
@@ -81,11 +88,11 @@ describe("easing", function()
 
 	it("moves monotonically for the standard curves", function()
 		for _, name in { "linear", "inQuad", "outQuad", "inOutQuad", "inSine", "outExpo" } do
-			local curves = (Support.erased(Compose.easing)) :: { [string]: (number) -> number }
+			local curves = Support.record(Compose.easing)
 			local curve = curves[name]
 			local previous = -math.huge
 			for step = 0, 20 do
-				local value = curve(step / 20)
+				local value = curveValue(curve, step / 20)
 				if value < previous - 1e-9 then
 					error("curve " .. name .. " went backwards")
 				end
@@ -142,6 +149,30 @@ describe("spring integrator", function()
 end)
 
 describe("runtime.spring", function()
+	it("releases an idle spring before its first movement without claiming borrowed state", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local dispose = world.runtime.mount(function()
+			local smooth = world.runtime.spring(function(use)
+				return use(target)
+			end)
+			return world.create "Frame" {
+				Position = function(use)
+					return use(smooth)
+				end,
+			}
+		end, world.root)
+		expect(world.host.counts().frameListeners):toBe(0)
+		dispose()
+		world.host.resetCounts()
+		target:set(100)
+		world.settle()
+		stepFor(world, 1)
+		expect(target:peek()):toBe(100)
+		expect(world.host.counts().frameListeners):toBe(0)
+		expect(world.host.counts().setProperty):toBe(0)
+	end)
+
 	it("moves towards the target and settles exactly on it", function()
 		local world = Support.world()
 		local target = Compose.cell(0)
@@ -347,9 +378,9 @@ describe("reduced motion", function()
 		local world = Support.world()
 		expect(function()
 			world.runtime.mount(function()
-				local smooth = world.runtime.spring(function()
+				local smooth = Support.invoke(world.runtime.spring, function()
 					return 0
-				end, { reducedMotion = (Support.erased(true)) :: Compose.Source<boolean> })
+				end, { reducedMotion = true })
 				return world.create "Frame" {
 					Position = function(use)
 						return use(smooth)
@@ -556,9 +587,9 @@ describe("runtime.tween", function()
 		local world = Support.world()
 		expect(function()
 			world.runtime.mount(function()
-				local eased = world.runtime.tween(function()
+				local eased = Support.invoke(world.runtime.tween, function()
 					return 0
-				end, { seconds = (Support.erased "fast") :: number })
+				end, { seconds = "fast" })
 				return world.create "Frame" {
 					Value = function(use)
 						return use(eased)
@@ -596,13 +627,9 @@ describe("codecs", function()
 		Compose.__resetForTests()
 	end)
 
-	it("registers number out of the box and nothing else", function()
-		expect(Compose.registeredCodecs()):toContain "number"
-	end)
-
-	it("animates a registered multi-component type", function()
+	it("animates a typed multi-component value through spring, tween and ramp", function()
 		local world = Support.world()
-		Compose.registerCodec("vector", {
+		local codec: Compose.Codec<Vector> = {
 			arity = 2,
 			encode = function(value: Vector, out: { number })
 				out[1], out[2] = value.x, value.y
@@ -610,22 +637,83 @@ describe("codecs", function()
 			decode = function(components: { number }): Vector
 				return vector(components[1], components[2])
 			end,
-		})
-
-		local state = Compose.createSpringState({ 0, 0 }, 2)
-		for _ = 1, 400 do
-			Compose.stepSpring(state, { 3, 4 }, FRAME, 0.3, 1)
+		}
+		local motion = world.runtime.motion(codec)
+		local target = Compose.cell(vector(0, 0))
+		local owner = Compose.createOwner(world.runtime.reactor)
+		local spring, tween, ramp = Compose.withOwner(owner, function()
+			local function source(use: Compose.Use): Vector
+				return use(target)
+			end
+			return motion.spring(source, { period = 0.3 }),
+				motion.tween(source, { seconds = 0.5 }),
+				motion.ramp(vector(0, 0))
+		end)
+		target:set(vector(3, 4))
+		ramp.retarget(vector(6, 8), 0.5)
+		world.settle()
+		expect(world.host.counts().frameListeners):toBe(1)
+		for _ = 1, 15 do
+			world.host.step(FRAME)
 		end
-		expect(state.position[1]):toBeCloseTo(3, 1e-3)
-		expect(state.position[2]):toBeCloseTo(4, 1e-3)
+		expect(tween:peek().x):toBeCloseTo(1.5, 1e-6)
+		expect(ramp.value:peek().y):toBeCloseTo(4, 1e-6)
+		for _ = 1, 400 do
+			world.host.step(FRAME)
+		end
+		expect(spring:peek().x):toBe(3)
+		expect(spring:peek().y):toBe(4)
+		expect(tween:peek().y):toBe(4)
+		expect(ramp.value:peek().x):toBe(6)
+		expect(world.host.counts().frameListeners):toBe(0)
+		Compose.owner.dispose(owner)
 		expect(world.host.liveNodes()):toBe(1)
+	end)
+
+	it("normalizes published values without changing spring momentum", function()
+		local world = Support.world()
+		local codec: Compose.Codec<Vector> = {
+			arity = 2,
+			encode = function(value: Vector, out: { number })
+				out[1], out[2] = value.x, value.y
+			end,
+			decode = function(components: { number }): Vector
+				return vector(components[1], components[2])
+			end,
+			normalise = function(components: { number })
+				components[1] = math.clamp(components[1], 0, 1)
+			end,
+		}
+		local motion = world.runtime.motion(codec)
+		local target = Compose.cell(vector(0, 0))
+		local dispose, node = world.runtime.mount(function()
+			local smooth = motion.spring(function(use)
+				return use(target)
+			end, { period = 0.3, damping = 0.2 })
+			return world.create "Frame" {
+				Value = function(use)
+					return use(smooth)
+				end,
+			}
+		end, world.root)
+		local state = Compose.createSpringState({ 0, 0 }, 2)
+		target:set(vector(1, 1))
+		world.settle()
+		for _ = 1, 30 do
+			Compose.stepSpring(state, { 1, 1 }, FRAME, 0.3, 0.2)
+			world.host.step(FRAME)
+			local actual = Support.record(world.host.propertyOf(node, "Value"))
+			expect(numberValue(actual.x)):toBeCloseTo(math.clamp(state.position[1], 0, 1), 1e-9)
+			expect(numberValue(actual.y)):toBeCloseTo(state.position[2], 1e-9)
+		end
+		dispose()
 	end)
 
 	it("refuses to animate a type with no codec", function()
 		local world = Support.world()
 		expect(function()
 			world.runtime.mount(function()
-				local moved = world.runtime.spring(function()
+				local moved = Support.invoke(world.runtime.spring, function()
 					return "not animatable"
 				end)
 				return world.create "Frame" {

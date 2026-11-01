@@ -275,7 +275,8 @@ describe("mounting", function()
 			local world = Support.world()
 			expect(function()
 				world.runtime.mount(function()
-					return (world.create "Frame")((Support.erased(3)) :: Compose.Props)
+					Support.invoke(world.create "Frame", 3)
+					return world.root
 				end, world.root)
 			end):toThrow "props/not-a-table"
 		end)
@@ -283,7 +284,7 @@ describe("mounting", function()
 		it("refuses a component that returns something that is not a node", function()
 			local world = Support.world()
 			expect(function()
-				world.runtime.mount(function(): Compose.Node
+				Support.invoke(world.runtime.mount, function()
 					return 42
 				end, world.root)
 			end):toThrow "mount/not-a-node"

@@ -77,7 +77,8 @@ describe("frame-driven admission", function()
 		end)
 
 		it("still drains a low-priority item while higher-priority work keeps arriving", function()
-			local status = Compose.cell({} :: Compose.MountBudgetStatus)
+			local status: Compose.Value<Compose.MountBudgetStatus> =
+				Compose.cell { total = 0, mounted = 0, pending = 0 }
 			local dispose, root, items = mountBudgeted {
 				initial = { { id = 1, priority = 0 }, { id = 2, priority = 5 }, { id = 3, priority = 5 } },
 				mountsPerFrame = 2,

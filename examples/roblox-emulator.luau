@@ -2,6 +2,7 @@
 
 local Compose = require "../src/core"
 local RobloxEmulator = require "../src/test-scene/roblox"
+local Engine = require "../src/roblox/engine"
 local Verify = require "../.lute/dependencies/verify/src/roblox"
 
 local function run(): string
@@ -41,13 +42,9 @@ local function run(): string
 					Activated = function()
 						(Verify.assertInstance(arm)):SetAttribute("State", "armed")
 						tier:set(tier:peek() + 1)
-						track = ((Verify.assertInstance(animator)).LoadAnimation :: (
-							RobloxEmulator.Instance,
-							RobloxEmulator.Instance
-						) -> RobloxEmulator.Instance)(Verify.assertInstance(animator), clip)
+						track = Verify.assertInstance(Engine.invoke(Engine.readMember, animator, "LoadAnimation", clip))
 						local playing = Verify.assertInstance(track)
-						local play = playing.Play :: (RobloxEmulator.Instance) -> ()
-						play(playing)
+						Engine.invoke(Engine.readMember, playing, "Play")
 					end,
 				},
 			},

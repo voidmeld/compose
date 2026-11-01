@@ -74,14 +74,15 @@ describe("Compose.sample", function()
 	it("refuses a value that is neither a node nor a body", function()
 		local sample = Compose.sample
 		expect(function()
-			sample((Support.erased { width = 1 }) :: Compose.ReadOnlyValue<number>)
+			Support.invoke(sample, { width = 1 })
 		end):toThrow "Compose.sample"
 	end)
 
 	it("names itself when a body reads something that is not a node", function()
 		local ok, err = pcall(function()
 			Compose.sample(function(use: Compose.Use): number
-				return use((Support.erased(function() end)) :: Compose.ReadOnlyValue<number>)
+				Support.invoke(use, function() end)
+				return 0
 			end)
 		end)
 		expect(ok):toBe(false)
@@ -101,7 +102,7 @@ describe("use", function()
 		local ok, err = pcall(function()
 			Compose.owner.watch(owner, function(use)
 				local read = use
-				read((Support.erased(body)) :: Compose.ReadOnlyValue<number>)
+				Support.invoke(read, body)
 			end)
 		end)
 		expect(ok):toBe(false)
@@ -120,7 +121,7 @@ describe("use", function()
 		expect(function()
 			Compose.owner.watch(owner, function(use)
 				local read = use
-				read((Support.erased { value = 1 }) :: Compose.ReadOnlyValue<number>)
+				Support.invoke(read, { value = 1 })
 			end)
 		end):toThrow "cell or formula"
 		Compose.owner.dispose(owner)

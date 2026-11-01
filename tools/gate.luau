@@ -90,13 +90,15 @@ local function slow(producer: Gate.ProducerDraft): Gate.ProducerDraft
 	return producer
 end
 
-local ANALYZE = { "luau-lsp", "analyze", "--platform=standard", "--base-luaurc=.luaurc" }
-local SOLVER_V2 = table.clone(ANALYZE)
-table.insert(SOLVER_V2, 3, "--flag:LuauSolverV2=true")
-for _, argv in { ANALYZE, SOLVER_V2 } do
-	table.insert(argv, "--ignore=**/.lute/**")
-	table.insert(argv, "--ignore=**/build/**")
-end
+local ANALYZE = {
+	"luau-lsp",
+	"analyze",
+	"--flag:LuauSolverV2=true",
+	"--platform=standard",
+	"--base-luaurc=.luaurc",
+	"--ignore=**/.lute/**",
+	"--ignore=**/build/**",
+}
 
 local draft: Gate.Draft = {
 	id = "compose-gate",
@@ -107,7 +109,11 @@ local draft: Gate.Draft = {
 			"tools/sync-dependencies.luau"
 		),
 		check("format", "source is formatted exactly as stylua.toml specifies", { "stylua", "--check" }, SOURCE_TREES),
-		script("type-policy", "strict maintained Luau has no explicit any", "tools/check-no-any.luau"),
+		script(
+			"type-policy",
+			"strict maintained Luau has no explicit any or type assertions",
+			"tools/check-no-any.luau"
+		),
 		script(
 			"spec-style",
 			"specifications declare compact describe, it and expect bindings once, except raw harness API subjects",
@@ -126,14 +132,8 @@ local draft: Gate.Draft = {
 		),
 		check(
 			"types",
-			"every portable package, test, tool, benchmark, example, and configuration type-checks strictly under the old type solver",
+			"every portable package, test, tool, benchmark, example, and configuration type-checks strictly under the current type solver",
 			ANALYZE,
-			TYPED_TREES
-		),
-		check(
-			"types-solver-v2",
-			"the same trees type-check strictly under the new type solver, including the tests/types contracts",
-			SOLVER_V2,
 			TYPED_TREES
 		),
 		script(
@@ -178,7 +178,7 @@ local draft: Gate.Draft = {
 		),
 		script(
 			"roblox-only",
-			"native verification type-checks under both solvers with the pinned Roblox declarations",
+			"native verification type-checks with Solver V2 and the pinned Roblox declarations",
 			"tools/check-roblox-only.luau"
 		),
 		script(
@@ -209,6 +209,7 @@ local draft: Gate.Draft = {
 		{
 			id = "roblox-engine",
 			kind = "native",
+			exclusive = true,
 			argv = {
 				"lute",
 				"run",
@@ -229,6 +230,7 @@ local draft: Gate.Draft = {
 		{
 			id = "roblox-heartbeat",
 			kind = "native",
+			exclusive = true,
 			argv = {
 				"lute",
 				"run",

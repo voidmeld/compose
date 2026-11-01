@@ -154,7 +154,7 @@ describe("createSharedResource", function()
 
 	it("refuses a factory that is not a function", function()
 		expect(function()
-			Compose.createSharedResource((Support.erased(42)) :: () -> (unknown, (() -> ())?))
+			Support.invoke(Compose.createSharedResource, 42)
 		end):toThrow "async/shared-needs-a-factory"
 	end)
 end)
@@ -212,7 +212,7 @@ describe("runtime.connect", function()
 
 		expect(function()
 			world.runtime.mount(function()
-				world.runtime.connect(42, "Poked", function() end)
+				Support.invoke(world.runtime.connect, 42, "Poked", function() end)
 				return world.create "Frame" {}
 			end, world.root)
 		end):toThrow "mount/not-a-node"
@@ -226,7 +226,9 @@ describe("mount point misuse", function()
 			world.runtime.mount(function()
 				return world.create "Frame" {
 					function(parent: Compose.MountPoint)
-						Support.record(parent).Parent = nil
+						local invalid: { [string]: unknown } = {}
+						setmetatable(invalid, { __newindex = parent })
+						invalid.Parent = nil
 					end,
 				}
 			end, world.root)

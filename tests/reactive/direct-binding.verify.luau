@@ -7,6 +7,161 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("direct property bindings", function()
+	it("reports both an immediate listener failure and a queued listener failure", function(own)
+		local owner = Compose.createOwner(Compose.reactor.create())
+		own(function()
+			Compose.owner.dispose(owner)
+		end)
+		local source, queued = Compose.cell(0), Compose.cell(0)
+		local seen = 0
+		Compose.owner.watchStatic(owner, queued, function(value)
+			seen = value
+			if value == 1 then
+				error("queued listener failed", 0)
+			end
+		end)
+		Compose.owner.watchStatic(owner, source, function(value)
+			if value > 0 then
+				queued:set(value)
+			end
+			if value == 1 then
+				error("immediate listener failed", 0)
+			end
+		end)
+		local ok, failure = pcall(function()
+			source:set(1)
+		end)
+		expect(ok):toBe(false)
+		expect(tostring(failure)):toContain "immediate listener failed"
+		expect(tostring(failure)):toContain "queued listener failed"
+		source:set(2)
+		expect(seen):toBe(2)
+	end)
+
+	it("continues outer terminal bindings after a nested terminal group fails", function(own)
+		local outer = Compose.createOwner(Compose.reactor.create())
+		local inner = Compose.createOwner(Compose.reactor.create())
+		own(function()
+			Compose.owner.dispose(outer)
+			Compose.owner.dispose(inner)
+		end)
+		local source, nested = Compose.cell(0), Compose.cell(0)
+		local outerSeen, innerSeen = 0, 0
+		local failing = true
+		Compose.owner.watchTerminal(inner, function(use)
+			use(nested)
+		end)
+		Compose.owner.watchTerminal(inner, function(use)
+			if use(nested) > 0 and failing then
+				error("nested terminal failed", 0)
+			end
+		end)
+		Compose.owner.watchTerminal(inner, function(use)
+			innerSeen = use(nested)
+		end)
+		Compose.owner.watchTerminal(outer, function(use)
+			use(source)
+		end)
+		Compose.owner.watchTerminal(outer, function(use)
+			local value = use(source)
+			if value > 0 then
+				nested:set(value)
+			end
+		end)
+		Compose.owner.watchTerminal(outer, function(use)
+			outerSeen = use(source)
+		end)
+		expect(function()
+			source:set(1)
+		end):toThrow "nested terminal failed"
+		expect(innerSeen):toBe(1)
+		expect(outerSeen):toBe(1)
+		failing = false
+		source:set(2)
+		expect(innerSeen):toBe(2)
+		expect(outerSeen):toBe(2)
+	end)
+
+	it("continues outer listeners after a nested listener group fails", function(own)
+		local outerWorld, innerWorld = Support.world(), Support.world()
+		local outer = Compose.createOwner(outerWorld.runtime.reactor)
+		local inner = Compose.createOwner(innerWorld.runtime.reactor)
+		own(function()
+			Compose.owner.dispose(outer)
+			Compose.owner.dispose(inner)
+		end)
+		local source, nested = Compose.cell(0), Compose.cell(0)
+		local outerSeen, innerSeen = 0, 0
+		local failing = true
+		Compose.owner.watchStatic(inner, nested, function(value)
+			if value > 0 and failing then
+				error("nested listener failed", 0)
+			end
+		end)
+		Compose.owner.watchStatic(inner, nested, function(value)
+			innerSeen = value
+		end)
+		Compose.owner.watchStatic(outer, source, function(value)
+			if value > 0 then
+				nested:set(value)
+			end
+		end)
+		Compose.owner.watchStatic(outer, source, function(value)
+			outerSeen = value
+		end)
+		expect(function()
+			source:set(1)
+		end):toThrow "nested listener failed"
+		expect(innerSeen):toBe(1)
+		expect(outerSeen):toBe(1)
+		failing = false
+		source:set(2)
+		expect(innerSeen):toBe(2)
+		expect(outerSeen):toBe(2)
+	end)
+
+	it("keeps new consumers live when a direct listener group changes", function(own)
+		local first, second = Support.world(), Support.world()
+		local left = Compose.createOwner(first.runtime.reactor)
+		local right = Compose.createOwner(second.runtime.reactor)
+		own(function()
+			Compose.owner.dispose(left)
+			Compose.owner.dispose(right)
+		end)
+		local source = Compose.cell(0)
+		local seen = { 0, 0, 0, 0 }
+		local stopFirst = Compose.owner.watchStatic(left, source, function(value)
+			seen[1] = value
+		end)
+		local stopSecond = Compose.owner.watchStatic(left, source, function(value)
+			seen[2] = value
+		end)
+		source:set(1)
+		local stopThird = Compose.owner.watchStatic(right, source, function(value)
+			seen[3] = value
+		end)
+		source:set(2)
+		expect(seen):toEqual { 2, 2, 2, 0 }
+		stopFirst()
+		source:set(3)
+		expect(seen):toEqual { 2, 3, 3, 0 }
+		stopSecond()
+		stopThird()
+		Compose.owner.watchStatic(left, source, function(value)
+			seen[1] = value
+		end)
+		Compose.withOwner(left, function()
+			local doubled = Compose.formula(function(use)
+				return use(source) * 2
+			end)
+			Compose.watch(function(use)
+				seen[4] = use(doubled)
+			end)
+		end)
+		source:set(4)
+		expect(seen):toEqual { 4, 3, 3, 8 }
+	end)
+
 	it("restores a coalesced setter after an abandoned terminal cascade", function(own)
 		local world = Support.world()
 		local source = Compose.cell(0)
@@ -86,7 +241,8 @@ describe("direct property bindings", function()
 
 	it("keeps cached setters valid after flushes and value type changes", function(own)
 		local world = Support.world()
-		local source = Compose.cell(Support.erased(0))
+		local initial: unknown = 0
+		local source = Compose.cell(initial)
 		local saved = source.set
 		local comparisons = 0
 		local class = {

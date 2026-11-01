@@ -48,10 +48,10 @@ describe("geometry safe area", function()
 			geometry.safeArea({ width = 10, height = 10 }, nil, math.huge)
 		end):toThrow "geometry/invalid-number"
 		expect(function()
-			geometry.safeArea({ width = 10, height = 10 }, (Support.erased(3)) :: Compose.GeometryInsets)
+			Support.invoke(geometry.safeArea, { width = 10, height = 10 }, 3)
 		end):toThrow "geometry/invalid-insets"
 		expect(function()
-			geometry.safeArea((Support.erased(nil)) :: Compose.GeometrySize)
+			Support.invoke(geometry.safeArea, nil)
 		end):toThrow "geometry/invalid-size"
 	end)
 end)
@@ -107,19 +107,16 @@ describe("geometry fit", function()
 			geometry.fit({ left = 0, top = 0, right = math.huge - math.huge, bottom = 5 }, { width = 1, height = 1 })
 		end):toThrow "geometry/invalid-number"
 		expect(function()
-			geometry.fit(
-				(Support.erased { left = 0, top = 0, right = 5 }) :: Compose.GeometryBounds,
-				{ width = 1, height = 1 }
-			)
+			Support.invoke(geometry.fit, { left = 0, top = 0, right = 5 }, { width = 1, height = 1 })
 		end):toThrow "geometry/invalid-number"
 		expect(function()
-			geometry.fit((Support.erased(nil)) :: Compose.GeometryBounds, { width = 1, height = 1 })
+			Support.invoke(geometry.fit, nil, { width = 1, height = 1 })
 		end):toThrow "geometry/invalid-rect"
 		expect(function()
 			geometry.fit(available, { width = -1, height = 1 })
 		end):toThrow "geometry/invalid-number"
 		expect(function()
-			geometry.fit(available, (Support.erased(nil)) :: Compose.GeometrySize)
+			Support.invoke(geometry.fit, available, nil)
 		end):toThrow "geometry/invalid-size"
 		expect(function()
 			geometry.fit(
@@ -189,7 +186,7 @@ describe("geometry overlap and clear placement", function()
 
 	it("refuses malformed candidates, bounds and reserved regions", function()
 		expect(function()
-			geometry.firstClear((Support.erased(nil)) :: { Compose.GeometryBounds })
+			Support.invoke(geometry.firstClear, nil)
 		end):toThrow "geometry/invalid-candidates"
 		expect(function()
 			geometry.firstClear { { left = 0, top = 0, right = 1 } }
@@ -201,7 +198,7 @@ describe("geometry overlap and clear placement", function()
 			geometry.firstClear({ rect(0, 0, 1, 1) }, { within = 5 })
 		end):toThrow "geometry/invalid-rect"
 		expect(function()
-			geometry.overlaps(rect(0, 0, 1, 1), (Support.erased(nil)) :: Compose.GeometryBounds)
+			Support.invoke(geometry.overlaps, rect(0, 0, 1, 1), nil)
 		end):toThrow "geometry/invalid-rect"
 	end)
 end)

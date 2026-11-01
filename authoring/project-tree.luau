@@ -57,7 +57,7 @@ export type Plan = {
 	requirePolicy: ("alias-only" | "any")?,
 }
 
-export type Node = { [string]: Node | string | boolean | { [string]: RojoValue } }
+export type Node = { [string]: RojoValue }
 
 export type Document = {
 	name: string,
@@ -90,11 +90,15 @@ local function copyRojoValues(source: { [string]: RojoValue }?): { [string]: Roj
 	local copy: { [string]: RojoValue } = {}
 	for key, value in source do
 		if not Diagnostics.isRojoValue(value) then
-			Diagnostics.raise("project-tree/not-property-shaped", ("value %q cannot become a property"):format(key), {
-				key = key,
-				actual = Diagnostics.describe(value),
-				expected = "a scalar, an array of finite numbers, or a single-key typed value",
-			})
+			return Diagnostics.raise(
+				"project-tree/not-property-shaped",
+				("value %q cannot become a property"):format(key),
+				{
+					key = key,
+					actual = Diagnostics.describe(value),
+					expected = "a scalar, an array of finite numbers, or a single-key typed value",
+				}
+			)
 		end
 		copy[key] = Diagnostics.copyRojoValue(value)
 	end
@@ -115,19 +119,23 @@ end
 
 local function validateMount(mount: Mount, index: number)
 	if type(mount.name) ~= "string" or mount.name == "" then
-		Diagnostics.raise("project-tree/unnamed-mount", "a mount has no name", {
+		return Diagnostics.raise("project-tree/unnamed-mount", "a mount has no name", {
 			index = index,
 			expected = "a non-empty name",
 		})
 	end
 	if type(mount.at) ~= "table" then
-		Diagnostics.raise("project-tree/unplaced-mount", ("mount %q names no tree location"):format(mount.name), {
-			index = index,
-			expected = "at, an array of ancestor names",
-		})
+		return Diagnostics.raise(
+			"project-tree/unplaced-mount",
+			("mount %q names no tree location"):format(mount.name),
+			{
+				index = index,
+				expected = "at, an array of ancestor names",
+			}
+		)
 	end
 	if mount.path == nil and mount.className == nil then
-		Diagnostics.raise(
+		return Diagnostics.raise(
 			"project-tree/empty-mount",
 			("mount %q carries neither path nor className"):format(mount.name),
 			{
@@ -144,7 +152,7 @@ local function refuseBareRelativeRequires(mount: Mount)
 	end
 	for _, request in mount.requires do
 		if startsWith(request, "./") or startsWith(request, "../") then
-			Diagnostics.raise(
+			return Diagnostics.raise(
 				"project-tree/bare-relative-require",
 				("mount %q requires %q by relative path"):format(mountLabel(mount), request),
 				{
@@ -235,7 +243,7 @@ local function enforceSiblingClosure(mounts: { Mount })
 		local parent = table.concat(mount.at, "/")
 		for _, sibling in mount.siblings do
 			if not placed[parent .. "\0" .. sibling] then
-				Diagnostics.raise(
+				return Diagnostics.raise(
 					"project-tree/unmounted-sibling",
 					("mount %q needs sibling %q beside it"):format(mountLabel(mount), sibling),
 					{
@@ -255,17 +263,27 @@ local function branch(root: Node, at: { string }, className: string): Node
 	for _, name in at do
 		local child = node[name]
 		if child == nil then
-			child = { ["$className"] = className } :: Node
+			child = { ["$className"] = className }
 			node[name] = child
 		end
 		if type(child) ~= "table" then
-			Diagnostics.raise("project-tree/occupied-branch", ("tree location %q is not a branch"):format(name), {
-				key = name,
-				actual = Diagnostics.describe(child),
-				expected = "a branch node",
-			})
+			return Diagnostics.raise(
+				"project-tree/occupied-branch",
+				("tree location %q is not a branch"):format(name),
+				{
+					key = name,
+					actual = Diagnostics.describe(child),
+					expected = "a branch node",
+				}
+			)
 		end
-		node = child :: Node
+		local nextNode: Node = {}
+		for key, value in child do
+			assert(type(key) == "string", "project branches require named fields")
+			nextNode[key] = value
+		end
+		node[name] = nextNode
+		node = nextNode
 	end
 	return node
 end
@@ -295,14 +313,14 @@ end
 local function identityNode(identity: Identity): Node
 	local values = copyRojoValues(identity.values)
 	if values == nil then
-		Diagnostics.raise("project-tree/empty-identity", ("identity %q stamps no value"):format(identity.name), {
+		return Diagnostics.raise("project-tree/empty-identity", ("identity %q stamps no value"):format(identity.name), {
 			expected = "at least one identity value",
 		})
 	end
 	if identity.path ~= nil then
 		return { ["$path"] = identity.path }
 	end
-	local node: Node = { ["$className"] = "Configuration", ["$attributes"] = values :: { [string]: RojoValue } }
+	local node: Node = { ["$className"] = "Configuration", ["$attributes"] = values }
 	return node
 end
 
@@ -314,9 +332,13 @@ local function applyVariantProperties(root: Node, variant: Variant?)
 		local at: { string } = string.split(location, ".")
 		local node = branch(root, at, "Folder")
 		local existing = node["$properties"]
-		local merged: { [string]: RojoValue } = if type(existing) == "table"
-			then existing :: { [string]: RojoValue }
-			else {}
+		local merged: { [string]: RojoValue } = {}
+		if type(existing) == "table" then
+			for key, value in existing do
+				assert(type(key) == "string", "project properties require named fields")
+				merged[key] = value
+			end
+		end
 		local validated = copyRojoValues(properties)
 		if validated ~= nil then
 			for key, value in validated do
@@ -336,7 +358,7 @@ local function documentFor(plan: Plan, target: Target, mounts: { Mount }, varian
 		local existing = parent[mount.name]
 		if mount.replace == true then
 			if existing == nil then
-				Diagnostics.raise(
+				return Diagnostics.raise(
 					"project-tree/replace-without-base",
 					("mount %q replaces nothing"):format(mountLabel(mount)),
 					{
@@ -346,10 +368,14 @@ local function documentFor(plan: Plan, target: Target, mounts: { Mount }, varian
 				)
 			end
 		elseif existing ~= nil then
-			Diagnostics.raise("project-tree/duplicate-mount", ("two mounts claim %q"):format(mountLabel(mount)), {
-				key = mount.name,
-				expected = "one mount per tree location",
-			})
+			return Diagnostics.raise(
+				"project-tree/duplicate-mount",
+				("two mounts claim %q"):format(mountLabel(mount)),
+				{
+					key = mount.name,
+					expected = "one mount per tree location",
+				}
+			)
 		end
 		parent[mount.name] = nodeFor(mount)
 		if mount.path ~= nil then
@@ -360,7 +386,7 @@ local function documentFor(plan: Plan, target: Target, mounts: { Mount }, varian
 	if target.identity ~= nil then
 		local parent = branch(root, target.identity.at, "Folder")
 		if parent[target.identity.name] ~= nil then
-			Diagnostics.raise(
+			return Diagnostics.raise(
 				"project-tree/occupied-identity",
 				("identity %q collides with a mount"):format(target.identity.name),
 				{ key = target.identity.name, expected = "a free tree location for the identity" }
@@ -386,21 +412,24 @@ local function variantNamed(plan: Plan, name: string?): Variant?
 			end
 		end
 	end
-	Diagnostics.raise("project-tree/unknown-variant", ("no variant is named %q"):format(name), {
-		key = name,
-		expected = "a variant declared by the plan",
-	})
+	error(
+		Diagnostics.format("project-tree/unknown-variant", ("no variant is named %q"):format(name), {
+			key = name,
+			expected = "a variant declared by the plan",
+		}),
+		0
+	)
 	return nil
 end
 
 local function projectTree(plan: Plan): ProjectTree
 	if type(plan.mounts) ~= "table" or #plan.mounts == 0 then
-		Diagnostics.raise("project-tree/empty-plan", "the plan mounts nothing", {
+		return Diagnostics.raise("project-tree/empty-plan", "the plan mounts nothing", {
 			expected = "at least one mount",
 		})
 	end
 	if type(plan.targets) ~= "table" or #plan.targets == 0 then
-		Diagnostics.raise("project-tree/no-targets", "the plan names no target", {
+		return Diagnostics.raise("project-tree/no-targets", "the plan names no target", {
 			expected = "at least one target",
 		})
 	end
@@ -427,15 +456,19 @@ local function projectTree(plan: Plan): ProjectTree
 
 	for _, target in plan.targets do
 		if type(target.name) ~= "string" or target.name == "" then
-			Diagnostics.raise("project-tree/unnamed-target", "a target has no name", {
+			return Diagnostics.raise("project-tree/unnamed-target", "a target has no name", {
 				expected = "a non-empty target name",
 			})
 		end
 		if documents[target.name] ~= nil then
-			Diagnostics.raise("project-tree/duplicate-target", ("two targets are named %q"):format(target.name), {
-				key = target.name,
-				expected = "one target per name",
-			})
+			return Diagnostics.raise(
+				"project-tree/duplicate-target",
+				("two targets are named %q"):format(target.name),
+				{
+					key = target.name,
+					expected = "one target per name",
+				}
+			)
 		end
 
 		local variant = variantNamed(plan, target.variant)

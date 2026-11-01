@@ -85,6 +85,7 @@ return table.freeze {
 	"tests/tools/dispositions.lute.verify.luau",
 	"tests/tools/gate-resources.lute.verify.luau",
 	"tests/tools/lint-contract.lute.verify.luau",
+	"tests/tools/readable-types.lute.verify.luau",
 	"tests/tools/required-surface.lute.verify.luau",
 	"tests/tools/retained-performance.lute.verify.luau",
 	"tests/tools/temporary-directory.lute.verify.luau",

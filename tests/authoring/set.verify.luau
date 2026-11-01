@@ -28,19 +28,19 @@ describe("Author.set", function()
 
 	it("refuses a declaration without a name", function()
 		expect(function()
-			Author.set((Support.erased { idKey = "id", entries = {} }) :: Author.SetOptions)
+			Support.invoke(Author.set, { idKey = "id", entries = {} })
 		end):toThrow "name"
 	end)
 
 	it("refuses a declaration without an idKey", function()
 		expect(function()
-			Author.set((Support.erased { name = "props", entries = {} }) :: Author.SetOptions)
+			Support.invoke(Author.set, { name = "props", entries = {} })
 		end):toThrow "idKey"
 	end)
 
 	it("refuses an entry that is not a table", function()
 		expect(function()
-			Author.set { name = "props", idKey = "id", entries = (Support.erased { "torch" }) :: { Author.Entry } }
+			Support.invoke(Author.set, { name = "props", idKey = "id", entries = { "torch" } })
 		end):toThrow "entry"
 	end)
 

@@ -83,9 +83,9 @@ describe("a host that cannot order children", function()
 
 	it("still rejects a renderer missing a method that is not optional", function()
 		expect(function()
-			Compose.createRuntime({
+			Support.invoke(Compose.createRuntime, {
 				name = "broken",
-				render = Support.erased {
+				render = {
 					createNode = function()
 						return {}
 					end,
@@ -95,7 +95,7 @@ describe("a host that cannot order children", function()
 
 					destroyNode = function() end,
 				},
-			} :: Compose.Host)
+			})
 		end):toThrow "removeChild"
 	end)
 

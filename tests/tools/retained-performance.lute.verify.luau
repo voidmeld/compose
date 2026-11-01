@@ -2,6 +2,7 @@
 
 local Test = require "../harness"
 local Benchmark = require "../../.lute/dependencies/verify/src/benchmark"
+local json = require "@std/json"
 local process = require "@std/process"
 local Suites = require "../../bench/suites"
 local Paired = require "../../bench/paired"
@@ -154,6 +155,18 @@ describe("retained performance", function()
 		local rule: Benchmark.CompareRule = { ratio = 1.05, floor = 64 }
 		local same = Benchmark.compare(base, stored("same", sameMounted, sameTeardown), { rule = rule })
 		local kept = Benchmark.compare(base, stored("kept", keptMounted, keptTeardown), { rule = rule })
+		if same.passed ~= 2 or kept.failed ~= 2 then
+			error(
+				json.serialize {
+					baseline = { mounted = baseMounted, teardown = baseTeardown },
+					unchanged = { mounted = sameMounted, teardown = sameTeardown },
+					planted = { mounted = keptMounted, teardown = keptTeardown },
+					accepted = same.passed,
+					rejected = kept.failed,
+				},
+				0
+			)
+		end
 		expect(same.passed):toBe(2)
 		expect(kept.failed):toBe(2)
 	end)

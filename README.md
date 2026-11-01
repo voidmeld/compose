@@ -4,6 +4,8 @@ Compose is a scene composition library for Luau. It builds UI and world scenes f
 It binds properties to state. A state change updates only the affected properties and children.
 Each scene has an owner that releases its nodes and subscriptions.
 
+Source analysis uses Luau Solver V2, including read-only types.
+
 First, follow the [quickstart](docs/quickstart.md) to build, update and release one component.
 
 ## Documentation

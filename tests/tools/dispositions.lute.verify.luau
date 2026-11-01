@@ -110,7 +110,7 @@ describe("dispositions.apply", function()
 
 	it("refuses an entry that is not a complete disposition", function()
 		expect(function()
-			Dispositions.apply({}, { (Support.erased { code = "CMP011" }) :: Dispositions.Disposition })
+			Support.invoke(Dispositions.apply, {}, { { code = "CMP011" } })
 		end):toThrow "complete disposition"
 	end)
 end)
