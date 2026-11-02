@@ -16,7 +16,7 @@ export type ChildList = {
 	host: Host.Host,
 	direct: Host.Host,
 	parent: Node,
-	counts: { number },
+	[number]: number,
 
 	total: number,
 }
@@ -26,20 +26,19 @@ export type MountPoint = Host.MountPoint
 export type Directive = Host.Directive
 
 local function createList(host: Host.Host, parent: Node, direct: Host.Host?): ChildList
-	return { host = host, direct = direct or host, parent = parent, counts = {}, total = 0 }
+	return { host = host, direct = direct or host, parent = parent, total = 0 }
 end
 
 local function addSlot(list: ChildList): number
-	local index = #list.counts + 1
-	list.counts[index] = 0
+	local index = #list + 1
+	list[index] = 0
 	return index
 end
 
 local function baseOf(list: ChildList, slot: number): number
 	local base = 0
-	local counts = list.counts
 	for index = 1, slot - 1 do
-		base += counts[index]
+		base += list[index]
 	end
 	return base
 end
@@ -71,11 +70,11 @@ local function mountPointFor(list: ChildList, slot: number): MountPoint
 	local parent = list.parent
 
 	local function count(): number
-		return list.counts[slot]
+		return list[slot]
 	end
 
 	local function insert(node: Node, at: number?)
-		local held = list.counts[slot]
+		local held = list[slot]
 		local within = if at ~= nil then at else held + 1
 		if within < 1 or within > held + 1 then
 			return Diagnostics.raise(
@@ -89,7 +88,7 @@ local function mountPointFor(list: ChildList, slot: number): MountPoint
 			)
 		end
 		render.insertChild(parent, node, baseOf(list, slot) + within)
-		list.counts[slot] = held + 1
+		list[slot] = held + 1
 		list.total += 1
 	end
 
@@ -97,7 +96,7 @@ local function mountPointFor(list: ChildList, slot: number): MountPoint
 		if moveChild == nil then
 			return
 		end
-		local held = list.counts[slot]
+		local held = list[slot]
 		if at < 1 or at > held then
 			return Diagnostics.raise(
 				"structure/position-out-of-range",
@@ -114,7 +113,7 @@ local function mountPointFor(list: ChildList, slot: number): MountPoint
 
 	local function remove(node: Node)
 		render.removeChild(parent, node)
-		list.counts[slot] -= 1
+		list[slot] -= 1
 		list.total -= 1
 	end
 
@@ -133,7 +132,7 @@ end
 
 local function insertStatic(list: ChildList, slot: number, node: Node)
 	list.direct.render.insertChild(list.parent, node, list.total + 1)
-	list.counts[slot] += 1
+	list[slot] += 1
 	list.total += 1
 end
 
