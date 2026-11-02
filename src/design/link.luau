@@ -4,6 +4,7 @@ local Core = require "../core"
 local Session = require "./session"
 local Source = require "./source"
 local Types = require "./types"
+local Document = require "./document"
 
 export type Status = "synchronized" | "custom" | "conflict"
 
@@ -15,7 +16,7 @@ export type Link = {
 	dispose: () -> (),
 }
 
-local CHANGED = "Source changed outside the editor. Import it before editing visually"
+local CHANGED = "Conflict: source kept its changes; visual edits remain on stage. Import source to resolve"
 local CUSTOM = "The linked source is custom code. Import a generated design before editing visually"
 
 return function(session: Session.Session, store: Store): Link
@@ -24,7 +25,11 @@ return function(session: Session.Session, store: Store): Link
 	local status: Core.Value<Status> = Core.cell(initial)
 	local last = ""
 	local baseline = ""
+	local exported: string? = nil
 	local applying = false
+	local function emit(value: Types.Document): string
+		return Source.emit(value, library, if exported then { name = exported } else nil)
+	end
 	local function parsed(code: string): Types.Document?
 		local ok, value = pcall(Source.parse, code, library)
 		return if ok then value else nil
@@ -38,10 +43,48 @@ return function(session: Session.Session, store: Store): Link
 			session.problem:set(CUSTOM)
 			return false
 		end
-		baseline = Source.emit(value, library)
-		if Source.emit(session.document:peek(), library) ~= baseline then
+		exported = nil
+		local generated = Source.emit(value, library)
+		if generated ~= code then
+			local ok, named = pcall(function(): string
+				return Source.emit(value, library, { name = value.name })
+			end)
+			if ok and named == code then
+				exported = value.name
+			end
+		end
+		baseline = emit(value)
+		if emit(session.document:peek()) ~= baseline then
+			local old = session.document:peek()
+			local paths: { [string]: string } = {}
+			local replacements: { [string]: string } = {}
+			local function index(node: Types.Node, path: string, into: { [string]: string }, reverse: boolean)
+				if reverse then
+					into[path] = node.id
+				else
+					into[node.id] = path
+				end
+				local occurrences: { [string]: number } = {}
+				for _, child in node.children do
+					local key = child.kind .. "\0" .. child.name
+					occurrences[key] = (occurrences[key] or 0) + 1
+					index(child, path .. "\1" .. key .. "\0" .. tostring(occurrences[key]), into, reverse)
+				end
+			end
+			index(old.root, "", paths, false)
+			index(value.root, "", replacements, true)
+			local selected: { string } = {}
+			for _, id in session.selection:peek() do
+				local replacement = replacements[paths[id]]
+				if replacement ~= nil and Document.find(value.root, replacement) then
+					table.insert(selected, replacement)
+				end
+			end
 			applying = true
 			session.replace(value)
+			if #selected > 0 then
+				session.selectMany(selected)
+			end
 			applying = false
 		end
 		status:set "synchronized"
@@ -54,8 +97,13 @@ return function(session: Session.Session, store: Store): Link
 			if applying or status:peek() ~= "synchronized" then
 				return
 			end
-			local generated = Source.emit(value, library)
+			local generated = emit(value)
 			if generated == baseline then
+				return
+			end
+			if last ~= baseline then
+				status:set "custom"
+				session.problem:set "Source formatting is custom. Visual edits would change unrelated bytes"
 				return
 			end
 			if store.write(last, generated) then

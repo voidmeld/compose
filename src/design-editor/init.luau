@@ -24,6 +24,8 @@ export type Workspace = {
 	root: string,
 	stageSize: UI.Point?,
 	devices: { Editor.Device }?,
+	device: string?,
+	bindings: { [string]: Design.Resolved }?,
 	previews: { Editor.Preview }?,
 	token: ((name: string) -> Design.Literal)?,
 	resolveToken: ((name: string) -> Design.Resolved)?,
@@ -95,6 +97,8 @@ local function kit(name: string, open: () -> Workspace): Kit
 				stageSize = workspace.stageSize
 					or if devices ~= nil and devices[1] ~= nil then devices[1].size else { X = 390, Y = 844 },
 				devices = devices,
+				device = workspace.device,
+				bindings = workspace.bindings,
 				previews = workspace.previews,
 				token = workspace.token,
 				resolveToken = workspace.resolveToken,
