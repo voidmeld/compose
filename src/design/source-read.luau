@@ -1010,6 +1010,9 @@ function source.parse(code: string, library: Library): Types.Document
 				assert(type(flags) == "table", "Editor flags are a table")
 				assert(flags.hidden == nil or type(flags.hidden) == "boolean", "Hidden is a boolean")
 				assert(flags.locked == nil or type(flags.locked) == "boolean", "Locked is a boolean")
+				if flags.name ~= nil then
+					node.name = text(flags, "name")
+				end
 				node.hidden = if flags.hidden == true then true else nil
 				node.locked = if flags.locked == true then true else nil
 			end

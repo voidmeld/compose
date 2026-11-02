@@ -353,15 +353,14 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	local header: Record = { name = value.name, contract = contractLiteral(value.contract) }
 	local editor: Record = {}
 	Read.editorNodes(value.root, "root", function(node: Node, path: string)
-		if node.hidden or node.locked then
-			local flags: Record = {}
-			if node.hidden then
-				flags.hidden = true
-			end
-			if node.locked then
-				flags.locked = true
-			end
-			editor[path] = flags
+		local input = if node.nameInput then Document.input(value, node.nameInput) else nil
+		local name = if node.nameField or (input and input.required) then node.name else nil
+		if node.hidden or node.locked or name then
+			editor[path] = {
+				hidden = if node.hidden then true else nil,
+				locked = if node.locked then true else nil,
+				name = name,
+			}
 		end
 	end)
 	if next(editor) ~= nil then
@@ -716,7 +715,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		if nameField ~= nil then
 			opening = `{kind.call}(tostring(current:peek().{nameField})) `
 		elseif nameInput ~= nil then
-			opening = `{kind.call}(props.{nameInput} or {literal(node.name)}) `
+			local input = assert(Document.input(value, nameInput))
+			local fallback = if input.required then "" else ` or {literal(node.name)}`
+			opening = `{kind.call}(props.{nameInput}{fallback}) `
 		else
 			opening = `{kind.call} {literal(node.name)} `
 		end
