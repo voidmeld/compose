@@ -333,7 +333,6 @@ return {
 	},
 	createList = createList,
 	addSlot = addSlot,
-	baseOf = baseOf,
 	mountPointFor = mountPointFor,
 	insertStatic = insertStatic,
 	wholeOf = wholeOf,

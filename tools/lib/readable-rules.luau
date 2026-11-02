@@ -81,7 +81,5 @@ end
 
 return {
 	rules = RULES,
-	bodyNames = BODY_NAMES,
-	isBodyName = isBodyName,
 	occurrences = occurrences,
 }
