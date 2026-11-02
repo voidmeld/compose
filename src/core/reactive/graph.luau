@@ -261,20 +261,14 @@ local function settleTouched()
 		for _, node in pending do
 			local invalidate = node.invalidate
 			if invalidate ~= nil and not node.released then
-				local ok, failure: unknown = pcall(function(): unknown
-					invalidate(node)
-					return nil
-				end)
+				local ok, failure: unknown = pcall(invalidate, node)
 				if not ok then
 					table.insert(failures, tostring(failure))
 				end
 			end
 		end
 	end
-	local ok, failure: unknown = pcall(function(): unknown
-		Reactor.settleTouched()
-		return nil
-	end)
+	local ok, failure: unknown = pcall(Reactor.settleTouched)
 	if not ok then
 		table.insert(failures, tostring(failure))
 	end
