@@ -227,6 +227,8 @@ local function scalar(library: Library, kind: string): string
 		return "number"
 	elseif kind == "boolean" then
 		return "boolean"
+	elseif kind == "vector3" then
+		return "{ number }"
 	elseif kind == "list" then
 		return "{ { [string]: unknown } }"
 	elseif kind == "record" then
