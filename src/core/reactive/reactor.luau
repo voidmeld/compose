@@ -387,21 +387,6 @@ local function pending(reactor: Reactor): number
 	return reactor.count - reactor.cursor
 end
 
-local function reset(reactor: Reactor)
-	local resume = statsOn.resume
-	if resume ~= nil then
-		resume()
-	end
-	local queue = reactor.queue
-	for index = reactor.count, 1, -1 do
-		queue[index].queued = false
-		queue[index] = nil
-	end
-	reactor.count = 0
-	reactor.cursor = 0
-	reactor.batching = false
-end
-
 return {
 	create = create,
 	enqueue = enqueue,
@@ -411,6 +396,4 @@ return {
 	settle = settle,
 	settleTouched = settleTouched,
 	pending = pending,
-	reset = reset,
-	touch = touch,
 }
