@@ -29,10 +29,7 @@ local CHECK = 1
 local DIRTY = 2
 
 local detachers = Nodes.detachers
-local asNode = Nodes.asNode
-local isNode = Nodes.isNode
 local nodeOf = Nodes.nodeOf
-local read = Nodes.read
 local identityKey = Nodes.identityKey
 
 local invalidated: { Node } = {}
@@ -275,13 +272,6 @@ local function settleTouched()
 	end
 end
 
-local function refresh(producer: Node)
-	local update = producer.refresh
-	if update then
-		update(producer)
-	end
-end
-
 local function notANode(api: string, candidate: unknown): never
 	local actual = Diagnostics.describe(candidate)
 	return Diagnostics.raise(
@@ -490,14 +480,6 @@ local function runEffectIn(frame: Evaluation.Evaluation, consumer: Node)
 	if #consumer > reads then
 		trim(consumer, reads + 1)
 	end
-end
-
-local function track(consumer: Node, invoke: (Node) -> ())
-	local previousConsumer, previousOrder = Evaluation.enter(consumer)
-	consumer.reads = 0
-	invoke(consumer)
-	Evaluation.leave(previousConsumer, previousOrder)
-	trim(consumer, (consumer.reads or 0) + 1)
 end
 
 local function release(consumer: Node)
@@ -762,10 +744,7 @@ end
 
 return {
 	detachers = detachers,
-	isNode = isNode,
-	asNode = asNode,
 	nodeOf = nodeOf,
-	read = read,
 	identityKey = identityKey,
 	clock = clock,
 	nextVersion = nextVersion,
@@ -773,21 +752,16 @@ return {
 	coalesce = coalesce,
 	CHECK = CHECK,
 	DIRTY = DIRTY,
-	observations = observations,
 	observe = observe,
-	attach = attach,
-	detach = detach,
 	trim = trim,
 	markStale = markStale,
 	settleTouched = settleTouched,
-	refresh = refresh,
 	notANode = notANode,
 	use = use,
 	runEffect = runEffect,
 	runEffectIn = runEffectIn,
 	dependenciesMoved = dependenciesMoved,
 	evaluate = evaluate,
-	track = track,
 	release = release,
 	untracked = untracked,
 	countNotification = countNotification,
