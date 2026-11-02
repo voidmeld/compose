@@ -63,9 +63,6 @@ local function keyedWithKeys<V, K>(
 			table.clear(order)
 			table.clear(matched)
 			table.clear(keys)
-			table.clear(retainedPositions)
-			table.clear(retainedTargets)
-			base, count = 0, 0
 		end)
 
 		local function normalize()
@@ -217,35 +214,26 @@ local function keyedWithKeys<V, K>(
 			local previousCount = count
 			local fresh: { [K]: number }? = nil
 			for index = 1, wanted do
-				local itemKey = keyOf(list[index], index)
+				local item = list[index]
+				local itemKey = keyOf(item, index)
 				keys[index] = itemKey
-				if index <= previousCount and prefix == index - 1 and rawequal(order[base + index].key, itemKey) then
-					prefix = index
-					if not ordersChildren and order[base + index].item ~= list[index] then
-						changed += 1
-						local entry = order[base + index]
-						entry.mark = mark + index
-						matched[changed] = entry
-					end
-					continue
-				end
 				local entry = entries[itemKey]
 				if entry ~= nil then
 					local at = entry.position - base
-					if at <= prefix then
-						duplicate(index, at)
-					end
 					if entry.mark >= mark then
 						duplicate(index, entry.mark - mark)
 					end
 					entry.mark = mark + index
+					if prefix == index - 1 and at == index then
+						prefix = index
+					end
+					found += 1
 					if ordersChildren then
 						matched[index] = entry
-					elseif at ~= index or entry.item ~= list[index] then
+					elseif at ~= index or entry.item ~= item then
 						changed += 1
 						matched[changed] = entry
 					end
-					found += 1
 				else
 					local added = fresh or {}
 					fresh = added
@@ -259,13 +247,7 @@ local function keyedWithKeys<V, K>(
 			for index = #keys, wanted + 1, -1 do
 				keys[index] = nil
 			end
-			if
-				not ordersChildren
-				and fresh == nil
-				and found == previousCount - prefix
-				and wanted == previousCount
-				and complete
-			then
+			if not ordersChildren and fresh == nil and wanted == previousCount and complete then
 				for at = 1, changed do
 					local entry = assert(matched[at])
 					local index = entry.mark - mark
@@ -318,7 +300,7 @@ local function keyedWithKeys<V, K>(
 			end
 
 			local removedAny = false
-			if found < previousCount - prefix then
+			if found < previousCount then
 				for index = prefix + 1, oldEnd do
 					local existing = order[index]
 					if existing.mark < mark then
