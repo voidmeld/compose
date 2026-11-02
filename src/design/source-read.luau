@@ -155,35 +155,27 @@ local function list(record: Record, key: string): { Record }
 end
 
 local function inputKind(name: string): Types.InputKind
-	if name == "readable" then
-		return "readable"
-	elseif name == "cell" then
-		return "cell"
+	if name == "value" or name == "readable" or name == "cell" then
+		return name
 	end
-	assert(name == "value", `Unknown input kind {name}`)
-	return "value"
+	error(`Unknown input kind {name}`, 0)
 end
 
 local function inputType(name: string): Types.InputType
-	if name == "number" then
-		return "number"
-	elseif name == "boolean" then
-		return "boolean"
-	elseif name == "color" then
-		return "color"
-	elseif name == "image" then
-		return "image"
-	elseif name == "vector3" then
-		return "vector3"
-	elseif name == "list" then
-		return "list"
-	elseif name == "record" then
-		return "record"
-	elseif name == "slot" then
-		return "slot"
+	if
+		name == "string"
+		or name == "number"
+		or name == "boolean"
+		or name == "color"
+		or name == "image"
+		or name == "vector3"
+		or name == "list"
+		or name == "record"
+		or name == "slot"
+	then
+		return name
 	end
-	assert(name == "string", `Unknown input type {name}`)
-	return "string"
+	error(`Unknown input type {name}`, 0)
 end
 
 local function stateFrom(header: Record): { Types.State }?

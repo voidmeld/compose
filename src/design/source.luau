@@ -66,16 +66,12 @@ local function layoutHeader(header: Literal): string
 		if type(current) ~= "table" then
 			return literal(current)
 		end
-		local keys = keysOf(current)
-		if #keys == 0 then
-			return "{}"
-		end
 		local single = literal(current)
-		if used + #single <= WIDTH then
+		if single == "{}" or used + #single <= WIDTH then
 			return single
 		end
 		local lines = { "{" }
-		for index, key in keys do
+		for index, key in keysOf(current) do
 			local prefix = prefix(key, index)
 			local width = (depth + 1) * 4 + #prefix + 1
 			table.insert(lines, string.rep("\t", depth + 1) .. prefix .. lay(current[key], depth + 1, width) .. ",")
