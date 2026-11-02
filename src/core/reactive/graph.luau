@@ -98,9 +98,6 @@ local function append(producer: Node, edge: Node)
 	local first = producer.first
 	if first == nil then
 		producer.first = edge
-		if edge[2] == nil then
-			edge.listenerGroup = true
-		end
 		edge[3] = edge
 		if observing > 0 then
 			local observed = observations[producer]
@@ -542,6 +539,7 @@ end
 
 local LISTENER = {}
 LISTENER.__index = LISTENER
+LISTENER.listenerGroup = true
 Nodes.adopt(LISTENER)
 
 local resume: Node? = nil
@@ -643,6 +641,7 @@ end
 
 local CELL_LISTENER = {}
 CELL_LISTENER.__index = CELL_LISTENER
+CELL_LISTENER.listenerGroup = true
 Nodes.adopt(CELL_LISTENER)
 
 function CELL_LISTENER.run(leader: Node)
@@ -692,6 +691,7 @@ local function listenEdge(
 			version = producer.version,
 			reactor = reactor,
 			listener = listener,
+			coalesced = false,
 			subject = subject,
 			fastKey = key,
 		}
@@ -703,6 +703,7 @@ local function listenEdge(
 			version = producer.version,
 			reactor = reactor,
 			listener = listener,
+			coalesced = false,
 			subject = subject,
 			fastKey = key,
 			transform = transform,
@@ -740,6 +741,7 @@ local function listen(reactor: Types.Reactor, producer: Node, listener: (unknown
 		version = producer.version,
 		reactor = reactor,
 		listener = listener,
+		coalesced = false,
 	}
 	Nodes.classify(edge, class)
 	if statsOn.enabled then
