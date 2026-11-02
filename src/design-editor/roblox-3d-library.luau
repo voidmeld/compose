@@ -625,6 +625,17 @@ local function create(
 		if type(value) == "string" and string.match(value, "^#%x%x%x%x%x%x$") then
 			return ui.hex(value)
 		end
+		if type(value) == "table" then
+			local r, g, b = value[1], value[2], value[3]
+			assert(
+				type(r) == "number" and type(g) == "number" and type(b) == "number" and #value == 3,
+				"A color has three RGB channels"
+			)
+			for key in value do
+				assert(key == 1 or key == 2 or key == 3, "A color has three RGB channels")
+			end
+			return ui.values.color(r, g, b)
+		end
 		return nil
 	end
 
@@ -841,10 +852,11 @@ local function create(
 			for _, row in rows do
 				local current: Design.Row = {
 					id = row.id,
+					name = row.name,
 					position = vectorLiteral(row.position),
 					rotation = vectorLiteral(row.rotation),
 					size = vectorLiteral(row.size),
-					color = row.color,
+					color = if type(row.color) == "string" then row.color else vectorLiteral(row.color),
 				}
 				ui.set(render(Compose.cell(current)), "Parent", model)
 			end
