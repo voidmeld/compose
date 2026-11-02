@@ -480,16 +480,21 @@ local function create(
 			update()
 		end)
 		apply(props.transform, function(value: Design.Literal?)
+			transform = Math.frame { X = 0, Y = 0, Z = 0 }
 			if type(value) == "table" then
-				local components: { number } = {}
-				for index = 1, 12 do
-					local component = value[index]
-					assert(type(component) == "number", "A transform has twelve numeric CFrame components")
-					components[index] = component
+				local rows = if type(value[1]) == "table" then value else { value }
+				for _, row in rows do
+					assert(type(row) == "table" and #row == 12, "A transform has twelve numeric CFrame components")
+					local components: { number } = {}
+					for index = 1, 12 do
+						local component = row[index]
+						assert(type(component) == "number", "A transform has twelve numeric CFrame components")
+						components[index] = component
+					end
+					transform = Math.multiply(transform, components)
 				end
-				transform = components
-				update()
 			end
+			update()
 		end)
 		update()
 	end
