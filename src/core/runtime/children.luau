@@ -7,10 +7,8 @@ local Host = require "../host"
 local Nodes = require "../ownership/nodes"
 local Owner = require "../ownership/owner"
 local Dynamic = require "../dynamic"
-local Types = require "../reactive/types"
 
 type Node = Host.Node
-type Dispose = Types.Dispose
 
 export type ChildList = {
 	host: Host.Host,

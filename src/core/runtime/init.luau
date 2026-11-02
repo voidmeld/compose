@@ -204,19 +204,31 @@ local function createRuntime(host: Host.Host): Runtime
 			end
 
 			applying.key = nil
-			local list = Children.createList(host, node, supplied)
+			local list: Children.ChildList? = nil
 			local staticSlot = 0
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
-					if staticSlot == 0 then
-						staticSlot = Children.addSlot(list)
+					if list == nil then
+						supplied.render.insertChild(node, child, index)
+					else
+						if staticSlot == 0 then
+							staticSlot = Children.addSlot(list)
+						end
+						Children.insertStatic(list, staticSlot, child)
 					end
-					Children.insertStatic(list, staticSlot, child)
 				elseif type(child) == "function" and constructorKinds[child] == nil then
+					local current: Children.ChildList = list or Children.createList(host, node, supplied)
+					if list == nil then
+						if index > 1 then
+							current[1] = index - 1
+							current.total = index - 1
+						end
+						list = current
+					end
 					staticSlot = 0
-					local slot = Children.addSlot(list)
-					child(Children.mountPointFor(list, slot))
+					local slot = Children.addSlot(current)
+					child(Children.mountPointFor(current, slot))
 				elseif constructorKinds[child] ~= nil then
 					return Diagnostics.raise(
 						"mount/constructor-not-applied",
