@@ -208,6 +208,19 @@ local partDefaults: { [string]: Design.Literal } = {
 
 local function kinds(): { [string]: Design.Kind }
 	return {
+		Array = {
+			fields = {},
+			children = "template",
+			template = "render",
+			source = "from",
+			key = "key",
+			staticRows = true,
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
 		Model = {
 			fields = with(
 				placement,
@@ -744,6 +757,28 @@ local function create(
 	end
 
 	local builds: { [string]: Build } = {
+		Array = function(props: Props): unknown
+			local source, template = props.from, props.render
+			local rows = if source then source.rows else nil
+			local render = if template then template.template else nil
+			if rows == nil or render == nil then
+				return ui.new "Model"
+			end
+			local key = assert(source and source.key, "An Array needs a key")
+			local current = rows:peek()
+			local seen: { [string | number]: boolean } = {}
+			for _, row in current do
+				local id = row[key]
+				assert(type(id) == "string" or type(id) == "number", "An Array row needs a string or number key")
+				assert(not seen[id], `Duplicate Array key {id}`)
+				seen[id] = true
+			end
+			local model = ui.new "Model"
+			for _, row in current do
+				ui.set(render(Compose.cell(row)), "Parent", model)
+			end
+			return model
+		end,
 		Model = function(props: Props, children: { unknown }): unknown
 			local model = ui.new "Model"
 			local primary = ui.new "Part"
@@ -763,9 +798,11 @@ local function create(
 			for _, child in children do
 				if child ~= nil then
 					ui.set(child, "Parent", model)
-					if ui.isA(child, "BasePart") then
-						offsets[ui.node(child)] = ui.components(ui.get(child, "CFrame"))
-					end
+				end
+			end
+			for _, part in ui.descendants(model) do
+				if part ~= primary and ui.isA(part, "BasePart") then
+					offsets[part] = ui.components(ui.get(part, "CFrame"))
 				end
 			end
 			place(props, function(frame: { number })

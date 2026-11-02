@@ -540,7 +540,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	end
 	local function rowFunction(template: Node, depth: number, from: string): string
 		local typed = itemType(template, from)
-		local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
+		local parameter = if typed then `current: {library.rowReadable or library.readable}<{typed}>` else "current"
 		table.insert(scopes, { fields = fieldsOf(from) })
 		local written
 		if not rowFunctions then
@@ -795,7 +795,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			end
 			if current ~= nil and field ~= nil and field.perRow and bound ~= nil then
 				local typed = itemType(node, bound.from)
-				local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
+				local parameter = if typed
+					then `current: {library.rowReadable or library.readable}<{typed}>`
+					else "current"
 				table.insert(scopes, { fields = fieldsOf(bound.from) })
 				written = returning(parameter, layout(current, depth + 2, 0), depth + 1, luauType)
 				table.remove(scopes)
