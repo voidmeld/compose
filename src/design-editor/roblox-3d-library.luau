@@ -266,6 +266,7 @@ local function kinds(): { [string]: Design.Kind }
 				error "schema only"
 			end,
 		},
+		Fragment = scalar("Structure", placement, "list"),
 		Folder = scalar("Structure", {}, "list"),
 		SpecialMesh = scalar("Mesh", {
 			meshId = field("string", "Mesh", 1),
@@ -989,6 +990,7 @@ local function create(
 		Sparkles = plain("Sparkles", sparklesBindings),
 		Sound = plain("Sound", soundBindings),
 	}
+	builds.Fragment = builds.Model
 	for _, className in { "Decal", "Texture" } do
 		builds[className] = function(props: Props): unknown
 			local node = ui.new(className)
