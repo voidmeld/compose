@@ -542,7 +542,36 @@ local function create(
 			if type(value) == "table" then
 				local rows = if type(value[1]) == "table" then value else { value }
 				for _, row in rows do
-					assert(type(row) == "table" and #row == 12, "A transform has twelve numeric CFrame components")
+					assert(type(row) == "table", "A transform needs an operation or twelve numeric CFrame components")
+					local position, angles = row.position, row.angles
+					if position ~= nil or angles ~= nil then
+						assert(
+							(position ~= nil) ~= (angles ~= nil) and #row == 0,
+							"A transform operation has one position or angles"
+						)
+						for key in row do
+							assert(
+								key == (if position ~= nil then "position" else "angles"),
+								"A transform operation has one operand"
+							)
+						end
+						local operand = if position ~= nil then position else angles
+						assert(type(operand) == "table" and #operand == 3, "A transform operation needs three numbers")
+						local x, y, z = operand[1], operand[2], operand[3]
+						assert(
+							type(x) == "number" and type(y) == "number" and type(z) == "number",
+							"A transform operation needs three numbers"
+						)
+						local components = if position ~= nil
+							then Math.frame { X = x, Y = y, Z = z }
+							else Math.multiply(
+								Math.multiply(Math.rotation(x, 0, 0), Math.rotation(0, y, 0)),
+								Math.rotation(0, 0, z)
+							)
+						transform = Math.multiply(transform, components)
+						continue
+					end
+					assert(#row == 12, "A transform has twelve numeric CFrame components")
 					local components: { number } = {}
 					for index = 1, 12 do
 						local component = row[index]
