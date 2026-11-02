@@ -39,7 +39,8 @@ local function tokenize(code: string): { Token }
 			push("name", word)
 			at += #word
 		elseif string.match(code, "^%-?%d", at) then
-			local number = assert(string.match(code, "^%-?[%d%.eE]+", at))
+			local number = string.match(code, "^%-?%d+%.?%d*[eE][%+%-]?%d+", at)
+				or assert(string.match(code, "^%-?%d+%.?%d*", at))
 			push("number", number)
 			at += #number
 		elseif string.sub(code, at, at + 2) == "..." then

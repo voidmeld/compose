@@ -65,6 +65,7 @@ local EMITTER_ORIENTATIONS = { "FacingCamera", "FacingCameraWorldUp", "VelocityP
 local placement: { [string]: Design.Field } = {
 	position = { type = "vector3", group = "Transform", order = 1 },
 	rotation = { type = "vector3", group = "Transform", order = 2 },
+	transform = { type = "value", group = "Transform", order = 3, advanced = true },
 }
 
 local function with(base: { [string]: Design.Field }, extra: { [string]: Design.Field }): { [string]: Design.Field }
@@ -458,11 +459,15 @@ local function create(
 	local function place(props: Props, set: ({ number }) -> ())
 		local position: UI.Vector = { X = 0, Y = 0, Z = 0 }
 		local rotation: UI.Vector = { X = 0, Y = 0, Z = 0 }
+		local transform = Math.frame { X = 0, Y = 0, Z = 0 }
 		local function update()
 			set(
 				Math.multiply(
-					Math.frame(position),
-					Math.rotation(math.rad(rotation.X), math.rad(rotation.Y), math.rad(rotation.Z))
+					transform,
+					Math.multiply(
+						Math.frame(position),
+						Math.rotation(math.rad(rotation.X), math.rad(rotation.Y), math.rad(rotation.Z))
+					)
 				)
 			)
 		end
@@ -473,6 +478,18 @@ local function create(
 		apply(props.rotation, function(value: Design.Literal?)
 			rotation = vector(value, { X = 0, Y = 0, Z = 0 })
 			update()
+		end)
+		apply(props.transform, function(value: Design.Literal?)
+			if type(value) == "table" then
+				local components: { number } = {}
+				for index = 1, 12 do
+					local component = value[index]
+					assert(type(component) == "number", "A transform has twelve numeric CFrame components")
+					components[index] = component
+				end
+				transform = components
+				update()
+			end
 		end)
 		update()
 	end
