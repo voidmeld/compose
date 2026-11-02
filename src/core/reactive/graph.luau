@@ -27,6 +27,7 @@ end
 local CLEAN = 0
 local CHECK = 1
 local DIRTY = 2
+local RETRY = 3
 
 local detachers = Nodes.detachers
 local nodeOf = Nodes.nodeOf
@@ -206,25 +207,28 @@ local function markStale(producer: Node, state: number)
 				end
 			else
 				local current = consumer.state or CLEAN
-				local retry = consumer.retry
+				local kind = consumer.kind
+				local retry = if kind == 1 or kind == 2 then current == RETRY else consumer.retry
 				if current < state or retry then
-					if retry then
+					if retry and kind ~= 1 and kind ~= 2 then
 						consumer.retry = false
 					end
 					consumer.state = state
 					if current == CLEAN or retry then
-						local cutoff = consumer.cutoff
-						if cutoff ~= nil then
-							cutoff(consumer)
-						elseif consumer.body ~= nil then
+						if kind == 1 then
 							if following == nil then
 								source = consumer
 							else
 								markStale(consumer, CHECK)
 							end
-						elseif consumer.invalidate ~= nil then
+						elseif kind == 2 then
+							local cutoff = consumer.cutoff
+							if cutoff ~= nil then
+								cutoff(consumer)
+							end
+						elseif kind == nil then
 							table.insert(invalidated, consumer)
-						elseif state == DIRTY and consumer.group then
+						elseif state == DIRTY and kind == 4 then
 							local reactor = consumer.reactor
 							if consumer[2] ~= nil then
 								Reactor.enqueue(consumer)
@@ -710,6 +714,7 @@ return {
 	coalesce = coalesce,
 	CHECK = CHECK,
 	DIRTY = DIRTY,
+	RETRY = RETRY,
 	observe = observe,
 	trim = trim,
 	markStale = markStale,

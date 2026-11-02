@@ -57,6 +57,7 @@ local WATCH = {}
 WATCH.__index = WATCH
 Nodes.adopt(WATCH)
 WATCH.state = CLEAN
+WATCH.kind = 3
 
 function WATCH.run(node: Node, frame: Evaluation.Evaluation?)
 	if node.released then
@@ -76,6 +77,7 @@ TERMINAL.__index = TERMINAL
 Nodes.adopt(TERMINAL)
 TERMINAL.state = CLEAN
 TERMINAL.group = true
+TERMINAL.kind = 4
 
 local resume: Node? = nil
 
@@ -172,6 +174,7 @@ local GUARDED = {}
 GUARDED.__index = GUARDED
 Nodes.adopt(GUARDED)
 GUARDED.state = CLEAN
+GUARDED.kind = 3
 
 function GUARDED.run(node: Node, frame: Evaluation.Evaluation?)
 	if node.released then

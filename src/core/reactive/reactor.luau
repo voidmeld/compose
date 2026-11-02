@@ -70,10 +70,16 @@ local function enqueue(node: Node)
 end
 
 local function rearm(node: Node)
-	if node.released or node.retry then
+	local kind = node.kind
+	local formula = kind == 1 or kind == 2
+	if node.released or (if formula then node.state == 3 else node.retry) then
 		return
 	end
-	node.retry = true
+	if formula then
+		node.state = 3
+	else
+		node.retry = true
+	end
 	if node.state == nil then
 		local producer = node[1]
 		if producer ~= nil and producer.refresh ~= nil then
