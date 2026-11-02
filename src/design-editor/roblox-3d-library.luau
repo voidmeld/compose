@@ -185,6 +185,18 @@ local function kinds(): { [string]: Design.Kind }
 			end,
 		},
 		Folder = scalar("Structure", {}, "list"),
+		SpecialMesh = scalar("Mesh", {
+			meshId = field("string", "Mesh", 1),
+			textureId = field("string", "Mesh", 2),
+			scale = field("vector3", "Mesh", 3),
+			offset = field("vector3", "Mesh", 4),
+			meshType = field(
+				"choice",
+				"Mesh",
+				5,
+				{ "FileMesh", "Brick", "Sphere", "Cylinder", "Head", "Wedge", "Torso" }
+			),
+		}, "none"),
 		Part = {
 			fields = with(
 				with(placement, with(physics, attributes)),
@@ -698,6 +710,13 @@ local function create(
 			attach(folder, children)
 			return folder
 		end,
+		SpecialMesh = plain("SpecialMesh", {
+			meshId = { property = "MeshId", convert = "string" },
+			textureId = { property = "TextureId", convert = "string" },
+			scale = { property = "Scale", convert = "vector3" },
+			offset = { property = "Offset", convert = "vector3" },
+			meshType = { property = "MeshType", convert = "string", enum = "MeshType" },
+		}),
 		Part = function(props: Props, children: { unknown }): unknown
 			local shape = props.shape and props.shape.literal
 			local part: Compose.Node = if shape == "Wedge"
