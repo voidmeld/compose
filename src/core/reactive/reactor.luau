@@ -98,36 +98,6 @@ end
 
 local function runRest(reactor: Reactor): unknown
 	local queue = reactor.queue
-	while reactor.cursor < reactor.count do
-		local limit = math.min(reactor.count, MAX_RUNS_PER_DRAIN)
-		while reactor.cursor < limit do
-			local cursor = reactor.cursor + 1
-			reactor.cursor = cursor
-			local node = queue[cursor]
-			node.queued = false
-			local run = node.run
-			if run then
-				run(node)
-			end
-		end
-		if reactor.cursor >= MAX_RUNS_PER_DRAIN then
-			fail(
-				reactor,
-				(
-					"Compose: watch cascade did not settle after %d runs. A watch is very likely "
-					.. "writing to a cell it also reads; break the loop, or write inside a batch "
-					.. "that ends."
-				):format(MAX_RUNS_PER_DRAIN)
-			)
-			reactor.abandoned = true
-			return nil
-		end
-	end
-	return nil
-end
-
-local function runInRest(reactor: Reactor): unknown
-	local queue = reactor.queue
 	local frame, previousConsumer, previousOrder = Evaluation.enterFrame(nil)
 	while reactor.cursor < reactor.count do
 		local limit = math.min(reactor.count, MAX_RUNS_PER_DRAIN)
@@ -136,15 +106,10 @@ local function runInRest(reactor: Reactor): unknown
 			reactor.cursor = cursor
 			local node = queue[cursor]
 			node.queued = false
-			local runIn = node.runIn
-			if runIn ~= nil then
-				runIn(frame, node)
-			else
-				frame.consumer = previousConsumer
-				local run = node.run
-				if run then
-					run(node)
-				end
+			frame.consumer = previousConsumer
+			local run = node.run
+			if run then
+				run(node, frame)
 			end
 		end
 		if reactor.cursor >= MAX_RUNS_PER_DRAIN then
@@ -182,9 +147,7 @@ local function drain(reactor: Reactor): { string }?
 		consumer, at = Evaluation.snapshot()
 	end
 	repeat
-		local first = reactor.queue[reactor.cursor + 1]
-		local run = if first ~= nil and first.runIn ~= nil then runInRest else runRest
-		local ok, failure = xpcall(run, traceback, reactor)
+		local ok, failure = xpcall(runRest, traceback, reactor)
 		if not ok then
 			Evaluation.leave(consumer, at)
 			fail(reactor, tostring(failure))

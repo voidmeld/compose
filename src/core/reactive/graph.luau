@@ -296,14 +296,7 @@ local function noEvaluation()
 	})
 end
 
-local function useWithTracking<T>(value: Types.ReadOnlyValue<T>): T
-	if type(value) ~= "table" then
-		return notANode("use", value)
-	end
-	local node = nodeOf(value)
-	if node.version == nil then
-		return notANode("use", value)
-	end
+local function use<T>(value: Types.ReadOnlyValue<T>): T
 	local frame = evaluationCache.frame
 	local consumer = if frame ~= nil
 			and frame.order > 0
@@ -311,11 +304,18 @@ local function useWithTracking<T>(value: Types.ReadOnlyValue<T>): T
 		then frame.consumer
 		else Evaluation.context()
 	if consumer == nil then
+		if type(value) ~= "table" or nodeOf(value).version == nil then
+			return notANode("use", value)
+		end
 		noEvaluation()
 		return Nodes.readCached(value)
 	end
+	local node: Node = value
 	local at = consumer.reads
 	if at == nil then
+		if type(value) ~= "table" or node.version == nil then
+			return notANode("use", value)
+		end
 		local update = node.refresh
 		if update then
 			update(node)
@@ -324,11 +324,14 @@ local function useWithTracking<T>(value: Types.ReadOnlyValue<T>): T
 	end
 	local following = at + 1
 	local edge = consumer[following]
-	if edge ~= nil and edge[1] == node then
+	if edge ~= nil and rawequal(edge[1], value) then
 		consumer.reads = following
 	else
 		edge = consumer[at]
-		if edge == nil or edge[1] ~= node then
+		if edge == nil or not rawequal(edge[1], value) then
+			if type(value) ~= "table" or node.version == nil then
+				return notANode("use", value)
+			end
 			consumer.reads = following
 			trim(consumer, following)
 			local attached = attach(node, consumer)
@@ -348,33 +351,6 @@ local function useWithTracking<T>(value: Types.ReadOnlyValue<T>): T
 		return Nodes.readCached(value)
 	end
 	return cached.value
-end
-
-local function use<T>(value: Types.ReadOnlyValue<T>): T
-	local frame = evaluationCache.frame
-	if frame ~= nil and frame.order > 0 and evaluationCache.thread == coroutine.running() then
-		local consumer = frame.consumer
-		local at = if consumer ~= nil then consumer.reads else nil
-		if consumer ~= nil and at ~= nil then
-			local following = at + 1
-			local edge = consumer[following]
-			local node = if edge ~= nil then edge[1] else nil
-			if node ~= nil and edge ~= nil and rawequal(node, value) then
-				consumer.reads = following
-				local update = node.refresh
-				if update ~= nil and (node.state ~= CLEAN or node.released) then
-					update(node)
-				end
-				edge.version = node.version
-				local cached = value.cache
-				if cached == nil then
-					return Nodes.readCached(value)
-				end
-				return cached.value
-			end
-		end
-	end
-	return useWithTracking(value)
 end
 
 local function dependenciesMoved(consumer: Node): boolean

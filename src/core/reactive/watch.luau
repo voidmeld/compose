@@ -25,7 +25,7 @@ local function installScope(enter: (Node) -> (), leave: (Node) -> ())
 	enterScope, leaveScope = enter, leave
 end
 
-local function rerun(node: Node)
+local function rerun(node: Node, frame: Evaluation.Evaluation?)
 	if statsOn.enabled then
 		stats.bump "watchRuns"
 		statsOn.recorder.enterRun(node)
@@ -34,7 +34,11 @@ local function rerun(node: Node)
 	if node.inherited ~= nil then
 		enterScope(node)
 	end
-	Graph.runEffect(node)
+	if frame ~= nil then
+		Graph.runEffectIn(frame, node)
+	else
+		Graph.runEffect(node)
+	end
 end
 
 local function moved(node: Node): boolean
@@ -54,7 +58,7 @@ WATCH.__index = WATCH
 Nodes.adopt(WATCH)
 WATCH.state = CLEAN
 
-function WATCH.run(node: Node)
+function WATCH.run(node: Node, frame: Evaluation.Evaluation?)
 	if node.released then
 		return
 	end
@@ -62,7 +66,7 @@ function WATCH.run(node: Node)
 		node.state = CLEAN
 		return
 	end
-	rerun(node)
+	rerun(node, frame)
 end
 
 local TERMINAL = {}
@@ -104,14 +108,14 @@ local function sweep(leader: Node, producer: Node, from: Node?)
 	Evaluation.leave(previousConsumer, previousOrder)
 end
 
-function TERMINAL.run(leader: Node)
+function TERMINAL.run(leader: Node, frame: Evaluation.Evaluation?)
 	local producer = leader.source
 	leader.source = nil
 	if not leader.released then
 		if leader.state == CHECK and not moved(leader) then
 			leader.state = CLEAN
 		else
-			rerun(leader)
+			rerun(leader, frame)
 		end
 	end
 	if producer == nil then
@@ -147,28 +151,12 @@ function TERMINAL.run(leader: Node)
 	end
 end
 
-function TERMINAL.runIn(frame: Evaluation.Evaluation, node: Node)
-	if node.source ~= nil or node.state == CHECK then
-		TERMINAL.run(node)
-		return
-	end
-	if node.released then
-		return
-	end
-	if statsOn.enabled then
-		stats.bump "watchRuns"
-		statsOn.recorder.enterRun(node)
-	end
-	node.state = CLEAN
-	Graph.runEffectIn(frame, node)
-end
-
 local GUARDED = {}
 GUARDED.__index = GUARDED
 Nodes.adopt(GUARDED)
 GUARDED.state = CLEAN
 
-function GUARDED.run(node: Node)
+function GUARDED.run(node: Node, frame: Evaluation.Evaluation?)
 	if node.released then
 		return
 	end
@@ -176,7 +164,7 @@ function GUARDED.run(node: Node)
 		node.state = CLEAN
 		return
 	end
-	rerun(node)
+	rerun(node, frame)
 end
 
 local function begin(reactor: Reactor, body: Body, class: {}, label: string?, scope: Types.Owner?): Node
@@ -195,7 +183,7 @@ local function begin(reactor: Reactor, body: Body, class: {}, label: string?, sc
 		statsOn.recorder.born(node, label)
 	end
 	local consumer, at = Evaluation.snapshot()
-	local ok, err: unknown = pcall(rerun, node)
+	local ok, err: unknown = pcall(rerun, node, nil)
 	if not ok then
 		Evaluation.leave(consumer, at)
 		Graph.release(node)
