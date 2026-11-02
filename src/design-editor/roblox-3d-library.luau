@@ -205,6 +205,13 @@ local function kinds(): { [string]: Design.Kind }
 				with(placement, with(physics, attributes)),
 				with(surface, {
 					shape = field("choice", "Shape", 1, SHAPES),
+					partClass = {
+						type = "choice",
+						group = "Shape",
+						order = 3,
+						options = { "Auto", "Part", "WedgePart", "CornerWedgePart" },
+						advanced = true,
+					},
 					size = field("vector3", "Shape", 2),
 					meshId = field("string", "Mesh", 1),
 					textureId = field("string", "Mesh", 2),
@@ -744,8 +751,12 @@ local function create(
 		}),
 		Part = function(props: Props, children: { unknown }): unknown
 			local shape = props.shape and props.shape.literal
-			local part: Compose.Node = if shape == "Wedge"
-				then ui.new "WedgePart"
+			local class = props.partClass and props.partClass.literal
+			local part: Compose.Node = if class == "Part"
+					or class == "WedgePart"
+					or class == "CornerWedgePart"
+				then ui.new(class)
+				elseif shape == "Wedge" then ui.new "WedgePart"
 				elseif shape == "CornerWedge" then ui.new "CornerWedgePart"
 				else ui.new "Part"
 			if ui.isA(part, "Part") then
