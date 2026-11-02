@@ -505,23 +505,11 @@ local function keyedWithKeys<V, K>(
 		end
 		Owners.watch(owner, function(use)
 			depth += 1
-			if depth == 1 then
-				local ok, failure = pcall(function(): unknown
-					reconcile(use)
-					return nil
-				end)
-				depth -= 1
-				if not ok then
-					error(failure, 0)
-				end
-				return
-			end
 			local outerKeys, outerMatched = keys, matched
-			keys, matched = {}, {}
-			local ok, failure = pcall(function(): unknown
-				reconcile(use)
-				return nil
-			end)
+			if depth > 1 then
+				keys, matched = {}, {}
+			end
+			local ok, failure: unknown = pcall(reconcile, use)
 			keys, matched = outerKeys, outerMatched
 			depth -= 1
 			if not ok then
