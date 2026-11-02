@@ -771,7 +771,7 @@ function source.parse(code: string, library: Library): Types.Document
 				take "="
 				local property, template = value()
 				local contentField = kind.fields[prop]
-				if template and contentField and contentField.type == "content" then
+				if template and contentField and contentField.type == "content" and prop ~= kind.slot then
 					local marker: Record = { ["$template"] = template.id }
 					result.props[prop] = { literal = marker }
 					table.insert(pendingCells, template)

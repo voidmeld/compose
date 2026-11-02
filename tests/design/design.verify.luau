@@ -717,6 +717,47 @@ describe("Compose Design documents", function()
 			expect(closed):toEqual { { "back" } }
 		end)
 	end)
+	it("switches between prepared slot inputs and authored content without duplicate properties", function()
+		local extended = table.clone(library)
+		extended.kinds = table.clone(library.kinds)
+		extended.kinds.Panel = table.clone(library.kinds.Panel)
+		extended.kinds.Panel.fields = { content = { type = "content" }, icon = { type = "content" } }
+		local value = Design.document.setContract(Design.document.new("Prepared", extended, "Panel"), extended, {
+			inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+			outputs = {},
+		})
+		value = Design.document.insert(value, extended, "n1", "Label")
+		local iconId
+		value, iconId = Design.document.content(value, extended, "n1", "icon", "Label")
+		value = Design.document.change(value, extended, "n1", "content", { input = "body" })
+		expect(#value.root.children):toBe(1)
+		expect(value.root.children[1].id):toBe(iconId)
+		local calls = 0
+		local panel = builtNode(Design.render(value, extended, {
+			slots = {
+				body = function(): unknown
+					calls += 1
+					return "Prepared"
+				end,
+			},
+		}))
+		expect(calls):toBe(0)
+		expect(assert(panel.props.content.slot)()):toBe "Prepared"
+		expect(calls):toBe(1)
+		local code = Design.emit(value, extended)
+		expect(string.find(code, "content = props.body", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+		value = Design.document.change(value, extended, "n1", "icon", nil)
+		value = Design.document.insert(value, extended, "n1", "Label")
+		expect(value.root.props.content):toBe(nil)
+		code = Design.emit(value, extended)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+		value = Design.document.content(value, extended, "n1", "content", "Label")
+		expect(#value.root.children):toBe(1)
+		code = Design.emit(value, extended)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+	end)
+
 	it("builds slot content only when the slot is called and reads it back from source", function()
 		local value = Design.document.new("Panel", library, "Panel")
 		local body
