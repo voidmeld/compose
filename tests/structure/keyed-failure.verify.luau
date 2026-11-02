@@ -65,6 +65,43 @@ local function mountList(world: Support.World, initial: { Item }, failing: { [st
 end
 
 describe("keyed after a render failure", function()
+	for _, ordered in { false, true } do
+		for _, nextKeys in { { "a", "c", "d" }, { "d", "c", "a" }, { "e", "c", "d" } } do
+			it(
+				("repairs survivor indices with ordered=%s and next=%s"):format(
+					tostring(ordered),
+					table.concat(nextKeys, ",")
+				),
+				function()
+					local world = Support.world { ordersChildren = ordered }
+					local failing: { [string]: boolean } = { x = true }
+					local dispose, root, list = mountList(world, items(), failing)
+					expect(function()
+						list:set(items("a", "x", "c", "d"))
+					end):toThrow "row render exploded for x"
+					local before = nodesByKey(world, root)
+					list:set(items(table.unpack(nextKeys)))
+					world.settle()
+					local after = nodesByKey(world, root)
+					for index, key in nextKeys do
+						expect(world.host.propertyOf(after[key], "Order")):toBe(index)
+						if before[key] ~= nil then
+							expect(after[key]):toBe(before[key])
+						end
+					end
+					list:set(items("d", "c", "a"))
+					world.settle()
+					after = nodesByKey(world, root)
+					for index, key in { "d", "c", "a" } do
+						expect(world.host.propertyOf(after[key], "Order")):toBe(index)
+					end
+					dispose()
+					expect(world.host.leaked()):toEqual { "Root#1" }
+				end
+			)
+		end
+	end
+
 	it("finishes independent rows before reporting a failed factory", function()
 		local world = Support.world()
 		local failing: { [string]: boolean } = { c = true }

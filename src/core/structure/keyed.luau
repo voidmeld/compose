@@ -203,7 +203,6 @@ local function keyedWithKeys<V, K>(
 			local pass = passes
 			local list = source(use)
 			local wanted = #list
-			local complete = count == #keys
 
 			local mark = epoch + 1
 			epoch = mark + wanted
@@ -230,7 +229,11 @@ local function keyedWithKeys<V, K>(
 					found += 1
 					if ordersChildren then
 						matched[index] = entry
-					elseif at ~= index or entry.item ~= item then
+					elseif
+						at ~= index
+						or entry.item ~= item
+						or (readsIndex and (entry.index.cache == nil or entry.index.cache.value ~= index))
+					then
 						changed += 1
 						matched[changed] = entry
 					end
@@ -247,7 +250,7 @@ local function keyedWithKeys<V, K>(
 			for index = #keys, wanted + 1, -1 do
 				keys[index] = nil
 			end
-			if not ordersChildren and fresh == nil and wanted == previousCount and complete then
+			if not ordersChildren and fresh == nil and wanted == previousCount then
 				for at = 1, changed do
 					local entry = assert(matched[at])
 					local index = entry.mark - mark
@@ -256,7 +259,7 @@ local function keyedWithKeys<V, K>(
 						entry.item = item
 						entry.value:set(item)
 					end
-					if readsIndex and entry.position ~= base + index then
+					if readsIndex then
 						setIndex(entry, index)
 					end
 					order[base + index] = entry
@@ -283,6 +286,9 @@ local function keyedWithKeys<V, K>(
 					entry.item = item
 					entry.value:set(item)
 				end
+				if readsIndex then
+					setIndex(entry, index)
+				end
 			end
 			for index = newEnd + 1, wanted do
 				local entry = order[index - shift]
@@ -291,7 +297,7 @@ local function keyedWithKeys<V, K>(
 					entry.item = item
 					entry.value:set(item)
 				end
-				if readsIndex and shift ~= 0 then
+				if readsIndex then
 					setIndex(entry, index)
 				end
 			end
@@ -332,7 +338,7 @@ local function keyedWithKeys<V, K>(
 							entry.item = item
 							entry.value:set(item)
 						end
-						if readsIndex and (not complete or entry.position ~= index) then
+						if readsIndex then
 							setIndex(entry, index)
 						end
 					end
