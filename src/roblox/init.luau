@@ -1,5 +1,10 @@
 --!strict
 
+local codecsModule: typeof(require "@self/codecs")? = nil
+local cleanupModule: typeof(require "@self/cleanup")? = nil
+local viewportModule: typeof(require "@self/viewport")? = nil
+local inputModule: typeof(require "@self/input")? = nil
+
 local Compose = require "./core"
 local Engine = require "@self/engine"
 local HostImpl = require "@self/host"
@@ -57,7 +62,9 @@ local function designEnvironment(options: {
 end
 
 local function codecs(engine: CodecSource?): Codecs
-	return (require "@self/codecs").create(if engine ~= nil then engine else Engine.ambient())
+	local loaded = codecsModule or require "@self/codecs"
+	codecsModule = loaded
+	return loaded.create(if engine ~= nil then engine else Engine.ambient())
 end
 
 local function animatableTypes(engine: Engine.Engine?): { string }
@@ -86,11 +93,15 @@ local function animatableTypes(engine: Engine.Engine?): { string }
 end
 
 local function cleanup(value: unknown): Compose.Dispose
-	return (require "@self/cleanup").cleanup(value)
+	local loaded = cleanupModule or require "@self/cleanup"
+	cleanupModule = loaded
+	return loaded.cleanup(value)
 end
 
 local function createCleanup(typeName: ((value: unknown) -> string)?): (value: unknown) -> Compose.Dispose
-	return (require "@self/cleanup").createCleanup(typeName)
+	local loaded = cleanupModule or require "@self/cleanup"
+	cleanupModule = loaded
+	return loaded.createCleanup(typeName)
 end
 
 local function createViewport(
@@ -98,19 +109,27 @@ local function createViewport(
 	engine: Engine.Engine?,
 	options: Engine.ViewportOptions?
 ): (Compose.ReadOnlyValue<Engine.Viewport>, Compose.ReadOnlyValue<boolean>)
-	return (require "@self/viewport").createViewport(camera, engine, options)
+	local loaded = viewportModule or require "@self/viewport"
+	viewportModule = loaded
+	return loaded.createViewport(camera, engine, options)
 end
 
 local function usableViewportSize(size: Engine.Vector2?, minimum: number?): boolean
-	return (require "@self/viewport").usableViewportSize(size, minimum)
+	local loaded = viewportModule or require "@self/viewport"
+	viewportModule = loaded
+	return loaded.usableViewportSize(size, minimum)
 end
 
 local function preferredInput(inputService: unknown, engine: Engine.Engine?): Compose.Value<Engine.PreferredInputClass>
-	return (require "@self/input").preferredInput(inputService, engine)
+	local loaded = inputModule or require "@self/input"
+	inputModule = loaded
+	return loaded.preferredInput(inputService, engine)
 end
 
 local function preferredInputSpec(value: unknown): Engine.PreferredInputSpec
-	return (require "@self/input").preferredInputSpec(value)
+	local loaded = inputModule or require "@self/input"
+	inputModule = loaded
+	return loaded.preferredInputSpec(value)
 end
 
 local function __resetForTests()
