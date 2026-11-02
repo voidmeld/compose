@@ -16,6 +16,27 @@ local function cellAsReadable<T>(value: Compose.ReadOnlyValue<T>): Compose.ReadO
 end
 
 describe("falsifiers", function()
+	it("keeps mixed subscribers when the leading reactive subscriber detaches", function()
+		Support.world()
+		local _, owner = domain()
+		local source = Compose.cell(0)
+		local direct, reactive = 0, 0
+		local release = Compose.owner.watch(owner, function(use)
+			use(source)
+		end)
+		Compose.owner.watchStatic(owner, source, function(value)
+			direct = value
+		end)
+		Compose.owner.watchTerminal(owner, function(use)
+			reactive = use(source)
+		end)
+		release()
+		source:set(1)
+		expect(direct):toBe(1)
+		expect(reactive):toBe(1)
+		Compose.owner.dispose(owner)
+	end)
+
 	it("keeps dependencies after a watch normalizes its own source during its first run", function()
 		Support.world()
 		local _, owner = domain()

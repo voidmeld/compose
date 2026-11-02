@@ -138,7 +138,7 @@ local function detach(edge: Node)
 		if following ~= nil then
 			following[3] = previous
 			if following[2] == nil then
-				following.listenerGroup = edge.listenerGroup
+				following.listenerGroup = edge.listenerGroup == true
 			end
 		end
 	else
