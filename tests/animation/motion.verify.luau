@@ -50,6 +50,65 @@ describe("shared motion frames", function()
 		Compose.owner.dispose(owner)
 		expect(world.host.counts().frameListeners):toBe(0)
 	end)
+
+	it("advances later motions after an easing callback fails", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local owner = Compose.createOwner(world.runtime.reactor)
+		local healthy = Compose.withOwner(owner, function()
+			world.runtime.tween(function(use)
+				return use(target)
+			end, {
+				seconds = 1,
+				ease = function(): number
+					error "motion easing failed"
+				end,
+			})
+			return world.runtime.tween(function(use)
+				return use(target)
+			end, { seconds = 1 })
+		end)
+		target:set(10)
+		world.settle()
+		expect(function()
+			world.host.step(0.5)
+		end):toThrow "motion easing failed"
+		expect(healthy:peek()):toBe(5)
+		Compose.owner.dispose(owner)
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
+
+	it("skips a motion disposed by an earlier codec publication", function()
+		local world = Support.world()
+		local first = Compose.createOwner(world.runtime.reactor)
+		local later = Compose.createOwner(world.runtime.reactor)
+		local target = Compose.cell(0)
+		local publications = 0
+		local motion = world.runtime.motion {
+			arity = 1,
+			encode = Compose.numberCodec.encode,
+			decode = function(components: { number }): number
+				publications += 1
+				Compose.owner.dispose(later)
+				return components[1]
+			end,
+		}
+		for _, owner in { first, later } do
+			Compose.withOwner(owner, function()
+				motion.tween(function(use)
+					return use(target)
+				end, { seconds = 1 })
+			end)
+		end
+		target:set(10)
+		world.settle()
+		world.host.step(0.5)
+		expect(publications):toBe(1)
+		world.host.step(0.5)
+		expect(publications):toBe(2)
+		expect(world.host.counts().frameListeners):toBe(0)
+		Compose.owner.dispose(first)
+	end)
 end)
 
 local function stepFor(world: Support.World, seconds: number)
