@@ -104,6 +104,42 @@ local surface: { [string]: Design.Field } = {
 	material = field("choice", "Surface", 2, MATERIALS),
 	transparency = field("number", "Surface", 3),
 	materialVariant = field("string", "Surface", 4),
+	topSurface = {
+		type = "choice",
+		group = "Surface",
+		order = 5,
+		options = {
+			"Smooth",
+			"Glue",
+			"Weld",
+			"Studs",
+			"Inlet",
+			"Universal",
+			"Hinge",
+			"Motor",
+			"SteppingMotor",
+			"SmoothNoOutlines",
+		},
+		advanced = true,
+	},
+	bottomSurface = {
+		type = "choice",
+		group = "Surface",
+		order = 6,
+		options = {
+			"Smooth",
+			"Glue",
+			"Weld",
+			"Studs",
+			"Inlet",
+			"Universal",
+			"Hinge",
+			"Motor",
+			"SteppingMotor",
+			"SmoothNoOutlines",
+		},
+		advanced = true,
+	},
 }
 
 local function light(extra: { [string]: Design.Field }): Design.Kind
@@ -666,8 +702,12 @@ local function create(
 
 	local function body(part: Compose.Node, props: Props, children: { unknown })
 		ui.set(part, "Anchored", true)
-		ui.set(part, "TopSurface", ui.values.enum("SurfaceType", "Smooth"))
-		ui.set(part, "BottomSurface", ui.values.enum("SurfaceType", "Smooth"))
+		apply(props.topSurface, function(value: Design.Literal?)
+			ui.set(part, "TopSurface", enumItem("SurfaceType", value, "Smooth"))
+		end)
+		apply(props.bottomSurface, function(value: Design.Literal?)
+			ui.set(part, "BottomSurface", enumItem("SurfaceType", value, "Smooth"))
+		end)
 		apply(props.size, function(value: Design.Literal?)
 			local extent = vector(value, { X = 4, Y = 1, Z = 4 })
 			ui.set(part, "Size", ui.values.vector3(extent.X, extent.Y, extent.Z))
