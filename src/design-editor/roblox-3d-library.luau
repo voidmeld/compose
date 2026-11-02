@@ -33,7 +33,26 @@ export type Sequences = {
 	numberRange: (low: number, high: number) -> unknown,
 }
 
-local MATERIALS = { "SmoothPlastic", "Plastic", "Neon", "Glass", "Metal", "Wood", "Concrete", "Grass" }
+local MATERIALS = {
+	"SmoothPlastic",
+	"Plastic",
+	"Neon",
+	"Glass",
+	"Metal",
+	"CorrodedMetal",
+	"Wood",
+	"WoodPlanks",
+	"Concrete",
+	"Cobblestone",
+	"Rock",
+	"Slate",
+	"Basalt",
+	"Limestone",
+	"Grass",
+	"Ground",
+	"Mud",
+	"Fabric",
+}
 local SHAPES = { "Block", "Ball", "Cylinder", "Wedge", "CornerWedge" }
 local FACES = { "Front", "Back", "Top", "Bottom", "Left", "Right" }
 local STREAMING = { "Default", "Atomic", "Persistent", "PersistentPerPlayer" }
@@ -166,6 +185,18 @@ local function kinds(): { [string]: Design.Kind }
 			end,
 		},
 		Folder = scalar("Structure", {}, "list"),
+		SpecialMesh = scalar("Mesh", {
+			meshId = field("string", "Mesh", 1),
+			textureId = field("string", "Mesh", 2),
+			scale = field("vector3", "Mesh", 3),
+			offset = field("vector3", "Mesh", 4),
+			meshType = field(
+				"choice",
+				"Mesh",
+				5,
+				{ "FileMesh", "Brick", "Sphere", "Cylinder", "Head", "Wedge", "Torso" }
+			),
+		}, "none"),
 		Part = {
 			fields = with(
 				with(placement, with(physics, attributes)),
@@ -679,6 +710,13 @@ local function create(
 			attach(folder, children)
 			return folder
 		end,
+		SpecialMesh = plain("SpecialMesh", {
+			meshId = { property = "MeshId", convert = "string" },
+			textureId = { property = "TextureId", convert = "string" },
+			scale = { property = "Scale", convert = "vector3" },
+			offset = { property = "Offset", convert = "vector3" },
+			meshType = { property = "MeshType", convert = "string", enum = "MeshType" },
+		}),
 		Part = function(props: Props, children: { unknown }): unknown
 			local shape = props.shape and props.shape.literal
 			local part: Compose.Node = if shape == "Wedge"
