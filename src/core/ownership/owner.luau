@@ -206,7 +206,7 @@ local function attach(owner: Owner, entry: Entry)
 end
 
 local function link(owner: Owner, release: Dispose, after: Dispose?): Entry
-	local entry: Entry = { release = release, previous = nil, following = nil }
+	local entry: Entry = { release = release }
 	if after ~= nil then
 		entry.after = after
 	end

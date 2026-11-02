@@ -743,9 +743,7 @@ local function listen(reactor: Types.Reactor, producer: Node, listener: (unknown
 		nil,
 		version = producer.version,
 		reactor = reactor,
-		queued = false,
 		listener = listener,
-		coalesced = false,
 	}
 	Nodes.classify(edge, class)
 	if statsOn.enabled then
