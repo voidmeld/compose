@@ -33,6 +33,7 @@ local function copyValue(value: Value): Value
 	return {
 		literal = if current ~= nil then copyLiteral(current) else nil,
 		input = value.input,
+		path = if value.path then table.clone(value.path) else nil,
 		item = value.item,
 		output = value.output,
 		args = copyArgs(value.args),

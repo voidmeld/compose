@@ -201,6 +201,7 @@ end
 
 local function checkValue(value: Document, field: Types.Field, property: Value, collection: Types.Input?, key: string)
 	assert(present(property) == 1, `{key} holds exactly one literal or binding`)
+	assert(property.path == nil or property.input ~= nil, `{key} paths belong to input bindings`)
 	local played = property.play
 	if played ~= nil then
 		assert(sequenceOf(value, played) ~= nil, `{key} plays unknown sequence {played}`)
@@ -296,6 +297,31 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 		local declared = assert(inputOf(value, input), `{key} reads unknown input {input}`)
 		assert((field.type == "content") == (declared.type == "slot"), `{key} and input {input} do not match`)
 		assert(field.type ~= "event", `{key} needs an output`)
+		local path = property.path
+		if path ~= nil then
+			assert(
+				#path > 0 and declared.kind == "value" and declared.type == "record",
+				`{key} needs a value record for its input path`
+			)
+			local fields = declared.fields
+			for index, segment in path do
+				assert(string.match(segment, "^[%a_][%w_]*$") ~= nil, `{key} input path needs field identifiers`)
+				local selected: Types.ItemField? = nil
+				for _, candidate in fields or {} do
+					if candidate.id == segment then
+						selected = candidate
+						break
+					end
+				end
+				if fields ~= nil then
+					assert(selected ~= nil, `{key} reads unknown record field {segment}`)
+				end
+				if index < #path and selected ~= nil then
+					assert(selected.type == "record", `{key} crosses a non-record field {segment}`)
+				end
+				fields = if selected then selected.fields else nil
+			end
+		end
 	elseif item then
 		local list = assert(collection, `{key} reads an item outside a collection template`)
 		local fields = list.fields

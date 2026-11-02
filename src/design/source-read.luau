@@ -500,7 +500,13 @@ function source.parse(code: string, library: Library): Types.Document
 		elseif peek() == "props" then
 			take "props"
 			take "."
-			return { input = name() }, nil
+			local input = name()
+			local path: { string } = {}
+			while peek() == "." do
+				take "."
+				table.insert(path, name())
+			end
+			return { input = input, path = if #path > 0 then path else nil }, nil
 		elseif peek() == "function" then
 			take "function"
 			take "("

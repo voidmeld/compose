@@ -10,6 +10,7 @@ export type DatatypeComponent = number | { token: string }
 export type Value = {
 	literal: Literal?,
 	input: string?,
+	path: { string }?,
 	item: string?,
 	output: string?,
 	args: { Literal }?,
