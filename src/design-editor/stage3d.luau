@@ -232,8 +232,13 @@ return function(ui: UI.UI)
 		end
 		local function placeGizmo(id: string?)
 			local instance = if id then nodes[id] else nil
+			local node = if id then Design.document.find(session.document:peek().root, id) else nil
+			local position = if node then node.props.position else nil
+			local movable = node ~= nil
+				and session.library.kinds[node.kind].fields.position ~= nil
+				and (position == nil or position.literal ~= nil)
 			for part, direction in handles do
-				if instance == nil or ui.get(instance, "Parent") == nil or (id and blocked(id)) then
+				if not movable or instance == nil or ui.get(instance, "Parent") == nil or (id and blocked(id)) then
 					ui.set(part, "Transparency", 1)
 					ui.set(part, "CanQuery", false)
 				else
@@ -484,6 +489,7 @@ return function(ui: UI.UI)
 							and not blocked(id)
 							and not covered
 							and session.library.kinds[node.kind].fields.position
+							and (node.props.position == nil or node.props.position.literal ~= nil)
 						then
 							table.insert(ids, id)
 							origins[id] = ui.xyz(ui.call(nodes[id], "GetPivot"), "Position")

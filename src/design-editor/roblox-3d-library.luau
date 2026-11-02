@@ -6,6 +6,7 @@ local Math = require "./math"
 
 local Compose = require "../core"
 local Design = require "../design"
+local Patterns = require "../design/patterns"
 
 type Resolved = Design.Resolved
 type Props = { [string]: Resolved }
@@ -104,6 +105,42 @@ local surface: { [string]: Design.Field } = {
 	material = field("choice", "Surface", 2, MATERIALS),
 	transparency = field("number", "Surface", 3),
 	materialVariant = field("string", "Surface", 4),
+	topSurface = {
+		type = "choice",
+		group = "Surface",
+		order = 5,
+		options = {
+			"Smooth",
+			"Glue",
+			"Weld",
+			"Studs",
+			"Inlet",
+			"Universal",
+			"Hinge",
+			"Motor",
+			"SteppingMotor",
+			"SmoothNoOutlines",
+		},
+		advanced = true,
+	},
+	bottomSurface = {
+		type = "choice",
+		group = "Surface",
+		order = 6,
+		options = {
+			"Smooth",
+			"Glue",
+			"Weld",
+			"Studs",
+			"Inlet",
+			"Universal",
+			"Hinge",
+			"Motor",
+			"SteppingMotor",
+			"SmoothNoOutlines",
+		},
+		advanced = true,
+	},
 }
 
 local function light(extra: { [string]: Design.Field }): Design.Kind
@@ -172,6 +209,49 @@ local partDefaults: { [string]: Design.Literal } = {
 
 local function kinds(): { [string]: Design.Kind }
 	return {
+		Pattern = {
+			fields = {
+				mode = field("choice", "Pattern", 1, { "linear", "grid", "radial" }),
+				count = field("number", "Pattern", 2),
+				columns = field("number", "Pattern", 3),
+				rows = field("number", "Pattern", 4),
+				radius = field("number", "Pattern", 5),
+				extent = field("vector3", "Pattern", 6),
+				spacing = field("vector3", "Pattern", 7),
+				position = field("vector3", "Transform", 1),
+				rotation = field("vector3", "Transform", 2),
+				size = field("vector3", "Geometry", 1),
+				color = field("color", "Surface", 1),
+				namePattern = field("string", "Pattern", 8),
+				indexOrigin = field("number", "Pattern", 9),
+				variantBy = field("choice", "Pattern", 10, { "index", "sum" }),
+				variants = { type = "value", group = "Pattern", order = 11, advanced = true },
+				order = field("choice", "Pattern", 12, { "row", "column" }),
+				fit = field("boolean", "Pattern", 13),
+				gap = field("vector3", "Pattern", 14),
+			},
+			children = "template",
+			template = "render",
+			iteration = { fields = Patterns.fields },
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
+		Array = {
+			fields = {},
+			children = "template",
+			template = "render",
+			source = "from",
+			key = "key",
+			staticRows = true,
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
 		Model = {
 			fields = with(
 				placement,
@@ -205,6 +285,13 @@ local function kinds(): { [string]: Design.Kind }
 				with(placement, with(physics, attributes)),
 				with(surface, {
 					shape = field("choice", "Shape", 1, SHAPES),
+					partClass = {
+						type = "choice",
+						group = "Shape",
+						order = 3,
+						options = { "Auto", "Part", "WedgePart", "CornerWedgePart" },
+						advanced = true,
+					},
 					size = field("vector3", "Shape", 2),
 					meshId = field("string", "Mesh", 1),
 					textureId = field("string", "Mesh", 2),
@@ -486,7 +573,36 @@ local function create(
 			if type(value) == "table" then
 				local rows = if type(value[1]) == "table" then value else { value }
 				for _, row in rows do
-					assert(type(row) == "table" and #row == 12, "A transform has twelve numeric CFrame components")
+					assert(type(row) == "table", "A transform needs an operation or twelve numeric CFrame components")
+					local position, angles = row.position, row.angles
+					if position ~= nil or angles ~= nil then
+						assert(
+							(position ~= nil) ~= (angles ~= nil) and #row == 0,
+							"A transform operation has one position or angles"
+						)
+						for key in row do
+							assert(
+								key == (if position ~= nil then "position" else "angles"),
+								"A transform operation has one operand"
+							)
+						end
+						local operand = if position ~= nil then position else angles
+						assert(type(operand) == "table" and #operand == 3, "A transform operation needs three numbers")
+						local x, y, z = operand[1], operand[2], operand[3]
+						assert(
+							type(x) == "number" and type(y) == "number" and type(z) == "number",
+							"A transform operation needs three numbers"
+						)
+						local components = if position ~= nil
+							then Math.frame { X = x, Y = y, Z = z }
+							else Math.multiply(
+								Math.multiply(Math.rotation(x, 0, 0), Math.rotation(0, y, 0)),
+								Math.rotation(0, 0, z)
+							)
+						transform = Math.multiply(transform, components)
+						continue
+					end
+					assert(#row == 12, "A transform has twelve numeric CFrame components")
 					local components: { number } = {}
 					for index = 1, 12 do
 						local component = row[index]
@@ -659,8 +775,12 @@ local function create(
 
 	local function body(part: Compose.Node, props: Props, children: { unknown })
 		ui.set(part, "Anchored", true)
-		ui.set(part, "TopSurface", ui.values.enum("SurfaceType", "Smooth"))
-		ui.set(part, "BottomSurface", ui.values.enum("SurfaceType", "Smooth"))
+		apply(props.topSurface, function(value: Design.Literal?)
+			ui.set(part, "TopSurface", enumItem("SurfaceType", value, "Smooth"))
+		end)
+		apply(props.bottomSurface, function(value: Design.Literal?)
+			ui.set(part, "BottomSurface", enumItem("SurfaceType", value, "Smooth"))
+		end)
 		apply(props.size, function(value: Design.Literal?)
 			local extent = vector(value, { X = 4, Y = 1, Z = 4 })
 			ui.set(part, "Size", ui.values.vector3(extent.X, extent.Y, extent.Z))
@@ -697,6 +817,61 @@ local function create(
 	end
 
 	local builds: { [string]: Build } = {
+		Pattern = function(props: Props): unknown
+			local template = props.render
+			local render = if template then template.template else nil
+			if render == nil then
+				return ui.new "Model"
+			end
+			local config: { [string | number]: unknown } = {}
+			for key, property in props do
+				if key ~= "render" then
+					config[key] = if property.readable then property.readable:peek() else property.literal
+				end
+			end
+			local rows = Patterns.rows(config)
+			local model = ui.new "Model"
+			local function vectorLiteral(value: { number }): Design.Literal
+				local result: { [string | number]: Design.Literal } = {}
+				for index, component in value do
+					result[index] = component
+				end
+				return result
+			end
+			for _, row in rows do
+				local current: Design.Row = {
+					id = row.id,
+					position = vectorLiteral(row.position),
+					rotation = vectorLiteral(row.rotation),
+					size = vectorLiteral(row.size),
+					color = row.color,
+				}
+				ui.set(render(Compose.cell(current)), "Parent", model)
+			end
+			return model
+		end,
+		Array = function(props: Props): unknown
+			local source, template = props.from, props.render
+			local rows = if source then source.rows else nil
+			local render = if template then template.template else nil
+			if rows == nil or render == nil then
+				return ui.new "Model"
+			end
+			local key = assert(source and source.key, "An Array needs a key")
+			local current = rows:peek()
+			local seen: { [string | number]: boolean } = {}
+			for _, row in current do
+				local id = row[key]
+				assert(type(id) == "string" or type(id) == "number", "An Array row needs a string or number key")
+				assert(not seen[id], `Duplicate Array key {id}`)
+				seen[id] = true
+			end
+			local model = ui.new "Model"
+			for _, row in current do
+				ui.set(render(Compose.cell(row)), "Parent", model)
+			end
+			return model
+		end,
 		Model = function(props: Props, children: { unknown }): unknown
 			local model = ui.new "Model"
 			local primary = ui.new "Part"
@@ -716,9 +891,11 @@ local function create(
 			for _, child in children do
 				if child ~= nil then
 					ui.set(child, "Parent", model)
-					if ui.isA(child, "BasePart") then
-						offsets[ui.node(child)] = ui.components(ui.get(child, "CFrame"))
-					end
+				end
+			end
+			for _, part in ui.descendants(model) do
+				if part ~= primary and ui.isA(part, "BasePart") then
+					offsets[part] = ui.components(ui.get(part, "CFrame"))
 				end
 			end
 			place(props, function(frame: { number })
@@ -744,8 +921,12 @@ local function create(
 		}),
 		Part = function(props: Props, children: { unknown }): unknown
 			local shape = props.shape and props.shape.literal
-			local part: Compose.Node = if shape == "Wedge"
-				then ui.new "WedgePart"
+			local class = props.partClass and props.partClass.literal
+			local part: Compose.Node = if class == "Part"
+					or class == "WedgePart"
+					or class == "CornerWedgePart"
+				then ui.new(class)
+				elseif shape == "Wedge" then ui.new "WedgePart"
 				elseif shape == "CornerWedge" then ui.new "CornerWedgePart"
 				else ui.new "Part"
 			if ui.isA(part, "Part") then

@@ -201,6 +201,7 @@ end
 
 local function checkValue(value: Document, field: Types.Field, property: Value, collection: Types.Input?, key: string)
 	assert(present(property) == 1, `{key} holds exactly one literal or binding`)
+	assert(property.path == nil or property.input ~= nil, `{key} paths belong to input bindings`)
 	local played = property.play
 	if played ~= nil then
 		assert(sequenceOf(value, played) ~= nil, `{key} plays unknown sequence {played}`)
@@ -296,6 +297,31 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 		local declared = assert(inputOf(value, input), `{key} reads unknown input {input}`)
 		assert((field.type == "content") == (declared.type == "slot"), `{key} and input {input} do not match`)
 		assert(field.type ~= "event", `{key} needs an output`)
+		local path = property.path
+		if path ~= nil then
+			assert(
+				#path > 0 and declared.kind == "value" and declared.type == "record",
+				`{key} needs a value record for its input path`
+			)
+			local fields = declared.fields
+			for index, segment in path do
+				assert(string.match(segment, "^[%a_][%w_]*$") ~= nil, `{key} input path needs field identifiers`)
+				local selected: Types.ItemField? = nil
+				for _, candidate in fields or {} do
+					if candidate.id == segment then
+						selected = candidate
+						break
+					end
+				end
+				if fields ~= nil then
+					assert(selected ~= nil, `{key} reads unknown record field {segment}`)
+				end
+				if index < #path and selected ~= nil then
+					assert(selected.type == "record", `{key} crosses a non-record field {segment}`)
+				end
+				fields = if selected then selected.fields else nil
+			end
+		end
 	elseif item then
 		local list = assert(collection, `{key} reads an item outside a collection template`)
 		local fields = list.fields
@@ -495,6 +521,12 @@ function document.validate(value: Document, library: Library): Document
 			if bind then
 				local list = assert(listOf(value, bind.from, collection), `{node.kind} binds unknown input {bind.from}`)
 				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
+				assert(
+					not kind.staticRows
+						or list.kind == "value"
+						or (inputOf(value, bind.from) == nil and collection ~= nil and collection.kind == "value"),
+					`{node.kind} repeats value lists`
+				)
 				assert(#bind.key > 0, `{node.kind} needs an item key`)
 				local row = bind.row
 				if row ~= nil then
@@ -505,7 +537,18 @@ function document.validate(value: Document, library: Library): Document
 					nested = list
 				end
 			else
-				assert(#node.children == 0, `{node.kind} needs a list input for its template`)
+				local iteration = kind.iteration
+				if iteration then
+					local generated: Types.Input =
+						{ id = node.id, kind = "value", type = "list", fields = iteration.fields }
+					nested = generated
+					for _, property in node.props do
+						local input = if property.input then inputOf(value, property.input) else nil
+						assert(input == nil or input.kind == "value", `{node.kind} geometry inputs are values`)
+					end
+				else
+					assert(#node.children == 0, `{node.kind} needs a list input for its template`)
+				end
 			end
 		else
 			local bind = node.bind

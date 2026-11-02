@@ -30,6 +30,9 @@ local function copyValue(value: Value): Value
 		end
 		copied.args = arguments
 	end
+	if copied.path then
+		copied.path = table.clone(copied.path)
+	end
 	if copied.fields then
 		copied.fields = table.clone(copied.fields)
 	end
