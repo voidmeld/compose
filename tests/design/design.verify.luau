@@ -1135,7 +1135,7 @@ describe("Compose Design views as code", function()
 		)
 		expect(string.find(code, "local UI = Toy.controls()", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "export type Props", 1, true)):toBe(nil)
-		expect(string.find(code, "UI.Stack(props.name or ", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "UI.Stack(props.name) ", 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, toy).root.name):toBe(value.root.name)
 		expect(string.find(code, "local state = { expanded = Toy.cell(true) }", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "from = props.games,\n", 1, true) ~= nil):toBe(true)
@@ -1227,6 +1227,36 @@ describe("Compose Design views as code", function()
 		local context: Design.RenderContext = { inputs = supplied }
 		local root = builtNode(Design.render(value, toy, context))
 		expect(#(root.children[1]).children):toBe(3)
+	end)
+
+	it("preserves dynamic row names through inline and named source round trips", function()
+		for _, templated in { false, true } do
+			local value, toy = view()
+			local row, index = "n3", 1
+			if templated then
+				value, toy, row, index = sample(), library, "n4", 2
+			end
+			value = Design.document.rename(value, toy, row, "Letter Row!")
+			value = Design.document.nameFrom(value, toy, row, "id")
+			for _, rowFunctions in { false, true } do
+				local options: Design.EmitOptions = { rowFunctions = rowFunctions }
+				local code = Design.emit(value, toy, options)
+				local parsed = Design.parse(code, toy)
+				expect(parsed.root.children[index].children[1].name):toBe "Letter Row!"
+				expect(parsed.root.children[index].children[1].nameField):toBe "id"
+				expect(Design.emit(parsed, toy, options)):toBe(code)
+			end
+		end
+	end)
+
+	it("keeps fallback names for optional inputs", function()
+		local value, toy = view()
+		local contract = Design.document.copy(value).contract
+		contract.inputs[1].required = nil
+		value = Design.document.setContract(value, toy, contract)
+		local code = Design.emit(value, toy)
+		expect(string.find(code, 'UI.Stack(props.name or "Stack") ', 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
 	end)
 
 	it("binds outputs inside literal records and accepts declared extra literal kinds", function()

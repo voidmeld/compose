@@ -16,14 +16,12 @@ type Token = { kind: "name" | "string" | "number" | "symbol", text: string }
 
 local function tokenize(code: string): { Token }
 	local tokens: { Token } = {}
-	local function push(kind: "name" | "string" | "number" | "symbol", text: string)
-		table.insert(tokens, { kind = kind, text = text })
-	end
 	local at = 1
 	while at <= #code do
 		local character = string.sub(code, at, at)
-		if string.match(character, "%s") then
-			at += 1
+		local _, space = string.find(code, "^%s+", at)
+		if space then
+			at = space + 1
 		elseif string.sub(code, at, at + 1) == "--" then
 			local stop = string.find(code, "\n", at, true)
 			at = if stop then stop + 1 else #code + 1
@@ -32,22 +30,22 @@ local function tokenize(code: string): { Token }
 			while stop <= #code and string.sub(code, stop, stop) ~= '"' do
 				stop += if string.sub(code, stop, stop) == "\\" then 2 else 1
 			end
-			push("string", string.sub(code, at, stop))
+			tokens[#tokens + 1] = { kind = "string", text = string.sub(code, at, stop) }
 			at = stop + 1
 		elseif string.match(character, "[%a_]") then
 			local word = assert(string.match(code, "^[%w_]+", at))
-			push("name", word)
+			tokens[#tokens + 1] = { kind = "name", text = word }
 			at += #word
 		elseif string.match(code, "^%-?%d", at) then
 			local number = string.match(code, "^%-?%d+%.?%d*[eE][%+%-]?%d+", at)
 				or assert(string.match(code, "^%-?%d+%.?%d*", at))
-			push("number", number)
+			tokens[#tokens + 1] = { kind = "number", text = number }
 			at += #number
 		elseif string.sub(code, at, at + 2) == "..." then
-			push("symbol", "...")
+			tokens[#tokens + 1] = { kind = "symbol", text = "..." }
 			at += 3
 		else
-			push("symbol", character)
+			tokens[#tokens + 1] = { kind = "symbol", text = character }
 			at += 1
 		end
 	end
@@ -1012,6 +1010,9 @@ function source.parse(code: string, library: Library): Types.Document
 				assert(type(flags) == "table", "Editor flags are a table")
 				assert(flags.hidden == nil or type(flags.hidden) == "boolean", "Hidden is a boolean")
 				assert(flags.locked == nil or type(flags.locked) == "boolean", "Locked is a boolean")
+				if flags.name ~= nil then
+					node.name = text(flags, "name")
+				end
 				node.hidden = if flags.hidden == true then true else nil
 				node.locked = if flags.locked == true then true else nil
 			end
