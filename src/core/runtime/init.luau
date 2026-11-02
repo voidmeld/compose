@@ -201,16 +201,25 @@ local function createRuntime(host: Host.Host): Runtime
 			end
 
 			applying.key = nil
-			local list = Children.createList(host, node, supplied)
+			local list: Children.ChildList? = nil
 			local staticSlot = 0
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
+					if list == nil then
+						render.insertChild(node, child, index)
+						continue
+					end
 					if staticSlot == 0 then
 						staticSlot = Children.addSlot(list)
 					end
 					Children.insertStatic(list, staticSlot, child)
 				elseif type(child) == "function" and constructorKinds[child] == nil then
+					if list == nil then
+						list = Children.createList(host, node, supplied)
+						list.counts[1] = index - 1
+						list.total = index - 1
+					end
 					staticSlot = 0
 					local slot = Children.addSlot(list)
 					child(Children.mountPointFor(list, slot))
