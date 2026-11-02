@@ -222,6 +222,7 @@ local function keyedWithKeys<V, K>(
 					break
 				end
 				prefix += 1
+				entry.mark = mark + prefix
 				local cached = if readsIndex then entry.index.cache else nil
 				if entry.item ~= list[prefix] or (readsIndex and (cached == nil or cached.value ~= prefix)) then
 					staleCount += 1
@@ -237,9 +238,6 @@ local function keyedWithKeys<V, K>(
 				local entry = byKey[itemKey]
 				if entry ~= nil then
 					local at = entry.position - offset
-					if at <= prefix then
-						duplicate(index, at)
-					end
 					if entry.mark >= mark then
 						duplicate(index, entry.mark - mark)
 					end
