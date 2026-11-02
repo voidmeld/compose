@@ -7,11 +7,12 @@ local Dynamic = require "../dynamic"
 local Host = require "../host"
 local Nodes = require "../ownership/nodes"
 local ReactiveNodes = require "../reactive/node"
+local cellModule = require "../reactive/cell"
 local stats = require("../reactive/evaluation").stats
 local statsOn = stats.state
 local Owner = require "../ownership/owner"
 local Types = require "../reactive/types"
-local watchModule: typeof(require "../reactive/watch")? = nil
+local Watch = require "../reactive/watch"
 
 local freeze: ({}) -> {} = table.freeze
 
@@ -245,9 +246,7 @@ local function retireFast(node: Node, key: string)
 			else
 				previous.fastNext = following
 			end
-			local loaded = watchModule or require "../reactive/watch"
-			watchModule = loaded
-			loaded.releaseEdge(edge)
+			Watch.releaseEdge(edge)
 		else
 			previous = edge
 		end
@@ -287,7 +286,7 @@ local function bindFunction(
 		appendFast(node, edge)
 		return
 	end
-	local readable = if type(value) == "table" then ReactiveNodes.asValue(value) else nil
+	local readable = if type(value) == "table" then cellModule.asValue(value) else nil
 	local source: Host.PropFunction
 	if readable ~= nil then
 		function source(use: Types.Use): unknown
@@ -361,7 +360,7 @@ local function apply(host: Host.Host, node: Node, source: unknown, owner: Owner.
 						)
 					end
 					subscribe(host, node, owner, markerName, value, fresh)
-				elseif type(value) == "function" or ReactiveNodes.isNode(value) then
+				elseif type(value) == "function" or cellModule.isValue(value) then
 					local loaded = bindingsModule or require "./bindings"
 					bindingsModule = loaded
 					loaded.bind(loaded.propertyTarget(host), node, owner, markerName, value)
