@@ -262,7 +262,6 @@ return {
 	forget = forget,
 	trackedCount = trackedCount,
 	chargeToOwner = chargeToOwner,
-	releaseCharge = releaseCharge,
 	resetCharges = resetCharges,
 	ownedCounts = ownedCounts,
 	resetForTests = resetForTests,

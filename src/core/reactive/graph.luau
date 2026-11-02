@@ -792,7 +792,6 @@ return {
 	evaluate = evaluate,
 	track = track,
 	release = release,
-	subscriberCount = subscriberCount,
 	untracked = untracked,
 	countNotification = countNotification,
 	listen = listen,
