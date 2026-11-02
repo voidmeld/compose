@@ -194,16 +194,6 @@ local function runWith<A...>(owner: Owner.Owner, body: (A...) -> (), ...: A...)
 	end
 end
 
-local function runWith1<T>(owner: Owner.Owner, body: () -> T): T
-	local running = push(owner)
-	local ok, result = pcall(body)
-	pop(owner, running)
-	if not ok then
-		error(result, 0)
-	end
-	return result
-end
-
 Owner.installActivationDepth(depth)
 Owner.installCurrentOwner(current)
 
@@ -222,7 +212,6 @@ return {
 	withOwner = withOwner,
 	bind = bind,
 	runWith = runWith,
-	runWith1 = runWith1,
 	push = push,
 	pop = pop,
 	own = own,

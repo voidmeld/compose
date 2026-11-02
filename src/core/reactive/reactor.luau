@@ -406,7 +406,5 @@ return {
 	settleTouched = settleTouched,
 	pending = pending,
 	reset = reset,
-	rearm = rearm,
 	touch = touch,
-	MAX_RUNS_PER_DRAIN = MAX_RUNS_PER_DRAIN,
 }
