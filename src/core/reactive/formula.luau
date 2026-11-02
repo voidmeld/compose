@@ -20,6 +20,8 @@ type Body<T> = Types.Body<T>
 local CLEAN = Graph.CLEAN
 local CHECK = Graph.CHECK
 local DIRTY = Graph.DIRTY
+local RETRY = Graph.RETRY
+local RELEASED = 4
 local clockState = Graph.clock
 local use: Types.Use = Graph.use
 local evaluationCache = Evaluation.cache
@@ -38,18 +40,20 @@ end
 
 local FORMULA = {}
 FORMULA.__index = FORMULA
+FORMULA.kind = 1
+FORMULA.released = false
+FORMULA.retry = false
 
 function FORMULA.refresh(self: Node)
-	if self.released then
+	local state = self.state
+	if state == RELEASED then
 		disposed()
 	end
-	local state = self.state
 	if state == CLEAN then
 		return
 	end
 	if state == CHECK then
-		self.state = DIRTY
-		self.retry = true
+		self.state = RETRY
 		local moved = false
 		for index = 1, #self do
 			local edge = self[index]
@@ -67,14 +71,13 @@ function FORMULA.refresh(self: Node)
 				end
 			end
 		end
-		self.retry = false
 		if not moved then
-			self.state = CLEAN
+			self.state = if self.state == RELEASED then RELEASED else CLEAN
 			return
 		end
 	end
 
-	self.state = CLEAN
+	self.state = if self.state == RELEASED then RELEASED else CLEAN
 	local body = self.body or none
 	local running = coroutine.running()
 	local cached = if running == evaluationCache.thread then evaluationCache.frame else nil
@@ -102,8 +105,7 @@ function FORMULA.refresh(self: Node)
 	evaluationCache.thread = running
 	evaluationCache.frame = current
 	if not ok then
-		self.state = DIRTY
-		self.retry = true
+		self.state = if self.released then RELEASED else RETRY
 		error(incoming, 0)
 	end
 	local reads = self.reads or 0
@@ -111,7 +113,7 @@ function FORMULA.refresh(self: Node)
 		Graph.trim(self, reads + 1)
 	end
 	self.reads = nil
-	if self.released then
+	if self.state == RELEASED then
 		disposed()
 	end
 	if statsOn.enabled then
@@ -173,7 +175,9 @@ local function dispose(self: Node)
 		detachers[self] = nil
 		detach()
 	end
+	self.state = RELEASED
 	Graph.release(self)
+	self.state = RELEASED
 	self.body = nil
 	self.cache = nil
 	self.value = nil
@@ -200,14 +204,13 @@ local function formula<T>(body: Body<T>, equals: Equals<T>?): Value<T>
 	local node: Types.NodeData<T> = {
 		version = 0,
 		state = DIRTY,
-		released = false,
-		retry = false,
 		body = body,
 		refresh = FORMULA.refresh,
 	}
 	if equals ~= nil then
 		node.equals = equals
 		node.cutoff = cutoff
+		node.kind = 2
 	end
 	return setmetatable(node, FORMULA)
 end

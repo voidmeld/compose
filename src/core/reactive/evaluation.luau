@@ -204,11 +204,11 @@ local function leave(previousConsumer: Node?, previousOrder: number)
 	local running = coroutine.running()
 	local cached = if running == cache.thread then cache.frame else nil
 	local current: Evaluation = if cached ~= nil then cached else frame()
-	current.consumer = previousConsumer
-	current.order = previousOrder
-	if previousOrder == 0 then
+	if previousOrder == 0 and current.order > 0 then
 		cache.active -= 1
 	end
+	current.consumer = previousConsumer
+	current.order = previousOrder
 end
 
 local validation = { validating = false }

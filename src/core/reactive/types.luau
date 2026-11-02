@@ -126,6 +126,7 @@ export type Reactor = {
 export type Node = NodeData<unknown> & { read peek: (<S>(Cache<S>) -> S)? }
 
 export type NodeData<T> = {
+	kind: number?,
 	[number]: Node?,
 	version: number?,
 	value: unknown,
