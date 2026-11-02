@@ -132,5 +132,4 @@ return {
 	describe = describe,
 	findings = findingsOf,
 	keyOf = keyOf,
-	keyOfDisposition = keyOfDisposition,
 }

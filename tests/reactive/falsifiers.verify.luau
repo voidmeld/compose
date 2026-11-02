@@ -16,6 +16,27 @@ local function cellAsReadable<T>(value: Compose.ReadOnlyValue<T>): Compose.ReadO
 end
 
 describe("falsifiers", function()
+	it("keeps mixed subscribers when the leading reactive subscriber detaches", function()
+		Support.world()
+		local _, owner = domain()
+		local source = Compose.cell(0)
+		local direct, reactive = 0, 0
+		local release = Compose.owner.watch(owner, function(use)
+			use(source)
+		end)
+		Compose.owner.watchStatic(owner, source, function(value)
+			direct = value
+		end)
+		Compose.owner.watchTerminal(owner, function(use)
+			reactive = use(source)
+		end)
+		release()
+		source:set(1)
+		expect(direct):toBe(1)
+		expect(reactive):toBe(1)
+		Compose.owner.dispose(owner)
+	end)
+
 	it("keeps dependencies after a watch normalizes its own source during its first run", function()
 		Support.world()
 		local _, owner = domain()
@@ -150,6 +171,44 @@ describe("falsifiers", function()
 	end)
 
 	describe("released dependencies", function()
+		it("keeps a formula disposed when propagation releases it", function()
+			for mode = 1, 3 do
+				local _, owner = domain()
+				local source = Compose.cell(0)
+				local victim: Compose.Value<number>? = nil
+				local function equal(a: number, b: number): boolean
+					return a == b
+				end
+				local first = Compose.formula(function(use)
+					local value = use(source)
+					local current = victim
+					if value > 0 and current ~= nil then
+						current:dispose()
+					end
+					return if mode == 3 then 0 else value
+				end, if mode == 1 then equal else nil)
+				local target = Compose.formula(function(use)
+					return use(if mode == 1 then source else first) * 2
+				end)
+				victim = target
+				if mode == 1 then
+					Compose.owner.watchStatic(owner, first, function() end)
+				end
+				expect(target:peek()):toBe(0)
+				source:set(1)
+				if mode == 3 then
+					expect(function()
+						target:peek()
+					end):toThrow()
+				end
+				expect(function()
+					target:peek()
+				end):toThrow "reactive/disposed-formula"
+				Compose.owner.dispose(owner)
+				first:dispose()
+			end
+		end)
+
 		it("stops the remaining direct listeners when their owner is disposed during delivery", function()
 			local _, owner = domain()
 			local source = Compose.cell(0)

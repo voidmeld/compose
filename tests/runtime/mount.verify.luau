@@ -331,6 +331,28 @@ describe("mounting", function()
 			expect(Compose.outstandingMounts()):toBe(0)
 		end)
 
+		it("keeps host validation diagnostics exact across repeated failures", function()
+			local world = Support.world()
+			local host = table.clone(world.host.adapter)
+			host.render = table.clone(host.render)
+			Support.invoke(rawset, host.render, "createNode", nil)
+			for _ = 1, 2 do
+				local ok, failure: unknown = pcall(Compose.createRuntime, host)
+				expect(ok):toBe(false)
+				expect(failure):toBe(
+					Compose.formatDiagnostic(
+						"host/incomplete-renderer",
+						("host %q is missing render.createNode"):format(host.name),
+						{
+							expected = "a function",
+							actual = "nil nil",
+							contract = "every method in Renderer is required",
+						}
+					)
+				)
+			end
+		end)
+
 		it("refuses create outside a mount", function()
 			local world = Support.world()
 			expect(function()

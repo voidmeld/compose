@@ -653,6 +653,22 @@ describe("Compose Design documents", function()
 		expect(history.redo()):toBe(false)
 	end)
 
+	it("isolates nested literals and output arguments across document edits", function()
+		local value = sample()
+		local nested: Design.Row = { 1, false }
+		value = Design.document.change(value, library, "n5", "onActivate", {
+			output = "onClose",
+			args = { nested },
+		})
+		local changed = Design.document.change(value, library, "n1", "gap", { literal = 8 })
+		local original = assert(value.root.children[3].props.onActivate.args)[1]
+		local copied = assert(changed.root.children[3].props.onActivate.args)[1]
+		assert(type(original) == "table" and type(copied) == "table")
+		copied[1] = 9
+		expect(original):toEqual { 1, false }
+		expect(nested):toEqual { 1, false }
+	end)
+
 	it("emits typed source and reads the same design back", function()
 		local value = sample()
 		local code = Design.emit(value, library)
@@ -701,6 +717,47 @@ describe("Compose Design documents", function()
 			expect(closed):toEqual { { "back" } }
 		end)
 	end)
+	it("switches between prepared slot inputs and authored content without duplicate properties", function()
+		local extended = table.clone(library)
+		extended.kinds = table.clone(library.kinds)
+		extended.kinds.Panel = table.clone(library.kinds.Panel)
+		extended.kinds.Panel.fields = { content = { type = "content" }, icon = { type = "content" } }
+		local value = Design.document.setContract(Design.document.new("Prepared", extended, "Panel"), extended, {
+			inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+			outputs = {},
+		})
+		value = Design.document.insert(value, extended, "n1", "Label")
+		local iconId
+		value, iconId = Design.document.content(value, extended, "n1", "icon", "Label")
+		value = Design.document.change(value, extended, "n1", "content", { input = "body" })
+		expect(#value.root.children):toBe(1)
+		expect(value.root.children[1].id):toBe(iconId)
+		local calls = 0
+		local panel = builtNode(Design.render(value, extended, {
+			slots = {
+				body = function(): unknown
+					calls += 1
+					return "Prepared"
+				end,
+			},
+		}))
+		expect(calls):toBe(0)
+		expect(assert(panel.props.content.slot)()):toBe "Prepared"
+		expect(calls):toBe(1)
+		local code = Design.emit(value, extended)
+		expect(string.find(code, "content = props.body", 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+		value = Design.document.change(value, extended, "n1", "icon", nil)
+		value = Design.document.insert(value, extended, "n1", "Label")
+		expect(value.root.props.content):toBe(nil)
+		code = Design.emit(value, extended)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+		value = Design.document.content(value, extended, "n1", "content", "Label")
+		expect(#value.root.children):toBe(1)
+		code = Design.emit(value, extended)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+	end)
+
 	it("builds slot content only when the slot is called and reads it back from source", function()
 		local value = Design.document.new("Panel", library, "Panel")
 		local body
@@ -1135,7 +1192,7 @@ describe("Compose Design views as code", function()
 		)
 		expect(string.find(code, "local UI = Toy.controls()", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "export type Props", 1, true)):toBe(nil)
-		expect(string.find(code, "UI.Stack(props.name or ", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "UI.Stack(props.name) ", 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, toy).root.name):toBe(value.root.name)
 		expect(string.find(code, "local state = { expanded = Toy.cell(true) }", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "from = props.games,\n", 1, true) ~= nil):toBe(true)
@@ -1227,6 +1284,36 @@ describe("Compose Design views as code", function()
 		local context: Design.RenderContext = { inputs = supplied }
 		local root = builtNode(Design.render(value, toy, context))
 		expect(#(root.children[1]).children):toBe(3)
+	end)
+
+	it("preserves dynamic row names through inline and named source round trips", function()
+		for _, templated in { false, true } do
+			local value, toy = view()
+			local row, index = "n3", 1
+			if templated then
+				value, toy, row, index = sample(), library, "n4", 2
+			end
+			value = Design.document.rename(value, toy, row, "Letter Row!")
+			value = Design.document.nameFrom(value, toy, row, "id")
+			for _, rowFunctions in { false, true } do
+				local options: Design.EmitOptions = { rowFunctions = rowFunctions }
+				local code = Design.emit(value, toy, options)
+				local parsed = Design.parse(code, toy)
+				expect(parsed.root.children[index].children[1].name):toBe "Letter Row!"
+				expect(parsed.root.children[index].children[1].nameField):toBe "id"
+				expect(Design.emit(parsed, toy, options)):toBe(code)
+			end
+		end
+	end)
+
+	it("keeps fallback names for optional inputs", function()
+		local value, toy = view()
+		local contract = Design.document.copy(value).contract
+		contract.inputs[1].required = nil
+		value = Design.document.setContract(value, toy, contract)
+		local code = Design.emit(value, toy)
+		expect(string.find(code, 'UI.Stack(props.name or "Stack") ', 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
 	end)
 
 	it("binds outputs inside literal records and accepts declared extra literal kinds", function()

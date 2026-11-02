@@ -22,7 +22,7 @@ export type Entry = {
 	id: string,
 	parity: () -> string?,
 	collection: Benchmark.Collection,
-	memory: (number?) -> Lute.MemoryResult,
+	memory: (number?, boolean?) -> Lute.MemoryResult,
 }
 
 export type Filter = {
@@ -223,7 +223,7 @@ local function workloadEntry(workload: Workloads.Workload, position: number, obs
 			return Parity.workload(workload, order)
 		end,
 		collection = { name = workload.id, yardstick = yardstick(pairedRun), benchmarks = members, clock = clock },
-		memory = function(plantedBytes: number?): Lute.MemoryResult
+		memory = function(plantedBytes: number?, released: boolean?): Lute.MemoryResult
 			local framework = composeFramework()
 			local case = assert(workload.cases.compose)
 			local environment, context = makeContext(framework)
@@ -246,7 +246,7 @@ local function workloadEntry(workload: Workloads.Workload, position: number, obs
 				warmup = workload.warmup,
 				iterations = 1,
 				rehearsals = 1,
-			}, plantedBytes)
+			}, plantedBytes, released)
 		end,
 	}
 end
@@ -448,7 +448,7 @@ local function scenarioEntry(scenario: Types.Scenario, scale: Types.Scale, posit
 			return Parity.scenario(scenario, scale, order)
 		end,
 		collection = { name = id, yardstick = yardstick(pairedRun), benchmarks = members, clock = clock },
-		memory = function(plantedBytes: number?): Lute.MemoryResult
+		memory = function(plantedBytes: number?, released: boolean?): Lute.MemoryResult
 			local framework = composeFramework()
 			local case = assert(scenario.cases.compose)
 			local environment, context = makeContext(framework)
@@ -479,7 +479,7 @@ local function scenarioEntry(scenario: Types.Scenario, scale: Types.Scale, posit
 				end,
 				iterations = 1,
 				rehearsals = 1,
-			}, plantedBytes)
+			}, plantedBytes, released)
 		end,
 	}
 end
