@@ -2,7 +2,7 @@
 
 local Lute = require "../.lute/dependencies/verify/src/lute"
 
-local function measure<T>(spec: Lute.MemorySpec<T>, plantedBytes: number?): Lute.MemoryResult
+local function measure<T>(spec: Lute.MemorySpec<T>, plantedBytes: number?, released: boolean?): Lute.MemoryResult
 	local bytes = plantedBytes or 0
 	assert(bytes >= 0 and bytes <= 16 * 1024 * 1024 and bytes % 1 == 0)
 	local retained: buffer? = nil
@@ -18,7 +18,12 @@ local function measure<T>(spec: Lute.MemorySpec<T>, plantedBytes: number?): Lute
 		end,
 		run = spec.run,
 		afterRun = spec.afterRun,
-		teardown = spec.teardown,
+		teardown = function(sample: T)
+			if released then
+				retained = nil
+			end
+			spec.teardown(sample)
+		end,
 		warmup = spec.warmup,
 		iterations = spec.iterations,
 		rehearsals = rehearsals,

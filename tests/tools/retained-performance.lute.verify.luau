@@ -123,8 +123,8 @@ describe("retained performance", function()
 	end)
 
 	it("paired memory accepts unchanged scenes and detects retained allocations", function()
-		local function readings(bytes: number): ({ number }, { number })
-			local result = process.run { "lute", "run", "bench/memory-control.luau", tostring(bytes) }
+		local function readings(bytes: number, mode: string?): ({ number }, { number })
+			local result = process.run { "lute", "run", "bench/memory-control.luau", tostring(bytes), mode or "kept" }
 			assert(result.ok, result.stderr)
 			local mounted: { number } = {}
 			local teardown: { number } = {}
@@ -141,6 +141,7 @@ describe("retained performance", function()
 		local baseMounted, baseTeardown = readings(0)
 		local sameMounted, sameTeardown = readings(0)
 		local keptMounted, keptTeardown = readings(4 * 1024 * 1024)
+		local heldMounted, heldTeardown = readings(4 * 1024 * 1024, "released")
 		local function stored(name: string, mounted: { number }, teardown: { number }): Benchmark.Stored
 			return {
 				schemaVersion = 1,
@@ -155,20 +156,24 @@ describe("retained performance", function()
 		local rule: Benchmark.CompareRule = { ratio = 1.05, floor = 64 }
 		local same = Benchmark.compare(base, stored("same", sameMounted, sameTeardown), { rule = rule })
 		local kept = Benchmark.compare(base, stored("kept", keptMounted, keptTeardown), { rule = rule })
-		if same.passed ~= 2 or kept.failed ~= 2 then
+		local held = Benchmark.compare(base, stored("held", heldMounted, heldTeardown), { rule = rule })
+		if same.passed ~= 2 or kept.failed ~= 1 or held.failed ~= 1 then
 			error(
 				json.serialize {
 					baseline = { mounted = baseMounted, teardown = baseTeardown },
 					unchanged = { mounted = sameMounted, teardown = sameTeardown },
 					planted = { mounted = keptMounted, teardown = keptTeardown },
+					held = { mounted = heldMounted, teardown = heldTeardown },
 					accepted = same.passed,
 					rejected = kept.failed,
+					rejectedWhileMounted = held.failed,
 				},
 				0
 			)
 		end
 		expect(same.passed):toBe(2)
-		expect(kept.failed):toBe(2)
+		expect(kept.failed):toBe(1)
+		expect(held.failed):toBe(1)
 	end)
 
 	it("collects the prewarmed 10000-node fixture within its bounded memory allowance", function()
