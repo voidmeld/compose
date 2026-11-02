@@ -19,3 +19,11 @@ The 3D `Pattern` control authors one `render` template with these parameters. It
 are values and rebuild with the document. Host adapters may flatten the authoring group while
 retaining row order. Select the group to translate the whole pattern; position-bound template
 instances preserve their binding when selected with the gizmo.
+
+Use a `Fragment` as the Array or Pattern template when each repeated item contains several sibling
+parts. A Fragment has children, a layer name and optional position, rotation or ordered transform
+operations. Its transform composes before each child's authored or row-bound pose. The editor previews
+it as an organizational Model; host adapters flatten it without creating a game instance, preserving
+part order and existing hierarchy. This keeps a shared construction basis editable without changing
+the game's model hierarchy. The preview's pivot marker is editor-only.
+Use Model or Folder when the grouping itself belongs in the built instance tree.
