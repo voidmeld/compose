@@ -431,25 +431,18 @@ function source.parse(code: string, library: Library): Types.Document
 		at = start
 		return nil
 	end
-	local function startsCall(path: string): boolean
-		local offset = 0
-		for index, part in string.split(path, ".") do
-			if index > 1 then
-				if peek(offset) ~= "." then
-					return false
-				end
-				offset += 1
-			end
-			if peek(offset) ~= part then
+	local motion = library.motion
+	local motionTokens = if motion then tokenize(motion.call .. "(") else {}
+	local function startsMotion(): boolean
+		for index, part in motionTokens do
+			if peek(index - 1) ~= part.text then
 				return false
 			end
-			offset += 1
 		end
-		return peek(offset) == "("
+		return true
 	end
 	local function value(): (Value?, Node?)
-		local motion = library.motion
-		if motion ~= nil and startsCall(motion.call) then
+		if motion ~= nil and startsMotion() then
 			dotted()
 			take "("
 			local moving = assert(value(), `{motion.call} moves an input, state or item`)
