@@ -174,6 +174,8 @@ local function inputType(name: string): Types.InputType
 		return "color"
 	elseif name == "image" then
 		return "image"
+	elseif name == "vector3" then
+		return "vector3"
 	elseif name == "list" then
 		return "list"
 	elseif name == "record" then

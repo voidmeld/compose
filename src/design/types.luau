@@ -136,7 +136,7 @@ export type Library = {
 }
 
 export type InputKind = "value" | "readable" | "cell"
-export type InputType = "string" | "number" | "boolean" | "color" | "image" | "list" | "record" | "slot"
+export type InputType = "string" | "number" | "boolean" | "color" | "image" | "vector3" | "list" | "record" | "slot"
 
 export type ItemField = { id: string, type: InputType, fields: { ItemField }?, luauType: string? }
 
