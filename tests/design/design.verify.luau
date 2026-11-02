@@ -653,6 +653,22 @@ describe("Compose Design documents", function()
 		expect(history.redo()):toBe(false)
 	end)
 
+	it("isolates nested literals and output arguments across document edits", function()
+		local value = sample()
+		local nested: Design.Row = { 1, false }
+		value = Design.document.change(value, library, "n5", "onActivate", {
+			output = "onClose",
+			args = { nested },
+		})
+		local changed = Design.document.change(value, library, "n1", "gap", { literal = 8 })
+		local original = assert(value.root.children[3].props.onActivate.args)[1]
+		local copied = assert(changed.root.children[3].props.onActivate.args)[1]
+		assert(type(original) == "table" and type(copied) == "table")
+		copied[1] = 9
+		expect(original):toEqual { 1, false }
+		expect(nested):toEqual { 1, false }
+	end)
+
 	it("emits typed source and reads the same design back", function()
 		local value = sample()
 		local code = Design.emit(value, library)
