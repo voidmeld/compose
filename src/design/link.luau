@@ -27,6 +27,8 @@ return function(session: Session.Session, store: Store): Link
 	local baseline = ""
 	local exported: string? = nil
 	local applying = false
+	local pending = false
+	local disposed = false
 	local function emit(value: Types.Document): string
 		return Source.emit(value, library, if exported then { name = exported } else nil)
 	end
@@ -91,19 +93,25 @@ return function(session: Session.Session, store: Store): Link
 		session.problem:set(nil)
 		return true
 	end
-	local owner = Core.createRootOwner(function()
-		Core.watch(function(use: Core.Use)
-			local value = use(session.document)
-			if applying or status:peek() ~= "synchronized" then
+	local save: () -> ()
+	save = function()
+		if pending or applying or disposed or status:peek() ~= "synchronized" then
+			return
+		end
+		local function flush()
+			if disposed or applying or status:peek() ~= "synchronized" then
+				pending = false
 				return
 			end
-			local generated = emit(value)
+			local generated = emit(session.document:peek())
 			if generated == baseline then
+				pending = false
 				return
 			end
 			if last ~= baseline then
 				status:set "custom"
 				session.problem:set "Source formatting is custom. Visual edits would change unrelated bytes"
+				pending = false
 				return
 			end
 			if store.write(last, generated) then
@@ -112,6 +120,23 @@ return function(session: Session.Session, store: Store): Link
 				status:set "conflict"
 				session.problem:set(CHANGED)
 			end
+			pending = false
+			if status:peek() == "synchronized" and emit(session.document:peek()) ~= baseline then
+				save()
+			end
+		end
+		pending = true
+		local defer = store.defer
+		if defer then
+			defer(flush)
+		else
+			flush()
+		end
+	end
+	local owner = Core.createRootOwner(function()
+		Core.watch(function(use: Core.Use)
+			use(session.document)
+			save()
 		end)
 	end)
 	local stop = store.watch(function()
@@ -130,6 +155,7 @@ return function(session: Session.Session, store: Store): Link
 		status = status,
 		import = import,
 		dispose = function()
+			disposed = true
 			stop()
 			owner.dispose()
 		end,
