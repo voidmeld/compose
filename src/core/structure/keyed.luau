@@ -395,6 +395,24 @@ local function keyedWithKeys<V, K>(
 			if ordered and retained == middle and not removedAny and previousCount == wanted then
 				return
 			end
+			if not ordered and retained == middle and previousCount == wanted then
+				local first, last = order[prefix + 1], order[newEnd]
+				local index = prefix + 2
+				if matched[prefix + 1] == last and matched[newEnd] == first then
+					while index < newEnd and matched[index] == order[index] do
+						index += 1
+					end
+					if index >= newEnd then
+						order[prefix + 1], order[newEnd] = last, first
+						last.position, first.position = prefix + 1, newEnd
+						mountPoint.moveTo(last.node, prefix + 1)
+						if middle > 2 then
+							mountPoint.moveTo(first.node, newEnd)
+						end
+						return
+					end
+				end
+			end
 
 			local stays: { number }? = nil
 			if not ordered then
