@@ -22,6 +22,86 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 local FRAME = 1 / 60
 
 describe("shared motion frames", function()
+	for _, primitive in { "spring", "tween" } do
+		it("returns nil after a guarded initial " .. primitive .. " source failure", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local reports: { unknown } = {}
+			Compose.owner.guardWith(owner, {
+				report = function(failure: unknown)
+					table.insert(reports, failure)
+				end,
+			})
+			local target = Compose.cell(1)
+			local result = Compose.withOwner(owner, function()
+				return Support.invoke(
+					if primitive == "spring" then world.runtime.spring else world.runtime.tween,
+					function(use: Compose.Use): number
+						local value = use(target)
+						assert(value ~= 1, "initial motion source failed")
+						return value
+					end
+				)
+			end)
+			expect(result):toBe(nil)
+			expect(#reports):toBe(1)
+			expect(tostring(reports[1])):toContain "initial motion source failed"
+			target:set(2)
+			world.settle()
+			expect(#reports):toBe(1)
+			expect(world.host.counts().frameListeners):toBe(0)
+			target:set(3)
+			world.settle()
+			expect(world.host.counts().frameListeners):toBe(1)
+			Compose.owner.dispose(owner)
+			expect(world.host.counts().frameListeners):toBe(0)
+		end)
+
+		it("keeps the boundary fallback and retry after an initial " .. primitive .. " source failure", function()
+			local world = Support.world()
+			local target = Compose.cell(1)
+			local reported: unknown = nil
+			local retry = function() end
+			local dispose, root = world.runtime.mount(function()
+				return world.create "Frame" {
+					Compose.boundary(function()
+						local value = Support.invoke(
+							if primitive == "spring" then world.runtime.spring else world.runtime.tween,
+							function(use: Compose.Use): number
+								local wanted = use(target)
+								assert(wanted ~= 1, "initial motion source failed")
+								return wanted
+							end
+						)
+						return world.create "Animated" { Value = value }
+					end, function(failure, again)
+						reported = failure
+						retry = again
+						return world.create "Fallback" {}
+					end),
+				}
+			end, world.root)
+			world.settle()
+			expect(tostring(reported)):toContain "initial motion source failed"
+			local children = world.host.childrenOf(root)
+			expect(#children):toBe(1)
+			expect(world.host.kindOf(children[1])):toBe "Fallback"
+			target:set(2)
+			retry()
+			world.settle()
+			children = world.host.childrenOf(root)
+			expect(#children):toBe(1)
+			expect(world.host.kindOf(children[1])):toBe "Animated"
+			expect(world.host.propertyOf(children[1], "Value")):toBe(2)
+			target:set(3)
+			world.settle()
+			expect(world.host.counts().frameListeners):toBe(1)
+			dispose()
+			expect(world.host.counts().frameListeners):toBe(0)
+			expect(world.host.leaked()):toEqual { "Root#1" }
+		end)
+	end
+
 	it("uses one subscription only while mixed animations are active", function()
 		local world = Support.world()
 		local target = Compose.cell(0)

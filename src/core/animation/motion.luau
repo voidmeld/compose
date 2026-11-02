@@ -295,7 +295,11 @@ local function createMotion<T>(
 				end
 			end
 		end)
-		return assert(state).output
+		local output: Types.ReadOnlyValue<T>
+		if state ~= nil then
+			output = state.output
+		end
+		return output
 	end
 
 	local function spring(source: Types.Body<T>, options: SpringOptions?): Types.ReadOnlyValue<T>
