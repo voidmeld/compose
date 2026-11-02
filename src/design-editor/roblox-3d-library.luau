@@ -9,8 +9,392 @@ local Design = require "../design"
 
 type Resolved = Design.Resolved
 type Props = { [string]: Resolved }
+type Convert =
+	"number"
+	| "boolean"
+	| "string"
+	| "color"
+	| "vector2"
+	| "vector3"
+	| "range"
+	| "numberSequence"
+	| "colorSequence"
+	| "unit"
+	| "nonNegative"
+	| "tile"
+	| "reach"
+	| "angle"
+type Binding = { property: string, convert: Convert, enum: string? }
+type Bindings = { [string]: Binding }
+type Build = (props: Props, children: { unknown }, name: string) -> unknown
+export type Sequences = {
+	numberSequence: ({ { number } }) -> unknown,
+	colorSequence: ({ { number } }) -> unknown,
+	numberRange: (low: number, high: number) -> unknown,
+}
 
-return function(runtime: Compose.Runtime, environment: Environment.Environment): Design.Library
+local MATERIALS = { "SmoothPlastic", "Plastic", "Neon", "Glass", "Metal", "Wood", "Concrete", "Grass" }
+local SHAPES = { "Block", "Ball", "Cylinder", "Wedge", "CornerWedge" }
+local FACES = { "Front", "Back", "Top", "Bottom", "Left", "Right" }
+local STREAMING = { "Default", "Atomic", "Persistent", "PersistentPerPlayer" }
+local FIDELITY = { "Default", "Box", "Hull", "PreciseConvexDecomposition" }
+local RENDER_FIDELITY = { "Automatic", "Precise", "Performance" }
+local EMITTER_SHAPES = { "Box", "Sphere", "Cylinder", "Disc" }
+local EMITTER_STYLES = { "Volume", "Surface" }
+local EMITTER_ORIENTATIONS = { "FacingCamera", "FacingCameraWorldUp", "VelocityParallel", "VelocityPerpendicular" }
+
+local placement: { [string]: Design.Field } = {
+	position = { type = "vector3", group = "Transform", order = 1 },
+	rotation = { type = "vector3", group = "Transform", order = 2 },
+}
+
+local function with(base: { [string]: Design.Field }, extra: { [string]: Design.Field }): { [string]: Design.Field }
+	local fields = table.clone(base)
+	for key, field in extra do
+		fields[key] = field
+	end
+	return fields
+end
+
+local function field(kind: Design.FieldType, group: string, order: number, options: { string }?): Design.Field
+	return { type = kind, group = group, order = order, options = options }
+end
+
+local physics: { [string]: Design.Field } = {
+	canCollide = { type = "boolean", group = "Physics", order = 1, default = true },
+	canQuery = { type = "boolean", group = "Physics", order = 2, default = true },
+	canTouch = { type = "boolean", group = "Physics", order = 3, default = true },
+	castShadow = { type = "boolean", group = "Physics", order = 4, default = true },
+}
+
+local attributes: { [string]: Design.Field } = {
+	attributes = { type = "value", group = "Attributes", order = 1, advanced = true },
+}
+
+local physicsBindings: Bindings = {
+	canCollide = { property = "CanCollide", convert = "boolean" },
+	canQuery = { property = "CanQuery", convert = "boolean" },
+	canTouch = { property = "CanTouch", convert = "boolean" },
+	castShadow = { property = "CastShadow", convert = "boolean" },
+}
+
+local surface: { [string]: Design.Field } = {
+	color = field("color", "Surface", 1),
+	material = field("choice", "Surface", 2, MATERIALS),
+	transparency = field("number", "Surface", 3),
+	materialVariant = field("string", "Surface", 4),
+}
+
+local function light(extra: { [string]: Design.Field }): Design.Kind
+	local fields = with({
+		color = field("color", "Light", 1),
+		brightness = field("number", "Light", 2),
+		range = field("number", "Light", 3),
+		shadows = field("boolean", "Light", 4),
+		enabled = { type = "boolean", group = "Light", order = 7, default = true },
+	}, extra)
+	local defaults: { [string]: Design.Literal } = { color = "#FFE8C2", brightness = 1, range = 12 }
+	return {
+		fields = fields,
+		defaults = defaults,
+		children = "none",
+		category = "Light",
+		call = "",
+		build = function(): unknown
+			error "schema only"
+		end,
+	}
+end
+
+local function surfaceImage(extra: { [string]: Design.Field }): Design.Kind
+	local fields = with({
+		image = field("string", "Image", 1),
+		face = field("choice", "Image", 2, FACES),
+		color = field("color", "Image", 3),
+		transparency = field("number", "Image", 4),
+	}, extra)
+	local defaults: { [string]: Design.Literal } = { face = "Front" }
+	return {
+		fields = fields,
+		defaults = defaults,
+		children = "none",
+		category = "Surface",
+		call = "",
+		build = function(): unknown
+			error "schema only"
+		end,
+	}
+end
+
+local function scalar(
+	category: string,
+	fields: { [string]: Design.Field },
+	children: index<Design.Kind, "children">?
+): Design.Kind
+	return {
+		fields = fields,
+		children = children or "none",
+		category = category,
+		call = "",
+		build = function(): unknown
+			error "schema only"
+		end,
+	}
+end
+
+local partDefaults: { [string]: Design.Literal } = {
+	size = { 4, 1, 4 },
+	position = { 0, 0.5, 0 },
+	color = "#A3A2A5",
+	material = "SmoothPlastic",
+}
+
+local function kinds(): { [string]: Design.Kind }
+	return {
+		Model = {
+			fields = with(
+				placement,
+				with(attributes, {
+					streamingMode = field("choice", "Model", 1, STREAMING),
+				})
+			),
+			children = "list",
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
+		Folder = scalar("Structure", {}, "list"),
+		Part = {
+			fields = with(
+				with(placement, with(physics, attributes)),
+				with(surface, {
+					shape = field("choice", "Shape", 1, SHAPES),
+					size = field("vector3", "Shape", 2),
+					meshId = field("string", "Mesh", 1),
+					textureId = field("string", "Mesh", 2),
+				})
+			),
+			defaults = partDefaults,
+			children = "list",
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
+		MeshPart = {
+			fields = with(
+				with(placement, with(physics, attributes)),
+				with(surface, {
+					size = field("vector3", "Shape", 2),
+					meshId = field("string", "Mesh", 1),
+					textureId = field("string", "Mesh", 2),
+					collisionFidelity = field("choice", "Mesh", 3, FIDELITY),
+					renderFidelity = field("choice", "Mesh", 4, RENDER_FIDELITY),
+				})
+			),
+			defaults = partDefaults,
+			children = "list",
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
+		Attachment = {
+			fields = with(placement, {}),
+			children = "none",
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
+		PointLight = light {},
+		SpotLight = light {
+			face = field("choice", "Light", 5, FACES),
+			angle = field("number", "Light", 6),
+		},
+		SurfaceLight = light {
+			face = field("choice", "Light", 5, FACES),
+			angle = field("number", "Light", 6),
+		},
+		Decal = surfaceImage {},
+		Texture = surfaceImage {
+			tileU = field("number", "Image", 5),
+			tileV = field("number", "Image", 6),
+			offsetU = field("number", "Image", 7),
+			offsetV = field("number", "Image", 8),
+		},
+		ParticleEmitter = scalar("Effect", {
+			texture = field("string", "Appearance", 1),
+			color = field("value", "Appearance", 2),
+			size = field("value", "Appearance", 3),
+			transparency = field("value", "Appearance", 4),
+			lightEmission = field("number", "Appearance", 5),
+			lightInfluence = field("number", "Appearance", 6),
+			rotation = field("value", "Appearance", 7),
+			rotSpeed = field("value", "Appearance", 8),
+			orientation = field("choice", "Appearance", 9, EMITTER_ORIENTATIONS),
+			rate = field("number", "Emission", 1),
+			lifetime = field("value", "Emission", 2),
+			speed = field("value", "Emission", 3),
+			spreadAngle = field("value", "Emission", 4),
+			acceleration = field("vector3", "Emission", 5),
+			drag = field("number", "Emission", 6),
+			windAffectsDrag = field("boolean", "Emission", 7),
+			shape = field("choice", "Emission", 8, EMITTER_SHAPES),
+			shapeStyle = field("choice", "Emission", 9, EMITTER_STYLES),
+			emissionDirection = field("choice", "Emission", 10, FACES),
+			enabled = { type = "boolean", group = "Emission", order = 11, default = true },
+		}),
+		Fire = scalar("Effect", {
+			color = field("color", "Fire", 1),
+			secondaryColor = field("color", "Fire", 2),
+			heat = field("number", "Fire", 3),
+			size = field("number", "Fire", 4),
+			enabled = { type = "boolean", group = "Fire", order = 5, default = true },
+		}),
+		Smoke = scalar("Effect", {
+			color = field("color", "Smoke", 1),
+			opacity = field("number", "Smoke", 2),
+			riseVelocity = field("number", "Smoke", 3),
+			size = field("number", "Smoke", 4),
+			enabled = { type = "boolean", group = "Smoke", order = 5, default = true },
+		}),
+		Sparkles = scalar("Effect", {
+			color = field("color", "Sparkles", 1),
+			enabled = { type = "boolean", group = "Sparkles", order = 2, default = true },
+		}),
+		Sound = scalar("Audio", {
+			soundId = field("string", "Sound", 1),
+			volume = field("number", "Sound", 2),
+			playbackSpeed = field("number", "Sound", 3),
+			looped = field("boolean", "Sound", 4),
+			playing = field("boolean", "Sound", 5),
+			rollOffMinDistance = field("number", "Sound", 6),
+			rollOffMaxDistance = field("number", "Sound", 7),
+		}),
+	}
+end
+
+local function categories(): { string }
+	return { "Structure", "Light", "Surface", "Effect", "Audio" }
+end
+
+local calls: { [string]: string } = {}
+for name in kinds() do
+	calls[name] = "Design." .. name
+end
+
+local function named(source: { [string]: Design.Kind }): { [string]: Design.Kind }
+	for name, kind in source do
+		kind.call = calls[name]
+	end
+	return source
+end
+
+local lightBindings: Bindings = {
+	color = { property = "Color", convert = "color" },
+	brightness = { property = "Brightness", convert = "number" },
+	range = { property = "Range", convert = "reach" },
+	shadows = { property = "Shadows", convert = "boolean" },
+	enabled = { property = "Enabled", convert = "boolean" },
+	face = { property = "Face", convert = "string", enum = "NormalId" },
+	angle = { property = "Angle", convert = "angle" },
+}
+
+local imageBindings: Bindings = {
+	transparency = { property = "Transparency", convert = "unit" },
+	face = { property = "Face", convert = "string", enum = "NormalId" },
+	tileU = { property = "StudsPerTileU", convert = "tile" },
+	tileV = { property = "StudsPerTileV", convert = "tile" },
+	offsetU = { property = "OffsetStudsU", convert = "number" },
+	offsetV = { property = "OffsetStudsV", convert = "number" },
+}
+
+local emitterBindings: Bindings = {
+	texture = { property = "Texture", convert = "string" },
+	color = { property = "Color", convert = "colorSequence" },
+	size = { property = "Size", convert = "numberSequence" },
+	transparency = { property = "Transparency", convert = "numberSequence" },
+	lightEmission = { property = "LightEmission", convert = "unit" },
+	lightInfluence = { property = "LightInfluence", convert = "unit" },
+	rotation = { property = "Rotation", convert = "range" },
+	rotSpeed = { property = "RotSpeed", convert = "range" },
+	orientation = { property = "Orientation", convert = "string", enum = "ParticleOrientation" },
+	rate = { property = "Rate", convert = "nonNegative" },
+	lifetime = { property = "Lifetime", convert = "range" },
+	speed = { property = "Speed", convert = "range" },
+	spreadAngle = { property = "SpreadAngle", convert = "vector2" },
+	acceleration = { property = "Acceleration", convert = "vector3" },
+	drag = { property = "Drag", convert = "nonNegative" },
+	windAffectsDrag = { property = "WindAffectsDrag", convert = "boolean" },
+	shape = { property = "Shape", convert = "string", enum = "ParticleEmitterShape" },
+	shapeStyle = { property = "ShapeStyle", convert = "string", enum = "ParticleEmitterShapeStyle" },
+	emissionDirection = { property = "EmissionDirection", convert = "string", enum = "NormalId" },
+	enabled = { property = "Enabled", convert = "boolean" },
+}
+
+local fireBindings: Bindings = {
+	color = { property = "Color", convert = "color" },
+	secondaryColor = { property = "SecondaryColor", convert = "color" },
+	heat = { property = "Heat", convert = "number" },
+	size = { property = "Size", convert = "nonNegative" },
+	enabled = { property = "Enabled", convert = "boolean" },
+}
+
+local smokeBindings: Bindings = {
+	color = { property = "Color", convert = "color" },
+	opacity = { property = "Opacity", convert = "unit" },
+	riseVelocity = { property = "RiseVelocity", convert = "number" },
+	size = { property = "Size", convert = "nonNegative" },
+	enabled = { property = "Enabled", convert = "boolean" },
+}
+
+local sparklesBindings: Bindings = {
+	color = { property = "SparkleColor", convert = "color" },
+	enabled = { property = "Enabled", convert = "boolean" },
+}
+
+local soundBindings: Bindings = {
+	soundId = { property = "SoundId", convert = "string" },
+	volume = { property = "Volume", convert = "nonNegative" },
+	playbackSpeed = { property = "PlaybackSpeed", convert = "nonNegative" },
+	looped = { property = "Looped", convert = "boolean" },
+	playing = { property = "Playing", convert = "boolean" },
+	rollOffMinDistance = { property = "RollOffMinDistance", convert = "nonNegative" },
+	rollOffMaxDistance = { property = "RollOffMaxDistance", convert = "nonNegative" },
+}
+
+local meshBindings: Bindings = {
+	collisionFidelity = { property = "CollisionFidelity", convert = "string", enum = "CollisionFidelity" },
+	renderFidelity = { property = "RenderFidelity", convert = "string", enum = "RenderFidelity" },
+}
+
+local function schema(): Design.Library
+	return {
+		name = "Roblox3D",
+		containerKind = "Model",
+		parameter = "Host",
+		parameterType = "nil",
+		prelude = {},
+		returnType = "Instance",
+		readable = "Compose.ReadOnlyValue",
+		cell = "Compose.Cell",
+		space = "3d",
+		categories = categories(),
+		kinds = named(kinds()),
+	}
+end
+
+local function create(
+	runtime: Compose.Runtime,
+	environment: Environment.Environment,
+	sequences: Sequences?
+): Design.Library
 	local ui = UI.create(runtime, environment, true)
 	local function apply(property: Resolved?, set: (Design.Literal?) -> ())
 		if property == nil then
@@ -40,19 +424,6 @@ return function(runtime: Compose.Runtime, environment: Environment.Environment):
 		return ui.values.enum(category, if type(name) == "string" then name else fallback)
 	end
 
-	local placement: { [string]: Design.Field } = {
-		position = { type = "vector3", group = "Transform", order = 1 },
-		rotation = { type = "vector3", group = "Transform", order = 2 },
-	}
-
-	local function with(extra: { [string]: Design.Field }): { [string]: Design.Field }
-		local fields = table.clone(placement)
-		for key, field in extra do
-			fields[key] = field
-		end
-		return fields
-	end
-
 	local function place(props: Props, set: ({ number }) -> ())
 		local position: UI.Vector = { X = 0, Y = 0, Z = 0 }
 		local rotation: UI.Vector = { X = 0, Y = 0, Z = 0 }
@@ -75,27 +446,136 @@ return function(runtime: Compose.Runtime, environment: Environment.Environment):
 		update()
 	end
 
-	local partDefaults: { [string]: Design.Literal } = {
-		size = { 4, 1, 4 },
-		position = { 0, 0.5, 0 },
-		color = "#A3A2A5",
-		material = "SmoothPlastic",
-	}
-	local MATERIALS = { "SmoothPlastic", "Plastic", "Neon", "Glass", "Metal", "Wood", "Concrete", "Grass" }
-	local SHAPES = { "Block", "Ball", "Cylinder", "Wedge" }
-	local FACES = { "Front", "Back", "Top", "Bottom", "Left", "Right" }
-
 	local function text(value: Design.Literal?): string?
 		return if type(value) == "string" then value else nil
 	end
 
-	local function number(value: Design.Literal?, fallback: number): number
-		return if type(value) == "number" then value else fallback
+	local function hexColor(value: Design.Literal?): unknown
+		if type(value) == "string" and string.match(value, "^#%x%x%x%x%x%x$") then
+			return ui.hex(value)
+		end
+		return nil
 	end
 
-	local function tint(node: Compose.Node, property: string, value: Design.Literal?)
+	local function rgb(value: Design.Literal?): { number }?
 		if type(value) == "string" and string.match(value, "^#%x%x%x%x%x%x$") then
-			ui.set(node, property, ui.hex(value))
+			return {
+				(tonumber(string.sub(value, 2, 3), 16) or 0) / 255,
+				(tonumber(string.sub(value, 4, 5), 16) or 0) / 255,
+				(tonumber(string.sub(value, 6, 7), 16) or 0) / 255,
+			}
+		end
+		return nil
+	end
+
+	local function pair(value: Design.Literal?): (number?, number?)
+		if type(value) ~= "table" then
+			return nil, nil
+		end
+		local low, high = value[1], value[2]
+		if type(low) == "number" and type(high) == "number" then
+			return low, high
+		end
+		return nil, nil
+	end
+
+	local function sequence(value: Design.Literal?, color: boolean): { { number } }?
+		if type(value) == "string" and color then
+			local components = rgb(value)
+			if components then
+				return {
+					{ 0, components[1], components[2], components[3] },
+					{ 1, components[1], components[2], components[3] },
+				}
+			end
+			return nil
+		end
+		if type(value) == "number" and not color then
+			return { { 0, value }, { 1, value } }
+		end
+		if type(value) ~= "table" then
+			return nil
+		end
+		local points: { { number } } = {}
+		for _, point in value do
+			if type(point) ~= "table" then
+				return nil
+			end
+			local time, entry = point[1], point[2]
+			if type(time) ~= "number" then
+				return nil
+			end
+			if color then
+				local components = rgb(entry)
+				if components == nil then
+					return nil
+				end
+				table.insert(points, { time, components[1], components[2], components[3] })
+			elseif type(entry) == "number" then
+				table.insert(points, { time, entry })
+			else
+				return nil
+			end
+		end
+		return if #points > 0 then points else nil
+	end
+
+	local function converted(binding: Binding, value: Design.Literal?): unknown
+		local kind = binding.convert
+		if kind == "number" then
+			return if type(value) == "number" then value else nil
+		elseif kind == "nonNegative" then
+			return if type(value) == "number" then math.max(value, 0) else nil
+		elseif kind == "unit" then
+			return if type(value) == "number" then math.clamp(value, 0, 1) else nil
+		elseif kind == "reach" then
+			return if type(value) == "number" then math.clamp(value, 0, 60) else nil
+		elseif kind == "angle" then
+			return if type(value) == "number" then math.clamp(value, 0, 180) else nil
+		elseif kind == "tile" then
+			return if type(value) == "number" then math.max(value, 0.01) else nil
+		elseif kind == "boolean" then
+			return value == true
+		elseif kind == "string" then
+			local item = text(value)
+			if item == nil then
+				return nil
+			end
+			return if binding.enum then ui.values.enum(binding.enum, item) else item
+		elseif kind == "color" then
+			return hexColor(value)
+		elseif kind == "vector3" then
+			local extent = vector(value, { X = 0, Y = 0, Z = 0 })
+			return ui.values.vector3(extent.X, extent.Y, extent.Z)
+		elseif kind == "vector2" then
+			local x, y = pair(value)
+			local make = ui.values.vector2
+			return if x and y then make(x, y) else nil
+		elseif kind == "range" then
+			local low, high = pair(value)
+			local make = if sequences then sequences.numberRange else nil
+			if low and high and make then
+				return make(low, high)
+			end
+			return nil
+		elseif kind == "numberSequence" then
+			local points = sequence(value, false)
+			local make = if sequences then sequences.numberSequence else nil
+			return if points and make then make(points) else nil
+		end
+		local points = sequence(value, true)
+		local make = if sequences then sequences.colorSequence else nil
+		return if points and make then make(points) else nil
+	end
+
+	local function bind(node: Compose.Node, props: Props, bindings: Bindings)
+		for key, binding in bindings do
+			apply(props[key], function(value: Design.Literal?)
+				local made = converted(binding, value)
+				if made ~= nil then
+					ui.set(node, binding.property, made)
+				end
+			end)
 		end
 	end
 
@@ -107,239 +587,176 @@ return function(runtime: Compose.Runtime, environment: Environment.Environment):
 		end
 	end
 
-	local function light(className: string, extra: { [string]: Design.Field }): Design.Kind
-		local fields: { [string]: Design.Field } = {
-			color = { type = "color", group = "Light", order = 1 },
-			brightness = { type = "number", group = "Light", order = 2 },
-			range = { type = "number", group = "Light", order = 3 },
-			shadows = { type = "boolean", group = "Light", order = 4 },
-		}
-		for key, field in extra do
-			fields[key] = field
-		end
-		local defaults: { [string]: Design.Literal } = { color = "#FFE8C2", brightness = 1, range = 12 }
-		return {
-			fields = fields,
-			defaults = defaults,
-			children = "none",
-			category = "Light",
-			call = "Design." .. className,
-			build = function(props: Props): unknown
-				local node = ui.new(className)
-				apply(props.color, function(value: Design.Literal?)
-					tint(node, "Color", value)
-				end)
-				apply(props.brightness, function(value: Design.Literal?)
-					ui.set(node, "Brightness", number(value, 1))
-				end)
-				apply(props.range, function(value: Design.Literal?)
-					ui.set(node, "Range", math.clamp(number(value, 12), 0, 60))
-				end)
-				apply(props.shadows, function(value: Design.Literal?)
-					ui.set(node, "Shadows", value == true)
-				end)
-				if fields.face ~= nil then
-					apply(props.face, function(value: Design.Literal?)
-						ui.set(node, "Face", enumItem("NormalId", value, "Front"))
-					end)
+	local function describe(node: Compose.Node, props: Props)
+		apply(props.attributes, function(value: Design.Literal?)
+			if type(value) ~= "table" then
+				return
+			end
+			local entries: { [string]: Design.Literal } = {}
+			for key, item in value do
+				if type(key) == "string" and type(item) ~= "table" then
+					entries[key] = item
 				end
-				if fields.angle ~= nil then
-					apply(props.angle, function(value: Design.Literal?)
-						ui.set(node, "Angle", math.clamp(number(value, 90), 0, 180))
-					end)
-				end
-				return node
-			end,
-		}
+			end
+			ui.runtime.decorate(node, { Attributes = entries })
+		end)
 	end
 
-	local function surfaceImage(className: string, extra: { [string]: Design.Field }): Design.Kind
-		local fields: { [string]: Design.Field } = {
-			image = { type = "string", group = "Image", order = 1 },
-			face = { type = "choice", options = FACES, group = "Image", order = 2 },
-			color = { type = "color", group = "Image", order = 3 },
-			transparency = { type = "number", group = "Image", order = 4 },
-		}
-		for key, field in extra do
-			fields[key] = field
-		end
-		local defaults: { [string]: Design.Literal } = { face = "Front" }
-		return {
-			fields = fields,
-			defaults = defaults,
-			children = "none",
-			category = "Surface",
-			call = "Design." .. className,
-			build = function(props: Props): unknown
-				local node = ui.new(className)
-				apply(props.image, function(value: Design.Literal?)
-					ui.set(
-						node,
-						if className == "Texture" or className == "Decal" then "Texture" else "Image",
-						text(value) or ""
-					)
-				end)
-				apply(props.face, function(value: Design.Literal?)
-					ui.set(node, "Face", enumItem("NormalId", value, "Front"))
-				end)
-				apply(props.color, function(value: Design.Literal?)
-					tint(node, "Color3", value)
-				end)
-				apply(props.transparency, function(value: Design.Literal?)
-					ui.set(node, "Transparency", math.clamp(number(value, 0), 0, 1))
-				end)
-				if fields.tileU ~= nil then
-					apply(props.tileU, function(value: Design.Literal?)
-						ui.set(node, "StudsPerTileU", math.max(number(value, 2), 0.01))
-					end)
-					apply(props.tileV, function(value: Design.Literal?)
-						ui.set(node, "StudsPerTileV", math.max(number(value, 2), 0.01))
-					end)
-					apply(props.offsetU, function(value: Design.Literal?)
-						ui.set(node, "OffsetStudsU", number(value, 0))
-					end)
-					apply(props.offsetV, function(value: Design.Literal?)
-						ui.set(node, "OffsetStudsV", number(value, 0))
-					end)
-				end
-				return node
-			end,
-		}
+	local function body(part: Compose.Node, props: Props, children: { unknown })
+		ui.set(part, "Anchored", true)
+		ui.set(part, "TopSurface", ui.values.enum("SurfaceType", "Smooth"))
+		ui.set(part, "BottomSurface", ui.values.enum("SurfaceType", "Smooth"))
+		apply(props.size, function(value: Design.Literal?)
+			local extent = vector(value, { X = 4, Y = 1, Z = 4 })
+			ui.set(part, "Size", ui.values.vector3(extent.X, extent.Y, extent.Z))
+		end)
+		apply(props.color, function(value: Design.Literal?)
+			local made = hexColor(value)
+			if made ~= nil then
+				ui.set(part, "Color", made)
+			end
+		end)
+		apply(props.material, function(value: Design.Literal?)
+			ui.set(part, "Material", enumItem("Material", value, "SmoothPlastic"))
+		end)
+		apply(props.transparency, function(value: Design.Literal?)
+			ui.set(part, "Transparency", if type(value) == "number" then math.clamp(value, 0, 1) else 0)
+		end)
+		apply(props.materialVariant, function(value: Design.Literal?)
+			ui.set(part, "MaterialVariant", text(value) or "")
+		end)
+		bind(part, props, physicsBindings)
+		describe(part, props)
+		attach(part, children)
+		place(props, function(frame: { number })
+			ui.set(part, "CFrame", ui.values.cframe(frame))
+		end)
 	end
 
-	local library: Design.Library = {
-		name = "Roblox3D",
-		containerKind = "Model",
-		parameter = "Host",
-		parameterType = "nil",
-		prelude = {},
-		returnType = "Instance",
-		readable = "Compose.ReadOnlyValue",
-		cell = "Compose.Cell",
-		space = "3d",
-		kinds = {
-			Model = {
-				fields = with {},
-				children = "list",
-				call = "Design.Model",
-				build = function(props: Props, children: { unknown }): unknown
-					local model = ui.new "Model"
-					local primary = ui.new "Part"
-					ui.set(primary, "Name", "Pivot")
-					ui.set(primary, "Anchored", true)
-					ui.set(primary, "Transparency", 1)
-					ui.set(primary, "CanCollide", false)
-					ui.set(primary, "CanQuery", false)
-					ui.set(primary, "Size", ui.values.vector3(0.2, 0.2, 0.2))
-					ui.set(primary, "Parent", model)
-					ui.set(model, "PrimaryPart", primary)
-					local offsets: { [Compose.Node]: { number } } = {}
-					for _, child in children do
-						if child ~= nil then
-							ui.set(child, "Parent", model)
-							if ui.isA(child, "BasePart") then
-								offsets[ui.node(child)] = ui.components(ui.get(child, "CFrame"))
-							end
-						end
+	local function plain(className: string, bindings: Bindings): Build
+		return function(props: Props): unknown
+			local node = ui.new(className)
+			bind(node, props, bindings)
+			return node
+		end
+	end
+
+	local builds: { [string]: Build } = {
+		Model = function(props: Props, children: { unknown }): unknown
+			local model = ui.new "Model"
+			local primary = ui.new "Part"
+			ui.set(primary, "Name", "Pivot")
+			ui.set(primary, "Anchored", true)
+			ui.set(primary, "Transparency", 1)
+			ui.set(primary, "CanCollide", false)
+			ui.set(primary, "CanQuery", false)
+			ui.set(primary, "Size", ui.values.vector3(0.2, 0.2, 0.2))
+			ui.set(primary, "Parent", model)
+			ui.set(model, "PrimaryPart", primary)
+			apply(props.streamingMode, function(value: Design.Literal?)
+				ui.set(model, "ModelStreamingMode", enumItem("ModelStreamingMode", value, "Default"))
+			end)
+			describe(model, props)
+			local offsets: { [Compose.Node]: { number } } = {}
+			for _, child in children do
+				if child ~= nil then
+					ui.set(child, "Parent", model)
+					if ui.isA(child, "BasePart") then
+						offsets[ui.node(child)] = ui.components(ui.get(child, "CFrame"))
 					end
-					place(props, function(frame: { number })
-						ui.set(primary, "CFrame", ui.values.cframe(frame))
-						for part, offset in offsets do
-							ui.set(part, "CFrame", ui.values.cframe(Math.multiply(frame, offset)))
-						end
-					end)
-					return model
-				end,
-			},
-			Part = {
-				fields = with {
-					shape = { type = "choice", options = SHAPES, group = "Shape", order = 1 },
-					size = { type = "vector3", group = "Shape", order = 2 },
-					color = { type = "color", group = "Surface", order = 1 },
-					material = { type = "choice", options = MATERIALS, group = "Surface", order = 2 },
-					transparency = { type = "number", group = "Surface", order = 3 },
-					materialVariant = { type = "string", group = "Surface", order = 4 },
-					meshId = { type = "string", group = "Mesh", order = 1 },
-					textureId = { type = "string", group = "Mesh", order = 2 },
-				},
-				defaults = partDefaults,
-				children = "list",
-				call = "Design.Part",
-				build = function(props: Props, children: { unknown }): unknown
-					local wedge = props.shape and props.shape.literal == "Wedge"
-					local part: Compose.Node = if wedge then ui.new "WedgePart" else ui.new "Part"
-					ui.set(part, "Anchored", true)
-					ui.set(part, "TopSurface", ui.values.enum("SurfaceType", "Smooth"))
-					ui.set(part, "BottomSurface", ui.values.enum("SurfaceType", "Smooth"))
-					if ui.isA(part, "Part") then
-						local block = part
-						apply(props.shape, function(value: Design.Literal?)
-							if value ~= "Wedge" then
-								ui.set(block, "Shape", enumItem("PartType", value, "Block"))
-							end
-						end)
-					end
-					apply(props.size, function(value: Design.Literal?)
-						local extent = vector(value, { X = 4, Y = 1, Z = 4 })
-						ui.set(part, "Size", ui.values.vector3(extent.X, extent.Y, extent.Z))
-					end)
-					apply(props.color, function(value: Design.Literal?)
-						if type(value) == "string" and string.match(value, "^#%x%x%x%x%x%x$") then
-							ui.set(part, "Color", ui.hex(value))
-						end
-					end)
-					apply(props.material, function(value: Design.Literal?)
-						ui.set(part, "Material", enumItem("Material", value, "SmoothPlastic"))
-					end)
-					apply(props.transparency, function(value: Design.Literal?)
-						ui.set(part, "Transparency", if type(value) == "number" then math.clamp(value, 0, 1) else 0)
-					end)
-					apply(props.materialVariant, function(value: Design.Literal?)
-						ui.set(part, "MaterialVariant", text(value) or "")
-					end)
-					if props.meshId ~= nil or props.textureId ~= nil then
-						local mesh = ui.new "SpecialMesh"
-						ui.set(mesh, "MeshType", ui.values.enum("MeshType", "FileMesh"))
-						apply(props.meshId, function(value: Design.Literal?)
-							ui.set(mesh, "MeshId", text(value) or "")
-						end)
-						apply(props.textureId, function(value: Design.Literal?)
-							ui.set(mesh, "TextureId", text(value) or "")
-						end)
-						ui.set(mesh, "Parent", part)
-					end
-					attach(part, children)
-					place(props, function(frame: { number })
-						ui.set(part, "CFrame", ui.values.cframe(frame))
-					end)
-					return part
-				end,
-			},
-			PointLight = light("PointLight", {}),
-			SpotLight = light("SpotLight", {
-				face = { type = "choice", options = FACES, group = "Light", order = 5 },
-				angle = { type = "number", group = "Light", order = 6 },
-			}),
-			SurfaceLight = light("SurfaceLight", {
-				face = { type = "choice", options = FACES, group = "Light", order = 5 },
-				angle = { type = "number", group = "Light", order = 6 },
-			}),
-			Decal = surfaceImage("Decal", {}),
-			Texture = surfaceImage("Texture", {
-				tileU = { type = "number", group = "Image", order = 5 },
-				tileV = { type = "number", group = "Image", order = 6 },
-				offsetU = { type = "number", group = "Image", order = 7 },
-				offsetV = { type = "number", group = "Image", order = 8 },
-			}),
-		},
+				end
+			end
+			place(props, function(frame: { number })
+				ui.set(primary, "CFrame", ui.values.cframe(frame))
+				for part, offset in offsets do
+					ui.set(part, "CFrame", ui.values.cframe(Math.multiply(frame, offset)))
+				end
+			end)
+			return model
+		end,
+		Folder = function(_props: Props, children: { unknown }): unknown
+			local folder = ui.new "Folder"
+			attach(folder, children)
+			return folder
+		end,
+		Part = function(props: Props, children: { unknown }): unknown
+			local shape = props.shape and props.shape.literal
+			local part: Compose.Node = if shape == "Wedge"
+				then ui.new "WedgePart"
+				elseif shape == "CornerWedge" then ui.new "CornerWedgePart"
+				else ui.new "Part"
+			if ui.isA(part, "Part") then
+				local block = part
+				apply(props.shape, function(value: Design.Literal?)
+					ui.set(block, "Shape", enumItem("PartType", value, "Block"))
+				end)
+			end
+			if props.meshId ~= nil or props.textureId ~= nil then
+				local mesh = ui.new "SpecialMesh"
+				ui.set(mesh, "MeshType", ui.values.enum("MeshType", "FileMesh"))
+				apply(props.meshId, function(value: Design.Literal?)
+					ui.set(mesh, "MeshId", text(value) or "")
+				end)
+				apply(props.textureId, function(value: Design.Literal?)
+					ui.set(mesh, "TextureId", text(value) or "")
+				end)
+				ui.set(mesh, "Parent", part)
+			end
+			body(part, props, children)
+			return part
+		end,
+		MeshPart = function(props: Props, children: { unknown }): unknown
+			local part = ui.new "MeshPart"
+			apply(props.meshId, function(value: Design.Literal?)
+				pcall(ui.set, part, "MeshId", text(value) or "")
+			end)
+			apply(props.textureId, function(value: Design.Literal?)
+				pcall(ui.set, part, "TextureID", text(value) or "")
+			end)
+			bind(part, props, meshBindings)
+			body(part, props, children)
+			return part
+		end,
+		Attachment = function(props: Props): unknown
+			local attachment = ui.new "Attachment"
+			place(props, function(frame: { number })
+				ui.set(attachment, "CFrame", ui.values.cframe(frame))
+			end)
+			return attachment
+		end,
+		PointLight = plain("PointLight", lightBindings),
+		SpotLight = plain("SpotLight", lightBindings),
+		SurfaceLight = plain("SurfaceLight", lightBindings),
+		ParticleEmitter = plain("ParticleEmitter", emitterBindings),
+		Fire = plain("Fire", fireBindings),
+		Smoke = plain("Smoke", smokeBindings),
+		Sparkles = plain("Sparkles", sparklesBindings),
+		Sound = plain("Sound", soundBindings),
 	}
+	for _, className in { "Decal", "Texture" } do
+		builds[className] = function(props: Props): unknown
+			local node = ui.new(className)
+			apply(props.image, function(value: Design.Literal?)
+				ui.set(node, "Texture", text(value) or "")
+			end)
+			apply(props.color, function(value: Design.Literal?)
+				local made = hexColor(value)
+				if made ~= nil then
+					ui.set(node, "Color3", made)
+				end
+			end)
+			bind(node, props, imageBindings)
+			return node
+		end
+	end
 
-	for _, kind in library.kinds do
-		local build = kind.build
-		kind.build = function(props: Props, children: { unknown }, name: string): unknown
-			local built = build(props, children, name)
+	local library = schema()
+	for name, kind in library.kinds do
+		local build = assert(builds[name], `{name} has no build`)
+		kind.build = function(props: Props, children: { unknown }, label: string): unknown
+			local built = build(props, children, label)
 			if built ~= nil then
-				ui.set(built, "Name", name)
+				ui.set(built, "Name", label)
 			end
 			return built
 		end
@@ -347,3 +764,5 @@ return function(runtime: Compose.Runtime, environment: Environment.Environment):
 
 	return library
 end
+
+return { create = create, schema = schema }

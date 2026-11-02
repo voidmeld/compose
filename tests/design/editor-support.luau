@@ -105,11 +105,31 @@ local function world(space: string?)
 			end,
 		},
 	}
+	local sequences: Editor.Sequences = {
+		numberRange = values.NumberRange.new,
+		numberSequence = function(points: { { number } }): unknown
+			local keypoints = {}
+			for _, point in points do
+				table.insert(keypoints, values.NumberSequenceKeypoint.new(point[1], point[2]))
+			end
+			return values.NumberSequence.new(keypoints)
+		end,
+		colorSequence = function(points: { { number } }): unknown
+			local keypoints = {}
+			for _, point in points do
+				table.insert(
+					keypoints,
+					values.ColorSequenceKeypoint.new(point[1], values.Color3.new(point[2], point[3], point[4]))
+				)
+			end
+			return values.ColorSequence.new(keypoints)
+		end,
+	}
 	local screen = env.createInstance "ScreenGui"
 	table.insert(roots, screen)
 	screen.Parent = env.root
 	local library = if space == "3d"
-		then Editor.roblox3DLibrary(runtime, environment)
+		then Editor.roblox3DLibrary(runtime, environment, sequences)
 		else Editor.robloxLibrary(runtime, environment)
 	local document = Design.document.new("Headless", library, if space == "3d" then "Model" else "Stack")
 	local first, second

@@ -2227,9 +2227,15 @@ Returns the 2D kinds `Frame`, `Stack`, `Text`, `Button`, `Image` and `List`. Bui
 
 ### `DesignEditor.roblox3DLibrary`
 
-`roblox3DLibrary(runtime: Compose.Runtime, environment: Environment) -> Design.Library`
+`roblox3DLibrary(runtime: Compose.Runtime, environment: Environment, sequences: DesignEditor.Sequences?) -> Design.Library`
 
-Returns the `Model` and `Part` kinds with `space = "3d"`. Its ownership and runtime requirements match `robloxLibrary`.
+Returns the 3D kinds `Model`, `Folder`, `Part`, `MeshPart`, `Attachment`, `PointLight`, `SpotLight`, `SurfaceLight`, `Decal`, `Texture`, `ParticleEmitter`, `Fire`, `Smoke`, `Sparkles` and `Sound` with `space = "3d"`. `Part` and `MeshPart` carry `canCollide`, `canQuery`, `canTouch` and `castShadow`; `Model` and `Part` carry `attributes`. Sequence and range properties of `ParticleEmitter` apply only when `sequences` supplies `numberSequence`, `colorSequence` and `numberRange` constructors. Its ownership and runtime requirements match `robloxLibrary`.
+
+### `DesignEditor.roblox3DSchema`
+
+`roblox3DSchema() -> Design.Library`
+
+Returns the same library without a runtime. Its kinds parse, edit and emit, and every `build` raises. Use it to check a 3D module headlessly.
 
 ### `ComposeRoblox.designEnvironment`
 
