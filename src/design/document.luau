@@ -520,6 +520,12 @@ function document.validate(value: Document, library: Library): Document
 			if bind then
 				local list = assert(listOf(value, bind.from, collection), `{node.kind} binds unknown input {bind.from}`)
 				assert(list.type == "list", `{node.kind} binds {bind.from}, which is not a list`)
+				assert(
+					not kind.staticRows
+						or list.kind == "value"
+						or (inputOf(value, bind.from) == nil and collection ~= nil and collection.kind == "value"),
+					`{node.kind} repeats value lists`
+				)
 				assert(#bind.key > 0, `{node.kind} needs an item key`)
 				local row = bind.row
 				if row ~= nil then
