@@ -15,6 +15,7 @@ export type Point = UI.Point
 export type Editor = Editor.Editor
 export type Device = Editor.Device
 export type Preview = Editor.Preview
+export type Sequences = Roblox3DLibrary.Sequences
 export type Options = Editor.Options & { environment: Environment.Environment }
 export type Workspace = {
 	runtime: Compose.Runtime,
@@ -126,5 +127,6 @@ return {
 	create = create,
 	kit = kit,
 	robloxLibrary = RobloxLibrary,
-	roblox3DLibrary = Roblox3DLibrary,
+	roblox3DLibrary = Roblox3DLibrary.create,
+	roblox3DSchema = Roblox3DLibrary.schema,
 }

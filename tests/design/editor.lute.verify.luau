@@ -1030,6 +1030,70 @@ describe("host-neutral design editor", function()
 		editor.dispose()
 		w.close()
 	end)
+
+	it("builds physics flags, attributes, attachments, emitters and sounds, and round-trips them", function()
+		local w = Support.world "3d"
+		local editor = w.mount()
+		editor.session.select(w.first)
+		editor.session.change("canCollide", { literal = false })
+		editor.session.change("canQuery", { literal = false })
+		editor.session.change("castShadow", { literal = false })
+		editor.session.change("attributes", { literal = { PoiId = "gate" } })
+		expect(editor.session.insert "Attachment"):toBe(true)
+		editor.session.select(w.first)
+		expect(editor.session.insert "ParticleEmitter"):toBe(true)
+		editor.session.change("size", { literal = { { 0, 0.25 }, { 1, 0 } } })
+		editor.session.change("color", { literal = { { 0, "#FF0000" }, { 1, "#0000FF" } } })
+		editor.session.change("lifetime", { literal = { 1, 2 } })
+		editor.session.change("spreadAngle", { literal = { 10, 20 } })
+		editor.session.change("shape", { literal = "Sphere" })
+		editor.session.select(w.first)
+		expect(editor.session.insert "PointLight"):toBe(true)
+		editor.session.change("enabled", { literal = false })
+		editor.session.select(w.first)
+		expect(editor.session.insert "Sound"):toBe(true)
+		editor.session.change("volume", { literal = 0.5 })
+		w.settle()
+		local part = Support.instance(assert(editor.scene).nodes[w.first])
+		expect(part.CanCollide):toBe(false)
+		expect(part.CanQuery):toBe(false)
+		expect(part.CanTouch):toBe(true)
+		expect(part.CastShadow):toBe(false)
+		expect(part:GetAttribute "PoiId"):toBe "gate"
+		expect(assert(part:FindFirstChildWhichIsA "Attachment").Name):toBe "Attachment"
+		local emitter = assert(part:FindFirstChildWhichIsA "ParticleEmitter")
+		local V = w.values
+		expect(tostring(emitter.Size)):toBe(
+			tostring(V.NumberSequence.new { V.NumberSequenceKeypoint.new(0, 0.25), V.NumberSequenceKeypoint.new(1, 0) })
+		)
+		expect(tostring(emitter.Color)):toBe(tostring(V.ColorSequence.new {
+			V.ColorSequenceKeypoint.new(0, V.Color3.new(1, 0, 0)),
+			V.ColorSequenceKeypoint.new(1, V.Color3.new(0, 0, 1)),
+		}))
+		expect(tostring(emitter.Lifetime)):toBe(tostring(V.NumberRange.new(1, 2)))
+		expect(tostring(emitter.SpreadAngle)):toBe(tostring(V.Vector2.new(10, 20)))
+		expect(tostring(emitter.Shape)):toBe "Enum.ParticleEmitterShape.Sphere"
+		expect(assert(part:FindFirstChildWhichIsA "PointLight").Enabled):toBe(false)
+		expect(assert(part:FindFirstChildWhichIsA "Sound").Volume):toBe(0.5)
+		local source = Design.emit(editor.session.document:peek(), w.library)
+		expect(Design.emit(Design.parse(source, w.library), w.library)):toBe(source)
+		expect(string.find(source, "canTouch", 1, true)):toBe(nil)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("parses and emits a 3D design from the schema without a runtime", function()
+		local schema = DesignEditor.roblox3DSchema()
+		local document = Design.document.new("Fixture", schema, "Model")
+		local folder
+		document, folder = Design.document.insert(document, schema, "n1", "Folder")
+		local part
+		document, part = Design.document.insert(document, schema, folder, "MeshPart")
+		document = Design.document.change(document, schema, part, "canCollide", { literal = false })
+		local source = Design.emit(document, schema)
+		expect(Design.emit(Design.parse(source, schema), schema)):toBe(source)
+		expect(string.find(source, "Design.MeshPart", 1, true) ~= nil):toBe(true)
+	end)
 end)
 
 describe("design editor selection sets", function()
