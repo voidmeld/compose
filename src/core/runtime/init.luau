@@ -196,30 +196,24 @@ local function createRuntime(host: Host.Host): Runtime
 			Props.apply(supplied, node, props, owner, true)
 
 			local childCount = #entries
+			if childCount == 0 then
+				return
+			end
+
 			applying.key = nil
-			local list: Children.ChildList? = nil
+			local list = Children.createList(host, node, supplied)
 			local staticSlot = 0
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
-					if list == nil then
-						supplied.render.insertChild(node, child, index)
-						continue
-					end
 					if staticSlot == 0 then
 						staticSlot = Children.addSlot(list)
 					end
 					Children.insertStatic(list, staticSlot, child)
 				elseif type(child) == "function" and constructorKinds[child] == nil then
-					local current = list or Children.createList(host, node, supplied)
-					if list == nil then
-						current.counts[1] = index - 1
-						current.total = index - 1
-						list = current
-					end
 					staticSlot = 0
-					local slot = Children.addSlot(current)
-					child(Children.mountPointFor(current, slot))
+					local slot = Children.addSlot(list)
+					child(Children.mountPointFor(list, slot))
 				elseif constructorKinds[child] ~= nil then
 					return Diagnostics.raise(
 						"mount/constructor-not-applied",
