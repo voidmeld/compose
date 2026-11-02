@@ -325,7 +325,7 @@ local function useWithTracking<T>(value: Types.ReadOnlyValue<T>): T
 		return Nodes.readCached(value)
 	end
 	local at = consumer.reads
-	if consumer.released or at == nil then
+	if at == nil then
 		local update = node.refresh
 		if update then
 			update(node)
@@ -365,7 +365,7 @@ local function use<T>(value: Types.ReadOnlyValue<T>): T
 	if frame ~= nil and frame.order > 0 and evaluationCache.thread == coroutine.running() then
 		local consumer = frame.consumer
 		local at = if consumer ~= nil then consumer.reads else nil
-		if consumer ~= nil and at ~= nil and not consumer.released then
+		if consumer ~= nil and at ~= nil then
 			local following = at + 1
 			local edge = consumer[following]
 			local node = if edge ~= nil then edge[1] else nil
@@ -505,6 +505,7 @@ local function release(consumer: Node)
 		return
 	end
 	consumer.released = true
+	consumer.reads = nil
 	trim(consumer, 1)
 	consumer.state = CLEAN
 end
