@@ -1,16 +1,19 @@
 --!strict
 
-export type Row = { id: string, position: { number }, rotation: { number }, size: { number }, color: string }
+export type Color = string | { number }
+export type Row =
+	{ id: string, name: string, position: { number }, rotation: { number }, size: { number }, color: Color }
 type Vector = { x: number, y: number, z: number }
 type Record = { [string | number]: unknown }
 local ZERO: Vector = { x = 0, y = 0, z = 0 }
 
-local fields: { { id: string, type: "string" | "vector3" | "color" } } = {
+local fields: { { id: string, type: "string" | "vector3" | "color", luauType: string? } } = {
 	{ id = "id", type = "string" },
+	{ id = "name", type = "string" },
 	{ id = "position", type = "vector3" },
 	{ id = "rotation", type = "vector3" },
 	{ id = "size", type = "vector3" },
-	{ id = "color", type = "color" },
+	{ id = "color", type = "color", luauType = "unknown" },
 }
 
 local function number(value: unknown, fallback: number): number
@@ -41,6 +44,18 @@ local function triple(value: unknown, fallback: Vector): Vector
 		assert(key == 1 or key == 2 or key == 3, "A pattern vector has three numbers")
 	end
 	return { x = number(values[1], 0), y = number(values[2], 0), z = number(values[3], 0) }
+end
+
+local function color(value: unknown, fallback: Color): Color
+	if value == nil then
+		return fallback
+	end
+	if type(value) == "string" then
+		assert(string.match(value, "^#%x%x%x%x%x%x$"), "A pattern color is hex or an RGB vector")
+		return value
+	end
+	local channels = triple(value, ZERO)
+	return { channels.x, channels.y, channels.z }
 end
 
 local function rows(props: { [string | number]: unknown }): { Row }
@@ -90,8 +105,7 @@ local function rows(props: { [string | number]: unknown }): { Row }
 	end
 	local bySum = props.variantBy == "sum"
 	assert(props.variantBy == nil or bySum or props.variantBy == "index", "A pattern varies by index or grid sum")
-	local color = props.color or "#FFFFFF"
-	assert(type(color) == "string", "A pattern color is a string")
+	local baseColor = color(props.color, "#FFFFFF")
 	local rx, ry, rz = math.rad(rotation.x), math.rad(rotation.y), math.rad(rotation.z)
 	local cx, sx, cy, sy, cz, sz = math.cos(rx), math.sin(rx), math.cos(ry), math.sin(ry), math.cos(rz), math.sin(rz)
 	local result: { Row } = {}
@@ -102,8 +116,8 @@ local function rows(props: { [string | number]: unknown }): { Row }
 		local variant: Record = if #variants > 0 then variants[variantIndex % #variants + 1] else {}
 		for key in variant do
 			assert(
-				key == "position" or key == "rotation" or key == "size" or key == "color",
-				"A pattern variant has position, rotation, size or color"
+				key == "position" or key == "rotation" or key == "size" or key == "color" or key == "name",
+				"A pattern variant has position, rotation, size, color or name"
 			)
 		end
 		local offset = triple(variant.position, ZERO)
@@ -124,17 +138,20 @@ local function rows(props: { [string | number]: unknown }): { Row }
 		else
 			x, y, z = index * spacing.x + x, index * spacing.y + y, index * spacing.z + z
 		end
-		local shade = variant.color or color
-		assert(type(shade) == "string", "A pattern variant color is a string")
+		local shade = color(variant.color, baseColor)
 		local extent_ = triple(variant.size, size)
 		if mode == "grid" and props.fit == true then
 			extent_ = { x = extent.x / columns - gap.x, y = extent_.y, z = extent.z / rowCount - gap.z }
 		end
 		assert(extent_.x > 0 and extent_.y > 0 and extent_.z > 0, "Pattern sizes are positive")
+		local id = if placeholders == 2
+			then string.format(name, column + indexOrigin, row + indexOrigin)
+			else string.format(name, index + indexOrigin)
+		local label = variant.name or id
+		assert(type(label) == "string" and #label <= 160, "A pattern variant has a short name")
 		table.insert(result, {
-			id = if placeholders == 2
-				then string.format(name, column + indexOrigin, row + indexOrigin)
-				else string.format(name, index + indexOrigin),
+			id = id,
+			name = label,
 			position = {
 				origin.x + (cy * cz + sy * sx * sz) * x + (-cy * sz + sy * sx * cz) * y + sy * cx * z,
 				origin.y + cx * sz * x + cx * cz * y - sx * z,
