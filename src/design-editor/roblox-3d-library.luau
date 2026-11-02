@@ -237,7 +237,7 @@ local function kinds(): { [string]: Design.Kind }
 		},
 		Attachment = {
 			fields = with(placement, {}),
-			children = "none",
+			children = "list",
 			category = "Structure",
 			call = "",
 			build = function(): unknown
