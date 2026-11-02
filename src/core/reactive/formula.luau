@@ -38,8 +38,6 @@ end
 
 local FORMULA = {}
 FORMULA.__index = FORMULA
-FORMULA.version = 0
-FORMULA.state = DIRTY
 
 function FORMULA.refresh(self: Node)
 	if self.released then
@@ -122,7 +120,7 @@ function FORMULA.refresh(self: Node)
 	end
 
 	local previousCache = self.cache
-	local prior = if previousCache ~= nil then previousCache.value else nil
+	local prior = self.value
 	local equals = self.equals
 	local unchanged = if equals == nil and not validationState.validating
 		then prior == incoming
@@ -139,9 +137,8 @@ function FORMULA.refresh(self: Node)
 		end
 		return
 	end
-	if previousCache ~= nil then
-		previousCache.value = incoming
-	else
+	self.value = incoming
+	if previousCache == nil then
 		Dynamic.cache(self, incoming)
 	end
 	local version = clockState.now + 1
@@ -202,11 +199,7 @@ end
 local function formula<T>(body: Body<T>, equals: Equals<T>?): Value<T>
 	local node: Types.NodeData<T> = {
 		version = 0,
-		value = nil,
-		cache = nil,
-		first = nil,
 		state = DIRTY,
-		reads = nil,
 		released = false,
 		retry = false,
 		body = body,
