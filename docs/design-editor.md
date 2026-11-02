@@ -102,6 +102,7 @@ Pass their results through contract inputs and outputs.
 
 The 2D stage supports zoom around the cursor, pan, fit, selection outlines, resize controls and a size label.
 The 3D stage supports orbit, pan, filtered raycast selection and axis movement.
+The 3D `Pattern` control plans its rows with [geometric patterns](../src/design/patterns.md).
 Fit runs once on the next host frame.
 The stage and scene APIs can request another fit.
 

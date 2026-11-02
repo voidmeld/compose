@@ -23,6 +23,7 @@ Use this page to find a task. Each linked page gives the details for that task.
 | Use the Roblox host | [Roblox](docs/roblox.md) |
 | Build or test a scene | [Scenes](docs/scenes.md) |
 | Use the visual editor | [Design editor](docs/design-editor.md) |
+| Plan repeated 3D parts with Pattern | [Geometric patterns](src/design/patterns.md) |
 | Generate content, layouts and project trees | [Build-time authoring](authoring/README.md) |
 | Measure time and memory | [Benchmarks](docs/benchmarks.md) |
 | Read the library comparison | [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) |
@@ -34,11 +35,10 @@ Use this page to find a task. Each linked page gives the details for that task.
 | Find skill host and build links | [Skill guide routes](.agents/skills/compose/references/consumer-guides.md) |
 | Edit a design source module | [Design source](.agents/skills/compose/references/design.md) |
 | Change this repository | [Maintainer guide](AGENTS.md) |
-| Review this simplification | [Change report](ready.md) |
 
 ## Performance
 
-The [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository compares Compose with other Roblox scene composition libraries. It measures each library as the library ships and checks that all libraries produce the same result before it measures time. See its [results](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) and its [method](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/method.md).
+The [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository compares Compose with other Roblox scene composition libraries. It measures each library as the library ships and checks that all libraries produce the same result before it measures time. See its [results](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) and its [method](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/method.md).
 
 This repository keeps the paired performance check. It compares each change with its base on the same runner. See [benchmarks](docs/benchmarks.md).
 
