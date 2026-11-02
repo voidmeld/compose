@@ -44,6 +44,25 @@ local function baseOf(list: ChildList, slot: number): number
 	return base
 end
 
+local function refuse(key: string, how: string): never
+	return Diagnostics.raise("structure/not-a-mount-point", ("a directive %s %q on its mount point"):format(how, key), {
+		key = key,
+		contract = "a child written as a function is a directive, and receives a mount point, "
+			.. "not the parent node",
+		fix = "use insert, moveTo, remove, count, parent, or host; to reach the parent node itself, "
+			.. "read mountPoint.parent",
+	})
+end
+
+local mountPointMetatable = {
+	__index = function(_: unknown, key: string): never
+		return refuse(tostring(key), "read")
+	end,
+	__newindex = function(_: unknown, key: string, _value: unknown): never
+		return refuse(tostring(key), "assigned")
+	end,
+}
+
 local function mountPointFor(list: ChildList, slot: number): MountPoint
 	local host = list.host
 	local render = host.render
@@ -109,30 +128,7 @@ local function mountPointFor(list: ChildList, slot: number): MountPoint
 		count = count,
 	}
 
-	local function refuse(key: string, how: string): never
-		return Diagnostics.raise(
-			"structure/not-a-mount-point",
-			("a directive %s %q on its mount point"):format(how, key),
-			{
-				key = key,
-				contract = "a child written as a function is a directive, and receives a mount point, "
-					.. "not the parent node",
-				fix = "use insert, moveTo, remove, count, parent, or host; to reach the parent node itself, "
-					.. "read mountPoint.parent",
-			}
-		)
-	end
-
-	return (
-		setmetatable(mountPoint, {
-			__index = function(_: unknown, key: string): never
-				return refuse(tostring(key), "read")
-			end,
-			__newindex = function(_: unknown, key: string, _value: unknown): never
-				return refuse(tostring(key), "assigned")
-			end,
-		})
-	)
+	return setmetatable(mountPoint, mountPointMetatable)
 end
 
 local function insertStatic(list: ChildList, slot: number, node: Node)
