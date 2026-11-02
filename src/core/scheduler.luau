@@ -19,6 +19,11 @@ type Entry = {
 	live: boolean,
 }
 
+local function runEntry(scope: Owner.Owner, entry: Entry): unknown
+	Active.withOwner(scope, entry.body)
+	return nil
+end
+
 local function noop(): boolean
 	return false
 end
@@ -122,10 +127,7 @@ local function createSchedulers(
 			for _, entry in due do
 				if entry.live then
 					retire(entry)
-					local ok, problem: unknown = pcall(function()
-						Active.withOwner(scope, entry.body)
-						return nil
-					end)
+					local ok, problem: unknown = pcall(runEntry, scope, entry)
 					if not ok then
 						table.insert(failures, problem)
 					end
