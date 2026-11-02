@@ -45,13 +45,13 @@ jobs:
       - name: Run repository gate
         run: lute run tools/gate.luau
       - name: Retain gate evidence
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: gate-evidence
           path: .lute/tmp/compose-gate/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
 
   paired-perf:
     name: Paired performance (shard ${{ matrix.shard }})
@@ -110,13 +110,21 @@ jobs:
           SHARD: ${{ matrix.shard }}/6
         run: lute run bench/run-paired.luau "$RUNNER_TEMP/performance-base" "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/build/performance" "" "$SHARD"
       - name: Retain paired performance evidence
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: performance-evidence-shard${{ matrix.shard }}
           path: build/performance/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
+      - name: Keep candidate measurements for publishing
+        if: success() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: performance-evidence-shard${{ matrix.shard }}
+          path: build/performance/candidate-*/stored.json
+          if-no-files-found: ignore
+          retention-days: 1
 
   publish-performance:
     name: Publish performance
