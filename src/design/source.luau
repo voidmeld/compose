@@ -670,7 +670,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		if current ~= nil then
 			return layout(current, depth, used)
 		elseif input then
-			return `props.{input}`
+			local path = property.path
+			return `props.{input}` .. (if path then "." .. table.concat(path, ".") else "")
 		elseif item then
 			return returning("use", `use(current).{item}`, depth)
 		elseif output then
