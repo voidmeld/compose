@@ -6,6 +6,7 @@ local Math = require "./math"
 
 local Compose = require "../core"
 local Design = require "../design"
+local Patterns = require "../design/patterns"
 
 type Resolved = Design.Resolved
 type Props = { [string]: Resolved }
@@ -208,6 +209,36 @@ local partDefaults: { [string]: Design.Literal } = {
 
 local function kinds(): { [string]: Design.Kind }
 	return {
+		Pattern = {
+			fields = {
+				mode = field("choice", "Pattern", 1, { "linear", "grid", "radial" }),
+				count = field("number", "Pattern", 2),
+				columns = field("number", "Pattern", 3),
+				rows = field("number", "Pattern", 4),
+				radius = field("number", "Pattern", 5),
+				extent = field("vector3", "Pattern", 6),
+				spacing = field("vector3", "Pattern", 7),
+				position = field("vector3", "Transform", 1),
+				rotation = field("vector3", "Transform", 2),
+				size = field("vector3", "Geometry", 1),
+				color = field("color", "Surface", 1),
+				namePattern = field("string", "Pattern", 8),
+				indexOrigin = field("number", "Pattern", 9),
+				variantBy = field("choice", "Pattern", 10, { "index", "sum" }),
+				variants = { type = "value", group = "Pattern", order = 11, advanced = true },
+				order = field("choice", "Pattern", 12, { "row", "column" }),
+				fit = field("boolean", "Pattern", 13),
+				gap = field("vector3", "Pattern", 14),
+			},
+			children = "template",
+			template = "render",
+			iteration = { fields = Patterns.fields },
+			category = "Structure",
+			call = "",
+			build = function(): unknown
+				error "schema only"
+			end,
+		},
 		Array = {
 			fields = {},
 			children = "template",
@@ -786,6 +817,39 @@ local function create(
 	end
 
 	local builds: { [string]: Build } = {
+		Pattern = function(props: Props): unknown
+			local template = props.render
+			local render = if template then template.template else nil
+			if render == nil then
+				return ui.new "Model"
+			end
+			local config: { [string | number]: unknown } = {}
+			for key, property in props do
+				if key ~= "render" then
+					config[key] = if property.readable then property.readable:peek() else property.literal
+				end
+			end
+			local rows = Patterns.rows(config)
+			local model = ui.new "Model"
+			local function vectorLiteral(value: { number }): Design.Literal
+				local result: { [string | number]: Design.Literal } = {}
+				for index, component in value do
+					result[index] = component
+				end
+				return result
+			end
+			for _, row in rows do
+				local current: Design.Row = {
+					id = row.id,
+					position = vectorLiteral(row.position),
+					rotation = vectorLiteral(row.rotation),
+					size = vectorLiteral(row.size),
+					color = row.color,
+				}
+				ui.set(render(Compose.cell(current)), "Parent", model)
+			end
+			return model
+		end,
 		Array = function(props: Props): unknown
 			local source, template = props.from, props.render
 			local rows = if source then source.rows else nil

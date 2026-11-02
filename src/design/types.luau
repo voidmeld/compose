@@ -83,6 +83,7 @@ export type Kind = {
 	source: string?,
 	key: string?,
 	staticRows: boolean?,
+	iteration: { fields: { ItemField } }?,
 	call: string,
 	build: (props: { [string]: Resolved }, children: { unknown }, name: string) -> unknown,
 }

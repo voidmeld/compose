@@ -506,20 +506,35 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			end
 		end
 	end
-	local function itemType(template: Node, from: string): string?
-		local known = rowItemTypes[template.id] or listItemTypes[from]
+	local function itemType(template: Node, from: string?, provided: { Types.ItemField }?): string?
+		local known = rowItemTypes[template.id] or (if from then listItemTypes[from] else nil)
 		if known ~= nil then
 			rowItemTypes[template.id] = known
 			return known
 		end
-		local fields = fieldsOf(from)
-		if fields == nil or #fields == 0 then
+		local fields: { Types.ItemField } = {}
+		if provided ~= nil then
+			for _, field in provided do
+				table.insert(fields, field)
+			end
+		elseif from ~= nil then
+			local found = fieldsOf(from)
+			if found ~= nil then
+				for _, field in found do
+					table.insert(fields, field)
+				end
+			end
+		end
+		if #fields == 0 then
 			return nil
 		end
-		local name = unique(rowBase(template) .. "Item")
+		local name = unique(if provided then "RepeatedItem" else rowBase(template) .. "Item")
 		rowItemTypes[template.id] = name
-		listItemTypes[from] = name
-		table.insert(rowTypeLines, `type {name} = {rowType(library, fields)}`)
+		if from then
+			listItemTypes[from] = name
+		end
+		local prefix = `type {name} = `
+		table.insert(rowTypeLines, prefix .. rowType(library, fields, 0, #prefix))
 		return name
 	end
 	local function keyFunction(template: Node, bind: Types.Bind, depth: number): string
@@ -538,10 +553,10 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		return `function(row: {typed}): {keyType}\n{tabs(depth + 1)}return row.{bind.key}\n{tabs(depth)}end`
 	end
-	local function rowFunction(template: Node, depth: number, from: string): string
-		local typed = itemType(template, from)
+	local function rowFunction(template: Node, depth: number, from: string?, provided: { Types.ItemField }?): string
+		local typed = itemType(template, from, provided)
 		local parameter = if typed then `current: {library.rowReadable or library.readable}<{typed}>` else "current"
-		table.insert(scopes, { fields = fieldsOf(from) })
+		table.insert(scopes, { fields = provided or (if from then fieldsOf(from) else nil) })
 		local written
 		if not rowFunctions then
 			written = returning(parameter, emit(template, depth + 1), depth)
@@ -841,6 +856,11 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				for _, child in content do
 					table.insert(body, `{inner}{emit(child, depth + 1)},`)
 				end
+			elseif kind.iteration and template and bind == nil then
+				table.insert(
+					body,
+					`{inner}{templateProp} = {rowFunction(template, depth + 1, nil, kind.iteration.fields)},`
+				)
 			elseif bind and template then
 				local rowId = bind.row or template.id
 				local rowNode = template

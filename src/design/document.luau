@@ -536,7 +536,18 @@ function document.validate(value: Document, library: Library): Document
 					nested = list
 				end
 			else
-				assert(#node.children == 0, `{node.kind} needs a list input for its template`)
+				local iteration = kind.iteration
+				if iteration then
+					local generated: Types.Input =
+						{ id = node.id, kind = "value", type = "list", fields = iteration.fields }
+					nested = generated
+					for _, property in node.props do
+						local input = if property.input then inputOf(value, property.input) else nil
+						assert(input == nil or input.kind == "value", `{node.kind} geometry inputs are values`)
+					end
+				else
+					assert(#node.children == 0, `{node.kind} needs a list input for its template`)
+				end
 			end
 		else
 			local bind = node.bind
