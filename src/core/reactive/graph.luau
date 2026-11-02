@@ -209,7 +209,7 @@ local function markStale(producer: Node, state: number)
 				local current = consumer.state or CLEAN
 				local kind = consumer.kind
 				local retry = if kind == 1 or kind == 2 then current == RETRY else consumer.retry
-				if current >= CLEAN and (current < state or retry) then
+				if current < state or retry then
 					if retry and kind ~= 1 and kind ~= 2 then
 						consumer.retry = false
 					end
