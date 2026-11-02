@@ -16,6 +16,7 @@ local CoreTypes = require "./types"
 local Types = require "./reactive/types"
 
 local extensionsModule: typeof(require "@self/extensions")? = nil
+local motionModule: typeof(require "./animation/motion")? = nil
 
 local WEAK_KEYS = table.freeze { __mode = "k" }
 
@@ -451,7 +452,9 @@ local function createRuntime(host: Host.Host): Runtime
 
 	local motion: CoreTypes.Motion<number>? = nil
 	local function typedMotion<T>(codec: Codec.Codec<T>): CoreTypes.Motion<T>
-		return (require "./animation/motion").createMotion(host, requireOwner, codec)
+		local loaded = motionModule or require "./animation/motion"
+		motionModule = loaded
+		return loaded.createMotion(host, requireOwner, codec)
 	end
 	local function motionOf(): CoreTypes.Motion<number>
 		local made = motion
