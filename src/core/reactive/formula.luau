@@ -71,12 +71,12 @@ function FORMULA.refresh(self: Node)
 			end
 		end
 		if not moved then
-			self.state = CLEAN
+			self.state = if self.state == -1 then -1 else CLEAN
 			return
 		end
 	end
 
-	self.state = CLEAN
+	self.state = if self.state == -1 then -1 else CLEAN
 	local body = self.body or none
 	local running = coroutine.running()
 	local cached = if running == evaluationCache.thread then evaluationCache.frame else nil
