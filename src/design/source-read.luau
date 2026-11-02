@@ -155,35 +155,27 @@ local function list(record: Record, key: string): { Record }
 end
 
 local function inputKind(name: string): Types.InputKind
-	if name == "readable" then
-		return "readable"
-	elseif name == "cell" then
-		return "cell"
+	if name == "value" or name == "readable" or name == "cell" then
+		return name
 	end
-	assert(name == "value", `Unknown input kind {name}`)
-	return "value"
+	error(`Unknown input kind {name}`, 0)
 end
 
 local function inputType(name: string): Types.InputType
-	if name == "number" then
-		return "number"
-	elseif name == "boolean" then
-		return "boolean"
-	elseif name == "color" then
-		return "color"
-	elseif name == "image" then
-		return "image"
-	elseif name == "vector3" then
-		return "vector3"
-	elseif name == "list" then
-		return "list"
-	elseif name == "record" then
-		return "record"
-	elseif name == "slot" then
-		return "slot"
+	if
+		name == "string"
+		or name == "number"
+		or name == "boolean"
+		or name == "color"
+		or name == "image"
+		or name == "vector3"
+		or name == "list"
+		or name == "record"
+		or name == "slot"
+	then
+		return name
 	end
-	assert(name == "string", `Unknown input type {name}`)
-	return "string"
+	error(`Unknown input type {name}`, 0)
 end
 
 local function stateFrom(header: Record): { Types.State }?
@@ -439,25 +431,18 @@ function source.parse(code: string, library: Library): Types.Document
 		at = start
 		return nil
 	end
-	local function startsCall(path: string): boolean
-		local offset = 0
-		for index, part in string.split(path, ".") do
-			if index > 1 then
-				if peek(offset) ~= "." then
-					return false
-				end
-				offset += 1
-			end
-			if peek(offset) ~= part then
+	local motion = library.motion
+	local motionTokens = if motion then tokenize(motion.call .. "(") else {}
+	local function startsMotion(): boolean
+		for index, part in motionTokens do
+			if peek(index - 1) ~= part.text then
 				return false
 			end
-			offset += 1
 		end
-		return peek(offset) == "("
+		return true
 	end
 	local function value(): (Value?, Node?)
-		local motion = library.motion
-		if motion ~= nil and startsCall(motion.call) then
+		if motion ~= nil and startsMotion() then
 			dotted()
 			take "("
 			local moving = assert(value(), `{motion.call} moves an input, state or item`)
@@ -779,7 +764,7 @@ function source.parse(code: string, library: Library): Types.Document
 				take "="
 				local property, template = value()
 				local contentField = kind.fields[prop]
-				if template and contentField and contentField.type == "content" then
+				if template and contentField and contentField.type == "content" and prop ~= kind.slot then
 					local marker: Record = { ["$template"] = template.id }
 					result.props[prop] = { literal = marker }
 					table.insert(pendingCells, template)

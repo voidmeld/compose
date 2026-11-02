@@ -485,6 +485,7 @@ function document.validate(value: Document, library: Library): Document
 		elseif kind.children == "slot" then
 			assert(ordinary <= 1 and node.bind == nil, `{node.kind} holds one content node`)
 			assert(kind.slot ~= nil, `{node.kind} names no content property`)
+			assert(ordinary == 0 or node.props[kind.slot] == nil, `{node.kind} already binds its content`)
 		elseif kind.children == "template" then
 			local bind = node.bind
 			assert(
@@ -662,6 +663,9 @@ function document.insert(
 		return created
 	end
 	local node = create { kind = kindName }
+	if container.children == "slot" and container.slot then
+		parent.props[container.slot] = nil
+	end
 	table.insert(parent.children, math.clamp(at or #parent.children + 1, 1, #parent.children + 1), node)
 	return document.validate(nextValue, library), node.id
 end
@@ -691,6 +695,35 @@ function document.applies(node: Node, kind: Types.Kind, key: string): boolean
 	return true
 end
 
+local function changeProperty(node: Node, kind: Types.Kind?, key: string, property: Value?)
+	local previous = node.props[key]
+	local before = if previous and previous.literal ~= nil then cellsOf(previous.literal, {}) else {}
+	if property and kind and kind.children == "slot" and key == kind.slot then
+		for _, child in node.children do
+			before[child.id] = true
+		end
+	end
+	if property then
+		node.props[key] = copyValue(property)
+	else
+		node.props[key] = nil
+	end
+	if next(before) ~= nil then
+		local kept: { [string]: true } = {}
+		for _, other in node.props do
+			if other.literal ~= nil then
+				cellsOf(other.literal, kept)
+			end
+		end
+		for index = #node.children, 1, -1 do
+			local childId = node.children[index].id
+			if before[childId] and not kept[childId] then
+				table.remove(node.children, index)
+			end
+		end
+	end
+end
+
 function document.content(
 	value: Document,
 	library: Library,
@@ -714,35 +747,15 @@ function document.content(
 		children = {},
 	})
 	local marker: Types.Row = { ["$template"] = childId }
-	node.props[key] = { literal = marker }
+	changeProperty(node, kind, key, { literal = marker })
 	return document.validate(nextValue, library), childId
 end
 
 function document.change(value: Document, library: Library, id: string, key: string, property: Value?): Document
 	local nextValue = copyDocument(value)
 	local node = assert(document.find(nextValue.root, id), "Choose a node")
-	local previous = node.props[key]
-	local before = if previous and previous.literal ~= nil then cellsOf(previous.literal, {}) else {}
-	if property then
-		node.props[key] = copyValue(property)
-	else
-		node.props[key] = nil
-	end
-	if next(before) ~= nil then
-		local kept: { [string]: true } = {}
-		for _, other in node.props do
-			if other.literal ~= nil then
-				cellsOf(other.literal, kept)
-			end
-		end
-		for index = #node.children, 1, -1 do
-			local childId = node.children[index].id
-			if before[childId] and not kept[childId] then
-				table.remove(node.children, index)
-			end
-		end
-	end
 	local kind = library.kinds[node.kind]
+	changeProperty(node, kind, key, property)
 	if kind then
 		local requires = if kind.fields[key] then kind.fields[key].requires else nil
 		if property and requires and not document.applies(node, kind, key) then

@@ -66,16 +66,12 @@ local function layoutHeader(header: Literal): string
 		if type(current) ~= "table" then
 			return literal(current)
 		end
-		local keys = keysOf(current)
-		if #keys == 0 then
-			return "{}"
-		end
 		local single = literal(current)
-		if used + #single <= WIDTH then
+		if single == "{}" or used + #single <= WIDTH then
 			return single
 		end
 		local lines = { "{" }
-		for index, key in keys do
+		for index, key in keysOf(current) do
 			local prefix = prefix(key, index)
 			local width = (depth + 1) * 4 + #prefix + 1
 			table.insert(lines, string.rep("\t", depth + 1) .. prefix .. lay(current[key], depth + 1, width) .. ",")
@@ -724,12 +720,14 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local body: { string } = {}
 		local keys: { string } = {}
 		local boundTemplate = kind.children == "template" and node.bind ~= nil
-		for key in node.props do
-			local current = node.props[key].literal
+		local slot = if kind.children == "slot" then kind.slot else nil
+		for key, property in node.props do
+			local current = property.literal
 			local declared = kind.fields[key]
 			local default = if declared then declared.default else nil
 			if
 				not (boundTemplate and (key == kind.source or key == kind.key))
+				and (key ~= slot or current == nil)
 				and not (current ~= nil and default ~= nil and literal(current) == literal(default))
 			then
 				table.insert(keys, key)
