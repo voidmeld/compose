@@ -1,6 +1,7 @@
 --!strict
 --!nolint DeprecatedApi
 local Dynamic = require "../core/dynamic"
+local Codec = require "../core/animation/codec"
 
 export type Viewport = { width: number, height: number }
 
@@ -65,6 +66,20 @@ export type Engine = {
 	read destroy: (object: unknown) -> (),
 	read propertyChanged: (object: unknown, property: string) -> Signal<()>,
 
+	read datatypes: Datatypes,
+	read readCFrame: ((value: CFrame) -> (number, number, number, { number }))?,
+}
+
+export type Codecs = {
+	Vector2: Codec.Codec<Vector2>?,
+	Vector3: Codec.Codec<Vector3>?,
+	Color3: Codec.Codec<Color3>?,
+	UDim: Codec.Codec<UDim>?,
+	UDim2: Codec.Codec<UDim2>?,
+	CFrame: Codec.Codec<CFrame>?,
+}
+
+export type Source = {
 	read datatypes: Datatypes,
 	read readCFrame: ((value: CFrame) -> (number, number, number, { number }))?,
 }
