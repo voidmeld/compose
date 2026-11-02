@@ -63,7 +63,10 @@ local function resumeSet(producer: Node)
 			if consumer ~= nil then
 				consumer.coalesced = false
 			else
-				edge.coalesced = false
+				local version = edge.version
+				if version ~= nil and version < 0 then
+					edge.version = -version - 1
+				end
 			end
 		end
 		producer.coalescing = nil
@@ -82,7 +85,11 @@ local function coalesce(producer: Node, consumer: Node, set: (Node, unknown) -> 
 	if not producer.coalescing then
 		producer.coalescing = 1
 		Dynamic.write(producer, "set", set)
-		consumer.coalesced = producer
+		if consumer.state == nil then
+			consumer.version = -(consumer.version or 0) - 1
+		else
+			consumer.coalesced = producer
+		end
 		coalesced[producer] = true
 	end
 end
@@ -575,7 +582,7 @@ function LISTENER.run(leader: Node)
 	if producer == nil or producer.released then
 		return
 	end
-	if leader.coalesced then
+	if (leader.version or 0) < 0 then
 		resumeSet(producer)
 	end
 	local update = producer.refresh
@@ -608,7 +615,7 @@ function CELL_LISTENER.run(leader: Node)
 	if producer == nil then
 		return
 	end
-	if leader.coalesced then
+	if (leader.version or 0) < 0 then
 		resumeSet(producer)
 	end
 	if producer.first == leader and rawget(leader, 4) == nil and not statsOn.enabled then
@@ -627,6 +634,35 @@ function CELL_LISTENER.run(leader: Node)
 	runListeners(leader, producer)
 end
 
+local function makeListener(reactor: Types.Reactor, producer: Node): Node
+	local update = producer.refresh
+	if update then
+		update(producer)
+	end
+	local class = if update ~= nil and producer.refresh ~= nil then LISTENER else CELL_LISTENER
+	local edge: Node = { producer, nil, nil, nil, version = producer.version, reactor = reactor }
+	Nodes.classify(edge, class)
+	return edge
+end
+
+local function startListener(edge: Node)
+	local producer, listener = edge[1], edge.listener
+	if producer == nil or listener == nil then
+		return
+	end
+	if statsOn.enabled then
+		statsOn.recorder.born(edge)
+		stats.bump "watchRuns"
+		statsOn.recorder.enterRun(edge)
+	end
+	if edge.subject ~= nil then
+		listener(producer.value, edge)
+	else
+		listener(producer.value)
+	end
+	append(producer, edge)
+end
+
 local function listenEdge(
 	reactor: Types.Reactor,
 	producer: Node,
@@ -636,46 +672,15 @@ local function listenEdge(
 	transform: ((unknown) -> unknown)?,
 	written: unknown
 ): Node
-	local update = producer.refresh
-	if update then
-		update(producer)
+	local edge = makeListener(reactor, producer)
+	edge.listener = listener
+	edge.subject = subject
+	edge.fastKey = key
+	if transform ~= nil then
+		edge.transform = transform
+		edge.written = written
 	end
-	local class = if update ~= nil and producer.refresh ~= nil then LISTENER else CELL_LISTENER
-	local edge: Node = if transform == nil
-		then {
-			producer,
-			nil,
-			nil,
-			nil,
-			version = producer.version,
-			reactor = reactor,
-			listener = listener,
-			coalesced = false,
-			subject = subject,
-			fastKey = key,
-		}
-		else {
-			producer,
-			nil,
-			nil,
-			nil,
-			version = producer.version,
-			reactor = reactor,
-			listener = listener,
-			coalesced = false,
-			subject = subject,
-			fastKey = key,
-			transform = transform,
-			written = written,
-		}
-	Nodes.classify(edge, class)
-	if statsOn.enabled then
-		statsOn.recorder.born(edge)
-		stats.bump "watchRuns"
-		statsOn.recorder.enterRun(edge)
-	end
-	listener(producer.value, edge)
-	append(producer, edge)
+	startListener(edge)
 	return edge
 end
 
@@ -687,34 +692,11 @@ local function unlisten(edge: Node)
 end
 
 local function listen(reactor: Types.Reactor, producer: Node, listener: (unknown) -> ()): Dispose
-	local update = producer.refresh
-	if update then
-		update(producer)
-	end
-	local class = if update ~= nil and producer.refresh ~= nil then LISTENER else CELL_LISTENER
-	local edge: Node = {
-		producer,
-		nil,
-		nil,
-		nil,
-		version = producer.version,
-		reactor = reactor,
-		listener = listener,
-		coalesced = false,
-	}
-	Nodes.classify(edge, class)
-	if statsOn.enabled then
-		statsOn.recorder.born(edge)
-		stats.bump "watchRuns"
-		statsOn.recorder.enterRun(edge)
-	end
-	listener(producer.value)
-	append(producer, edge)
+	local edge = makeListener(reactor, producer)
+	edge.listener = listener
+	startListener(edge)
 	return function()
-		if edge.listener ~= nil then
-			edge.listener = nil
-			detach(edge)
-		end
+		unlisten(edge)
 	end
 end
 
