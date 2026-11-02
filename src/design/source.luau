@@ -239,18 +239,40 @@ local function scalar(library: Library, kind: string): string
 	return "string"
 end
 
-local function rowType(library: Library, fields: { Types.ItemField }): string
+local function flatRowType(library: Library, fields: { Types.ItemField }): string
 	local pieces: { string } = {}
 	for _, field in fields do
 		local shape = field.luauType
 		local nested = field.fields
 		if shape == nil and nested ~= nil and #nested > 0 then
-			local child = rowType(library, nested)
+			local child = flatRowType(library, nested)
 			shape = if field.type == "list" then "{ " .. child .. " }" else child
 		end
 		table.insert(pieces, `{field.id}: {shape or scalar(library, field.type)}`)
 	end
 	return "{ " .. table.concat(pieces, ", ") .. " }"
+end
+
+local function rowType(library: Library, fields: { Types.ItemField }, depth: number?, used: number?): string
+	local level = depth or 0
+	local single = flatRowType(library, fields)
+	if (used or 0) + #single <= WIDTH then
+		return single
+	end
+	local lines = { "{" }
+	for _, field in fields do
+		local prefix = string.rep("\t", level + 1) .. field.id .. ": "
+		local shape = field.luauType
+		local nested = field.fields
+		if shape == nil and nested ~= nil and #nested > 0 then
+			local width = (level + 1) * 4 + #field.id + 3
+			local child = rowType(library, nested, level + 1, width + (if field.type == "list" then 2 else 0))
+			shape = if field.type == "list" then "{ " .. child .. " }" else child
+		end
+		table.insert(lines, prefix .. (shape or scalar(library, field.type)) .. ",")
+	end
+	table.insert(lines, string.rep("\t", level) .. "}")
+	return table.concat(lines, "\n")
 end
 
 local function listItemName(input: Types.Input): string
@@ -334,7 +356,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		for _, input in value.contract.inputs do
 			local fields = input.fields
 			if input.type == "list" and fields and #fields > 0 then
-				table.insert(lines, `export type {listItemName(input)} = {rowType(library, fields)}`)
+				local prefix = `export type {listItemName(input)} = `
+				table.insert(lines, prefix .. rowType(library, fields, 0, #prefix))
 				table.insert(lines, "")
 			end
 		end
