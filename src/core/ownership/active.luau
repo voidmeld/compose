@@ -18,6 +18,9 @@ local function unstack(thread: thread)
 end
 
 local function depth(): number
+	if #threads == 0 then
+		return 0
+	end
 	local running = coroutine.running()
 	local own = stacked[running] or 0
 	if own == #threads then
@@ -124,11 +127,6 @@ local function resolve(): (Owner.Owner?, boolean)
 	return owner, owner ~= nil and threads[last] == running and owners[last] == owner
 end
 
-local function isCurrent(owner: Owner.Owner): boolean
-	local last = #threads
-	return threads[last] == coroutine.running() and owners[last] == owner
-end
-
 local function push(owner: Owner.Owner): thread
 	local running = coroutine.running()
 	local index = #threads + 1
@@ -206,7 +204,6 @@ end
 return {
 	current = current,
 	nearest = nearest,
-	isCurrent = isCurrent,
 	resolve = resolve,
 	depth = depth,
 	withOwner = withOwner,

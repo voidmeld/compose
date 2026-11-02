@@ -88,7 +88,7 @@ local function coalesce(producer: Node, consumer: Node, set: (Node, unknown) -> 
 end
 
 local function kindOf(producer: Node): string
-	return if producer.state ~= nil then "formula" else "cell"
+	return if producer.state ~= nil and producer.refresh ~= nil then "formula" else "cell"
 end
 
 local function append(producer: Node, edge: Node)
@@ -209,7 +209,7 @@ local function markStale(producer: Node, state: number)
 						local cutoff = consumer.cutoff
 						if cutoff ~= nil then
 							cutoff(consumer)
-						elseif consumer.body ~= nil or (consumer.invalidate == nil and consumer.run == nil) then
+						elseif consumer.body ~= nil then
 							if following == nil then
 								source = consumer
 							else
@@ -339,8 +339,8 @@ local function use<T>(value: Types.ReadOnlyValue<T>): T
 			edge = attached
 		end
 	end
-	local update = node.refresh
-	if update ~= nil and (node.state ~= CLEAN or node.released) then
+	local update = if node.state ~= CLEAN then node.refresh else nil
+	if update ~= nil then
 		update(node)
 	end
 	if edge ~= nil then
@@ -359,8 +359,8 @@ local function dependenciesMoved(consumer: Node): boolean
 		if edge ~= nil then
 			local producer = edge[1]
 			if producer ~= nil then
-				local update = producer.refresh
-				if update ~= nil and (producer.state ~= CLEAN or producer.released) then
+				local update = if producer.state ~= CLEAN then producer.refresh else nil
+				if update ~= nil then
 					update(producer)
 				end
 				if producer.version ~= edge.version then
@@ -465,7 +465,7 @@ local function release(consumer: Node)
 	consumer.released = true
 	consumer.reads = nil
 	trim(consumer, 1)
-	consumer.state = CLEAN
+	consumer.state = DIRTY
 end
 
 local function subscriberCount(producer: Node): number
@@ -479,9 +479,9 @@ local function subscriberCount(producer: Node): number
 end
 
 local function untracked<T>(body: () -> T): T
-	local previousConsumer, previousOrder = Evaluation.enter(nil)
+	local frame, previousConsumer, previousOrder = Evaluation.enterFrame(nil)
 	local ok, result = pcall(body)
-	Evaluation.leave(previousConsumer, previousOrder)
+	Evaluation.leaveFrame(frame, previousConsumer, previousOrder)
 	if not ok then
 		error(result, 0)
 	end

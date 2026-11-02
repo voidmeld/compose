@@ -128,9 +128,6 @@ local function contextOn(running: thread): Node?
 	if own ~= nil and own.order > 0 then
 		return own.consumer
 	end
-	if cache.active == 0 then
-		return nil
-	end
 	local inherited: Evaluation? = nil
 	for thread, evaluation in evaluations do
 		if
@@ -172,21 +169,6 @@ local function frame(): Evaluation
 	cache.thread = running
 	cache.frame = current
 	return current
-end
-
-local function enter(consumer: Node?): (Node?, number)
-	local running = coroutine.running()
-	local cached = if running == cache.thread then cache.frame else nil
-	local current: Evaluation = if cached ~= nil then cached else frame()
-	local previousConsumer, previousOrder = current.consumer, current.order
-	if previousOrder == 0 then
-		cache.active += 1
-	end
-	local order = cache.order + 1
-	cache.order = order
-	current.consumer = consumer
-	current.order = order
-	return previousConsumer, previousOrder
 end
 
 local function enterFrame(consumer: Node?): (Evaluation, Node?, number)
@@ -276,7 +258,6 @@ return {
 	frame = frame,
 	context = context,
 	contextOn = contextOn,
-	enter = enter,
 	enterFrame = enterFrame,
 	leaveFrame = leaveFrame,
 	snapshot = snapshot,

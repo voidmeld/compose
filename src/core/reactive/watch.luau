@@ -69,6 +69,8 @@ function WATCH.run(node: Node, frame: Evaluation.Evaluation?)
 	rerun(node, frame)
 end
 
+WATCH.runIn = WATCH.run
+
 local TERMINAL = {}
 TERMINAL.__index = TERMINAL
 Nodes.adopt(TERMINAL)
@@ -79,8 +81,7 @@ local resume: Node? = nil
 
 local function sweep(leader: Node, producer: Node, from: Node?)
 	local reactor = leader.reactor
-	local frame = Evaluation.frame()
-	local previousConsumer, previousOrder = Evaluation.enter(leader)
+	local frame, previousConsumer, previousOrder = Evaluation.enterFrame(leader)
 	local edge = from
 	while edge ~= nil do
 		local following = edge[4]
@@ -105,7 +106,7 @@ local function sweep(leader: Node, producer: Node, from: Node?)
 		end
 		edge = following
 	end
-	Evaluation.leave(previousConsumer, previousOrder)
+	Evaluation.leaveFrame(frame, previousConsumer, previousOrder)
 end
 
 function TERMINAL.run(leader: Node, frame: Evaluation.Evaluation?)
@@ -151,6 +152,22 @@ function TERMINAL.run(leader: Node, frame: Evaluation.Evaluation?)
 	end
 end
 
+function TERMINAL.runIn(node: Node, frame: Evaluation.Evaluation)
+	if node.source ~= nil or node.state == CHECK then
+		TERMINAL.run(node, frame)
+		return
+	end
+	if node.released then
+		return
+	end
+	if statsOn.enabled then
+		stats.bump "watchRuns"
+		statsOn.recorder.enterRun(node)
+	end
+	node.state = CLEAN
+	Graph.runEffectIn(frame, node)
+end
+
 local GUARDED = {}
 GUARDED.__index = GUARDED
 Nodes.adopt(GUARDED)
@@ -166,6 +183,8 @@ function GUARDED.run(node: Node, frame: Evaluation.Evaluation?)
 	end
 	rerun(node, frame)
 end
+
+GUARDED.runIn = GUARDED.run
 
 local function begin(reactor: Reactor, body: Body, class: {}, label: string?, scope: Types.Owner?): Node
 	local node: Node = {

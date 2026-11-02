@@ -170,7 +170,8 @@ local function map<T, R>(source: Types.ReadOnlyValue<T>, transform: (T) -> R): T
 	mapped[body] = {
 		source = source,
 		transform = function(_value: unknown): unknown
-			return transform(source:peek())
+			local cached = source.cache
+			return transform(if cached ~= nil then cached.value else source:peek())
 		end,
 	}
 	return body

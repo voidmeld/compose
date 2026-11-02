@@ -138,6 +138,7 @@ export type NodeData<T> = {
 	state: number?,
 	reads: number?,
 	run: ((Node, { consumer: Node?, order: number }?) -> ())?,
+	runIn: ((Node, { consumer: Node?, order: number }) -> ())?,
 	effect: ((use: Use) -> ())?,
 	listener: ((unknown, Node?) -> ())?,
 	listenerGroup: boolean?,

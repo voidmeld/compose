@@ -56,8 +56,8 @@ function FORMULA.refresh(self: Node)
 			if edge ~= nil then
 				local producer = edge[1]
 				if producer ~= nil then
-					local update = producer.refresh
-					if update ~= nil and (producer.state ~= CLEAN or producer.released) then
+					local update = if producer.state ~= CLEAN then producer.refresh else nil
+					if update ~= nil then
 						update(producer)
 					end
 					if producer.version ~= edge.version then
