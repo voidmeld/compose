@@ -122,6 +122,8 @@ type GroupBody = (use: Types.Use) -> ...unknown
 local propertyBindings: Registry = {}
 
 local fastEdges: { [Node]: Types.Node? } = {}
+local fastCount = 0
+local fastPeak = 0
 
 Weak.keys(fastEdges)
 
@@ -737,6 +739,22 @@ local function mappedListener(write: (Node, string, unknown) -> (), liveRead: ((
 	return listener
 end
 
+local function forget(node: Node)
+	if fastEdges[node] ~= nil then
+		fastEdges[node] = nil
+		fastCount -= 1
+		if fastCount * 4 <= fastPeak then
+			local compacted: { [Node]: Types.Node? } = {}
+			for target, edge in fastEdges do
+				compacted[target] = edge
+			end
+			Weak.keys(compacted)
+			fastEdges = compacted
+			fastPeak = fastCount
+		end
+	end
+end
+
 local function retireFast(node: Node, key: string)
 	local edge = fastEdges[node]
 	local previous: Types.Node? = nil
@@ -744,7 +762,11 @@ local function retireFast(node: Node, key: string)
 		local following = edge.fastNext
 		if edge.fastKey == key then
 			if previous == nil then
-				fastEdges[node] = following
+				if following == nil then
+					forget(node)
+				else
+					fastEdges[node] = following
+				end
 			else
 				previous.fastNext = following
 			end
@@ -760,6 +782,9 @@ local function appendFast(node: Node, edge: Types.Node)
 	local previous = fastEdges[node]
 	if previous ~= nil then
 		edge.fastNext = previous
+	else
+		fastCount += 1
+		fastPeak = math.max(fastPeak, fastCount)
 	end
 	fastEdges[node] = edge
 end
@@ -930,10 +955,6 @@ local function apply(host: Host.Host, node: Node, source: unknown, owner: Owner.
 			writeOnce(propertyTarget(host), node, owner, name, value)
 		end
 	end
-end
-
-local function forget(node: Node)
-	fastEdges[node] = nil
 end
 
 return {
