@@ -44,7 +44,12 @@ local function indexes<V>(source: Types.Source<{ V }>, render: Render<V>): Child
 					end
 				else
 					local value = cellModule.cell(item)
-					local rowOwner = Block.mountRows(mountPoint, owner, build, value, index, "indexed row")
+					local node, rowOwner = Block.mountRows(mountPoint, owner, build, value, index, "indexed row")
+					if node ~= nil then
+						Owners.adopt(rowOwner, function()
+							Block.releaseNode(mountPoint, node)
+						end)
+					end
 					rows[index] = { owner = rowOwner, value = value }
 					items[index] = item
 				end

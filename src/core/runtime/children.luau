@@ -317,15 +317,11 @@ local function mountRow<A, B, C>(
 	return produced, owner
 end
 
-local function rowOutputs(first: unknown, ...: unknown): (unknown, { unknown }?)
+local function rowOutputs(ok: boolean, first: unknown, ...: unknown): (boolean, unknown, { unknown }?)
 	if first ~= nil and select("#", ...) == 0 then
-		return first, nil
+		return ok, first, nil
 	end
-	return nil, { first, ... }
-end
-
-local function buildRows<A, B>(render: (A, B) -> Node, first: A, second: B): (unknown, { unknown }?)
-	return rowOutputs(render(first, second))
+	return ok, nil, { first, ... }
 end
 
 local function mountRows<A, B>(
@@ -335,10 +331,10 @@ local function mountRows<A, B>(
 	first: A,
 	second: B,
 	label: string
-): Owner.Owner
+): (Node?, Owner.Owner)
 	local owner = Owner.createChild(parentOwner)
 	local running = Active.push(owner)
-	local ok, node, nodes = pcall(buildRows, render, first, second)
+	local ok, node, nodes = rowOutputs(pcall(render, first, second))
 	Active.pop(owner, running)
 	if nodes ~= nil or not ok then
 		place(mountPoint, owner, ok, if ok then nodes else node, label, nil, nil)
@@ -348,14 +344,11 @@ local function mountRows<A, B>(
 			Owner.dispose(owner)
 			error(failure, 0)
 		end
-		Owner.adopt(owner, function()
-			mountPoint.remove(node)
-			Nodes.forget(node)
-		end)
+		return node, owner
 	else
 		place(mountPoint, owner, true, { node }, label, nil, nil)
 	end
-	return owner
+	return nil, owner
 end
 
 local function releaseNode(mountPoint: MountPoint, node: Node)
