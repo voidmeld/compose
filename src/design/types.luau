@@ -209,7 +209,7 @@ export type LinkStore = {
 	read: () -> string,
 	write: (expected: string, generated: string) -> boolean,
 	watch: (changed: () -> ()) -> () -> (),
-	defer: ((save: () -> ()) -> ())?,
+	read defer: ((save: () -> ()) -> ())?,
 }
 
 export type OpenDesign = { dispose: () -> () }
