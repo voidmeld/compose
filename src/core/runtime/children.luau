@@ -317,6 +317,47 @@ local function mountRow<A, B, C>(
 	return produced, owner
 end
 
+local function rowOutputs(first: unknown, ...: unknown): (unknown, { unknown }?)
+	if first ~= nil and select("#", ...) == 0 then
+		return first, nil
+	end
+	return nil, { first, ... }
+end
+
+local function buildRows<A, B>(render: (A, B) -> Node, first: A, second: B): (unknown, { unknown }?)
+	return rowOutputs(render(first, second))
+end
+
+local function mountRows<A, B>(
+	mountPoint: MountPoint,
+	parentOwner: Owner.Owner,
+	render: (A, B) -> Node,
+	first: A,
+	second: B,
+	label: string
+): Owner.Owner
+	local owner = Owner.createChild(parentOwner)
+	local running = Active.push(owner)
+	local ok, node, nodes = pcall(buildRows, render, first, second)
+	Active.pop(owner, running)
+	if nodes ~= nil or not ok then
+		place(mountPoint, owner, ok, if ok then nodes else node, label, nil, nil)
+	elseif type(node) == "table" or type(node) == "userdata" then
+		local inserted, failure = pcall(mountPoint.insert, node, nil)
+		if not inserted then
+			Owner.dispose(owner)
+			error(failure, 0)
+		end
+		Owner.adopt(owner, function()
+			mountPoint.remove(node)
+			Nodes.forget(node)
+		end)
+	else
+		place(mountPoint, owner, true, { node }, label, nil, nil)
+	end
+	return owner
+end
+
 local function releaseNode(mountPoint: MountPoint, node: Node)
 	mountPoint.remove(node)
 	Nodes.forget(node)
@@ -326,6 +367,7 @@ return {
 	block = {
 		mountBlock = mountBlock,
 		mountRow = mountRow,
+		mountRows = mountRows,
 		releaseNode = releaseNode,
 		releaseNodes = releaseNodes,
 		nameOf = nameOf,

@@ -274,6 +274,98 @@ describe("portal", function()
 end)
 
 describe("indexes", function()
+	it("keeps empty rows and every returned sibling through updates and disposal", function()
+		local world = Support.world()
+		local lines = Compose.cell { "one", "two", "three" }
+		local dispose, root = world.runtime.mount(function()
+			return world.create "Frame" {
+				Support.invoke(
+					Compose.indexes,
+					lines,
+					function(value: Compose.ReadOnlyValue<string>, index: number): ...Compose.Node?
+						if index == 2 then
+							return nil
+						end
+						local first = world.create "Line" { Text = value }
+						if index == 3 then
+							return first, world.create "Extra" { Text = value }
+						end
+						return first
+					end
+				),
+			}
+		end, world.root)
+		expect(kinds(world, root)):toEqual { "Line", "Line", "Extra" }
+		local before = world.host.childrenOf(root)
+		lines:set { "changed", "empty", "siblings" }
+		world.settle()
+		expect(world.host.childrenOf(root)):toEqual(before)
+		expect(world.host.propertyOf(before[1], "Text")):toBe "changed"
+		expect(world.host.propertyOf(before[2], "Text")):toBe "siblings"
+		expect(world.host.propertyOf(before[3], "Text")):toBe "siblings"
+		lines:set { "changed", "empty" }
+		world.settle()
+		expect(kinds(world, root)):toEqual { "Line" }
+		expect(world.host.isAlive(before[2])):toBe(false)
+		expect(world.host.isAlive(before[3])):toBe(false)
+		lines:set { "changed", "empty", "again" }
+		world.settle()
+		expect(kinds(world, root)):toEqual { "Line", "Line", "Extra" }
+		dispose()
+		expect(world.host.leaked()):toEqual { "Root#1" }
+	end)
+
+	it("mounts every returned node when all rows have siblings", function()
+		local world = Support.world()
+		local dispose, root = world.runtime.mount(function()
+			return world.create "Frame" {
+				Support.invoke(Compose.indexes, Compose.cell { 1, 2 }, function(): ...Compose.Node
+					return world.create "First" {}, world.create "Second" {}, world.create "Third" {}
+				end),
+			}
+		end, world.root)
+		expect(kinds(world, root)):toEqual { "First", "Second", "Third", "First", "Second", "Third" }
+		dispose()
+		expect(world.host.leaked()):toEqual { "Root#1" }
+	end)
+
+	for _, multiple in { false, true } do
+		it("unwinds an indexed row insertion failure with siblings=" .. tostring(multiple), function()
+			local world = Support.world()
+			local lines = Compose.cell { 1 }
+			local dispose, root = world.runtime.mount(function()
+				return world.create "Frame" {
+					Support.invoke(
+						Compose.indexes,
+						lines,
+						function(_: Compose.ReadOnlyValue<number>, index: number): ...Compose.Node
+							local node = world.create "Line" {}
+							if index == 2 then
+								world.host.failNext "insertChild"
+							end
+							if multiple then
+								return node, world.create "Extra" {}
+							end
+							return node
+						end
+					),
+				}
+			end, world.root)
+			local before = world.host.childrenOf(root)
+			local live = world.host.liveNodes()
+			expect(function()
+				lines:set { 1, 2 }
+			end):toThrow "injected failure in insertChild"
+			expect(world.host.childrenOf(root)):toEqual(before)
+			expect(world.host.liveNodes()):toBe(live)
+			lines:set {}
+			world.settle()
+			expect(kinds(world, root)):toEqual {}
+			dispose()
+			expect(world.host.leaked()):toEqual { "Root#1" }
+		end)
+	end
+
 	it("reuses rows by position and updates their values", function()
 		local world = Support.world()
 		local lines = Compose.cell { "one", "two" }

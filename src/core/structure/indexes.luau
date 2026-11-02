@@ -19,9 +19,6 @@ type Row<V> = {
 local function indexes<V>(source: Types.Source<{ V }>, render: Render<V>): Children.Directive
 	local from: Types.Body<{ V }> = Support.sourceOf(source, "indexes", "source")
 	local build: Render<V> = Support.builderOf(render, "indexes", "render")
-	local function buildRow(value: Types.ReadOnlyValue<V>, index: number, _key: nil)
-		return build(value, index)
-	end
 	return function(mountPoint: Children.MountPoint)
 		local owner = Support.ownerFor "indexes"
 		Support.mountPointOf(mountPoint, "indexes")
@@ -47,10 +44,7 @@ local function indexes<V>(source: Types.Source<{ V }>, render: Render<V>): Child
 					end
 				else
 					local value = cellModule.cell(item)
-					local node, rowOwner = Block.mountRow(mountPoint, owner, buildRow, value, index, nil, "indexed row")
-					Owners.adopt(rowOwner, function()
-						Block.releaseNode(mountPoint, node)
-					end)
+					local rowOwner = Block.mountRows(mountPoint, owner, build, value, index, "indexed row")
 					rows[index] = { owner = rowOwner, value = value }
 					items[index] = item
 				end
