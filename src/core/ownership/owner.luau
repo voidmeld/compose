@@ -4,8 +4,8 @@
 local Types = require "../reactive/types"
 local Nodes = require "./nodes"
 local Reactor = require "../reactive/reactor"
-local watchModule = require "../reactive/watch"
-local Graph = require "../reactive/graph"
+local cachedWatch: typeof(require "../reactive/watch")? = nil
+local graphModule: typeof(require "../reactive/graph")? = nil
 local Dynamic = require "../dynamic"
 local OwnerTypes = require "./types"
 
@@ -45,7 +45,6 @@ local function new(inherited: Reactor.Reactor?, parent: Owner?): Owner
 end
 
 local detached: Reactor.Reactor? = nil
-local releaseHeld = watchModule.releaseHeld
 
 local function noop() end
 
@@ -481,6 +480,8 @@ local function watchStatic<T>(
 	body: (value: T) -> (),
 	after: Dispose?
 ): Dispose
+	local watchModule = cachedWatch or require "../reactive/watch"
+	cachedWatch = watchModule
 	if inspecting.active then
 		inspector().watch(owner)
 	end
@@ -507,15 +508,21 @@ local function listenHeld(
 	transform: ((unknown) -> unknown)?,
 	written: unknown?
 ): Types.Node
+	local watchModule = cachedWatch or require "../reactive/watch"
+	cachedWatch = watchModule
 	if inspecting.active then
 		inspector().watch(owner)
 	end
+	local Graph = graphModule or require "../reactive/graph"
+	graphModule = Graph
 	local edge = Graph.listenEdge(reactorOf(owner), producer, body, subject, key, transform, written)
-	holdSubject(owner, releaseHeld, edge)
+	holdSubject(owner, watchModule.releaseHeld, edge)
 	return edge
 end
 
 local function effectHeld(owner: Owner, body: (use: Types.Use) -> ()): Types.Node?
+	local watchModule = cachedWatch or require "../reactive/watch"
+	cachedWatch = watchModule
 	if inspecting.active then
 		inspector().watch(owner)
 	end
@@ -532,11 +539,13 @@ local function effectHeld(owner: Owner, body: (use: Types.Use) -> ()): Types.Nod
 	if node.effect == nil then
 		return nil
 	end
-	holdSubject(owner, releaseHeld, node)
+	holdSubject(owner, watchModule.releaseHeld, node)
 	return node
 end
 
 local function watchTerminal(owner: Owner, body: (use: Types.Use) -> (), after: Dispose?): Dispose
+	local watchModule = cachedWatch or require "../reactive/watch"
+	cachedWatch = watchModule
 	if inspecting.active then
 		inspector().watch(owner)
 	end
@@ -560,12 +569,19 @@ local function releaseScope(node: Types.Node)
 	end
 end
 
-watchModule.installScope(function(node: Types.Node)
-	releaseScope(node)
-	node.base = activationDepth()
-end, releaseScope)
+local scopesInstalled = false
 
 local function watch(owner: Owner, body: (use: Types.Use) -> (), label: string?, after: Dispose?): Dispose
+	local watchModule = cachedWatch or require "../reactive/watch"
+	cachedWatch = watchModule
+	if not scopesInstalled then
+		watchModule.installScope(function(node: Types.Node)
+			releaseScope(node)
+			node.base = activationDepth()
+		end, releaseScope)
+
+		scopesInstalled = true
+	end
 	if inspecting.active then
 		inspector().watch(owner)
 	end

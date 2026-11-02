@@ -34,18 +34,19 @@ local AnimationEasing = require "@self/animation/easing"
 local ContextModule = require "@self/context"
 local Diagnostics = require "@self/diagnostics"
 local Dynamic = require "@self/dynamic"
-local Graph = require "@self/reactive/graph"
+local graphModule: typeof(require "@self/reactive/graph")? = nil
+local ReactiveNodes = require "@self/reactive/node"
 local HostProtocol = require "@self/host"
 local Props = require "@self/runtime/props"
 local OwnerModule = require "@self/ownership/owner"
 local CoreTypes = require "@self/types"
 local RuntimeModule = require "@self/runtime"
 local Types = require "@self/reactive/types"
-local cellModule = require "@self/reactive/cell"
+local cellModule: typeof(require "@self/reactive/cell")? = nil
 local nodes = require "@self/ownership/nodes"
-local formulaModule = require "@self/reactive/formula"
+local formulaModule: typeof(require "@self/reactive/formula")? = nil
 local reactorModule = require "@self/reactive/reactor"
-local watchModule = require "@self/reactive/watch"
+local watchModule: typeof(require "@self/reactive/watch")? = nil
 local Evaluation = require "@self/reactive/evaluation"
 local stats = Evaluation.stats
 
@@ -429,11 +430,25 @@ local function inspectData(report: Types.InspectReport): Types.InspectData
 	return loaded.data(report)
 end
 
+local function cell<T>(initial: T, equals: Types.Equals<T>?): Types.Value<T>
+	local loaded = cellModule or require "@self/reactive/cell"
+	cellModule = loaded
+	return loaded.cell(initial, equals)
+end
+
+local function lazyCell<T>(initial: () -> T, equals: Types.Equals<T>?): Types.Value<T>
+	local loaded = cellModule or require "@self/reactive/cell"
+	cellModule = loaded
+	return loaded.lazyCell(initial, equals)
+end
+
 local function formula<T>(body: Types.Body<T>, equals: Types.Equals<T>?): Types.Value<T>
-	local value = formulaModule(body, equals)
+	local loaded = formulaModule or require "@self/reactive/formula"
+	formulaModule = loaded
+	local value = loaded(body, equals)
 	local owner = Active.current()
 	if owner ~= nil then
-		Graph.detachers[Graph.nodeOf(value)] = OwnerModule.own(owner, function()
+		ReactiveNodes.detachers[ReactiveNodes.nodeOf(value)] = OwnerModule.own(owner, function()
 			value:dispose()
 		end)
 	end
@@ -489,15 +504,17 @@ local function cleanup(value: unknown): Types.Dispose
 end
 
 local function sampleRead<T>(node: Types.ReadOnlyValue<T>): T
-	if cellModule.isValue(node) then
+	if ReactiveNodes.isNode(node) then
 		return node:peek()
 	end
-	return Graph.notANode("the reader Compose.sample passes to a body", node)
+	local loaded = graphModule or require "@self/reactive/graph"
+	graphModule = loaded
+	return loaded.notANode("the reader Compose.sample passes to a body", node)
 end
 
 local function sample<T>(source: Types.Source<T>): T
 	if type(source) ~= "function" then
-		if cellModule.isValue(source) then
+		if ReactiveNodes.isNode(source) then
 			return source:peek()
 		end
 		local actual = Diagnostics.describe(source)
@@ -513,7 +530,9 @@ local function sample<T>(source: Types.Source<T>): T
 		)
 	end
 	local body = source
-	return watchModule.sample(function(): T
+	local loaded = watchModule or require "@self/reactive/watch"
+	watchModule = loaded
+	return loaded.sample(function(): T
 		return body(sampleRead)
 	end)
 end
@@ -542,7 +561,9 @@ local function resetForTests()
 	Active.resetForTests()
 	OwnerModule.disposeRoots()
 	nodes.resetForTests()
-	Graph.clock.now = 0
+	local loaded = graphModule or require "@self/reactive/graph"
+	graphModule = loaded
+	loaded.clock.now = 0
 	stats.reset()
 end
 
@@ -607,16 +628,16 @@ local profile = {
 }
 
 return {
-	cell = cellModule.cell,
-	lazyCell = cellModule.lazyCell,
-	sharedCell = cellModule.cell,
+	cell = cell,
+	lazyCell = lazyCell,
+	sharedCell = cell,
 	formula = formula,
 	map = Props.map,
 	accumulator = accumulator,
 	selector = selector,
 	watch = watch,
 	sample = sample,
-	isValue = cellModule.isValue,
+	isValue = ReactiveNodes.isNode,
 	reactor = {
 		create = reactorModule.create,
 		batch = reactorModule.batch,
