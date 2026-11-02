@@ -606,13 +606,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			base = "value"
 		end
 		base ..= string.upper(string.sub(key, 1, 1)) .. string.sub(key, 2)
-		local name = base
-		local suffix = 1
-		while rowNames[name] do
-			suffix += 1
-			name = base .. tostring(suffix)
-		end
-		rowNames[name] = true
+		local name = unique(base)
 		local typed = luauType
 		local bound = node.bind
 		if bound ~= nil then
@@ -752,10 +746,23 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				Document.cellsOf(current, cells)
 			end
 			local datatype: string? = if field then field.datatype else nil
-			local written = expression(property, depth + 1, (depth + 1) * 4 + #key + 4)
+			local written: string
 			local luauType: string? = if field then field.luauType else nil
 			local bound = node.bind
 			local itemName = property.item
+			if current ~= nil and field ~= nil and field.perRow and bound ~= nil then
+				local typed = itemType(node, bound.from)
+				local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
+				table.insert(scopes, { fields = fieldsOf(bound.from) })
+				written = returning(parameter, layout(current, depth + 2, 0), depth + 1, luauType)
+				table.remove(scopes)
+			elseif current ~= nil and datatype ~= nil then
+				written = datatypeLiteral(library, datatype, current)
+			elseif current ~= nil and type(current) == "table" and luauType and not carriesRow(current) then
+				written = hoist(node, key, luauType, current)
+			else
+				written = expression(property, depth + 1, (depth + 1) * 4 + #key + 4)
+			end
 			if itemName ~= nil and field ~= nil and field.type == "string" then
 				local enclosing = scopes[#scopes]
 				local around: { Types.ItemField } = if enclosing and enclosing.fields then enclosing.fields else {}
@@ -768,18 +775,6 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				if not textual then
 					written = returning("use", `tostring(use(current).{itemName})`, depth + 1)
 				end
-			end
-			if current ~= nil and field ~= nil and field.perRow and bound ~= nil then
-				local typed = itemType(node, bound.from)
-				local parameter = if typed then `current: {library.readable}<{typed}>` else "current"
-				table.insert(scopes, { fields = fieldsOf(bound.from) })
-				written = returning(parameter, layout(current, depth + 2, 0), depth + 1, luauType)
-				table.remove(scopes)
-			elseif current ~= nil and datatype ~= nil then
-				written = datatypeLiteral(library, datatype, current)
-			elseif current ~= nil and type(current) == "table" and luauType and not carriesRow(current) then
-				local typeName: string = luauType
-				written = hoist(node, key, typeName, current)
 			end
 			table.insert(body, `{inner}{key} = {written},`)
 		end
