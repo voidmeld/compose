@@ -52,6 +52,7 @@ local MATERIALS = {
 	"Ground",
 	"Mud",
 	"Fabric",
+	"ForceField",
 }
 local SHAPES = { "Block", "Ball", "Cylinder", "Wedge", "CornerWedge" }
 local FACES = { "Front", "Back", "Top", "Bottom", "Left", "Right" }
@@ -191,6 +192,7 @@ local function kinds(): { [string]: Design.Kind }
 			textureId = field("string", "Mesh", 2),
 			scale = field("vector3", "Mesh", 3),
 			offset = field("vector3", "Mesh", 4),
+			vertexColor = field("vector3", "Mesh", 6),
 			meshType = field(
 				"choice",
 				"Mesh",
@@ -738,6 +740,7 @@ local function create(
 			scale = { property = "Scale", convert = "vector3" },
 			offset = { property = "Offset", convert = "vector3" },
 			meshType = { property = "MeshType", convert = "string", enum = "MeshType" },
+			vertexColor = { property = "VertexColor", convert = "vector3" },
 		}),
 		Part = function(props: Props, children: { unknown }): unknown
 			local shape = props.shape and props.shape.literal
