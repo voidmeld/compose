@@ -33,7 +33,26 @@ export type Sequences = {
 	numberRange: (low: number, high: number) -> unknown,
 }
 
-local MATERIALS = { "SmoothPlastic", "Plastic", "Neon", "Glass", "Metal", "Wood", "Concrete", "Grass" }
+local MATERIALS = {
+	"SmoothPlastic",
+	"Plastic",
+	"Neon",
+	"Glass",
+	"Metal",
+	"CorrodedMetal",
+	"Wood",
+	"WoodPlanks",
+	"Concrete",
+	"Cobblestone",
+	"Rock",
+	"Slate",
+	"Basalt",
+	"Limestone",
+	"Grass",
+	"Ground",
+	"Mud",
+	"Fabric",
+}
 local SHAPES = { "Block", "Ball", "Cylinder", "Wedge", "CornerWedge" }
 local FACES = { "Front", "Back", "Top", "Bottom", "Left", "Right" }
 local STREAMING = { "Default", "Atomic", "Persistent", "PersistentPerPlayer" }
