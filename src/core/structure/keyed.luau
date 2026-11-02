@@ -11,7 +11,6 @@ local Support = require "./support"
 local Types = require "../reactive/types"
 local longestIncreasingSubsequence = require "./lis"
 local cellModule = require "../reactive/cell"
-local identity = require("../reactive/graph").identityKey
 
 export type Render<V, K> = StructureTypes.KeyedRender<V, K>
 
@@ -36,7 +35,7 @@ local KNOWN_FIELDS: { [string]: true } = { from = true, key = true, render = tru
 local function keyedWithKeys<V, K>(
 	from: Source<V>,
 	render: Render<V, K>,
-	keyOf: (item: V, index: number) -> K
+	collectKeys: (list: { V }, wanted: number, keys: { K }) -> ()
 ): Children.Directive
 	local source: Types.Body<{ V }> = Support.sourceOf(from, "keyed", "from")
 	local arity, variadic = debug.info(render, "a")
@@ -51,6 +50,7 @@ local function keyedWithKeys<V, K>(
 		local matched: { [number]: Entry<V, K>? } = {}
 
 		local keys: { K } = {}
+		local stale: { number } = {}
 		local retainedPositions: { number } = {}
 		local retainedTargets: { number } = {}
 		local base, count, epoch = 0, 0, 0
@@ -203,39 +203,57 @@ local function keyedWithKeys<V, K>(
 			local pass = passes
 			local list = source(use)
 			local wanted = #list
+			collectKeys(list, wanted, keys)
+			for index = #keys, wanted + 1, -1 do
+				keys[index] = nil
+			end
 
 			local mark = epoch + 1
 			epoch = mark + wanted
 			table.clear(matched)
-			local found = 0
 			local changed = 0
-			local prefix = 0
 			local previousCount = count
+			local rows, wantedKeys, offset = order, keys, base
+			local prefix, staleCount = 0, 0
+			local shared = math.min(previousCount, wanted)
+			while prefix < shared do
+				local entry = rows[offset + prefix + 1]
+				if not rawequal(entry.key, wantedKeys[prefix + 1]) then
+					break
+				end
+				prefix += 1
+				local cached = if readsIndex then entry.index.cache else nil
+				if entry.item ~= list[prefix] or (readsIndex and (cached == nil or cached.value ~= prefix)) then
+					staleCount += 1
+					stale[staleCount] = prefix
+				end
+			end
+			local found = prefix
 			local fresh: { [K]: number }? = nil
-			for index = 1, wanted do
+			local byKey, picked = entries, matched
+			for index = prefix + 1, wanted do
 				local item = list[index]
-				local itemKey = keyOf(item, index)
-				keys[index] = itemKey
-				local entry = entries[itemKey]
+				local itemKey = wantedKeys[index]
+				local entry = byKey[itemKey]
 				if entry ~= nil then
-					local at = entry.position - base
+					local at = entry.position - offset
+					if at <= prefix then
+						duplicate(index, at)
+					end
 					if entry.mark >= mark then
 						duplicate(index, entry.mark - mark)
 					end
 					entry.mark = mark + index
-					if prefix == index - 1 and at == index then
-						prefix = index
-					end
 					found += 1
 					if ordersChildren then
-						matched[index] = entry
+						picked[index] = entry
 					elseif
 						at ~= index
 						or entry.item ~= item
 						or (readsIndex and (entry.index.cache == nil or entry.index.cache.value ~= index))
 					then
 						changed += 1
-						matched[changed] = entry
+						picked[changed] = entry
 					end
 				else
 					local added = fresh or {}
@@ -247,8 +265,17 @@ local function keyedWithKeys<V, K>(
 					added[itemKey] = index
 				end
 			end
-			for index = #keys, wanted + 1, -1 do
-				keys[index] = nil
+			for at = 1, staleCount do
+				local index = stale[at]
+				local entry = order[base + index]
+				local item = list[index]
+				if entry.item ~= item then
+					entry.item = item
+					entry.value:set(item)
+				end
+				if readsIndex then
+					setIndex(entry, index)
+				end
 			end
 			if not ordersChildren and fresh == nil and wanted == previousCount then
 				for at = 1, changed do
@@ -273,23 +300,12 @@ local function keyedWithKeys<V, K>(
 			normalize()
 
 			local oldEnd, newEnd = previousCount, wanted
-			while oldEnd > prefix and newEnd > prefix and rawequal(order[oldEnd].key, keys[newEnd]) do
+			while oldEnd > prefix and newEnd > prefix and rawequal(rows[oldEnd].key, wantedKeys[newEnd]) do
 				oldEnd -= 1
 				newEnd -= 1
 			end
 			local shift = newEnd - oldEnd
 
-			for index = 1, prefix do
-				local entry = order[index]
-				local item = list[index]
-				if entry.item ~= item then
-					entry.item = item
-					entry.value:set(item)
-				end
-				if readsIndex then
-					setIndex(entry, index)
-				end
-			end
 			for index = newEnd + 1, wanted do
 				local entry = order[index - shift]
 				local item = list[index]
@@ -517,11 +533,18 @@ end
 local function keyed<V, K>(options: Options<V, K>): Children.Directive
 	local settings = Support.optionsOf(options, "keyed", "from = ..., key = ..., render = ...")
 	Support.noUnknownFields(settings, "keyed", KNOWN_FIELDS)
-	local key: (item: V, index: number) -> K = if settings.key == nil
-		then identity
-		else Support.builderOf(settings.key, "keyed", "key")
 	local render = Support.builderOf(settings.render, "keyed", "render")
-	return keyedWithKeys(settings.from, render, key)
+	if settings.key == nil then
+		return keyedWithKeys(settings.from, render, function(list: { V }, wanted: number, keys: { V })
+			table.move(list, 1, wanted, 1, keys)
+		end)
+	end
+	local key = Support.builderOf(settings.key, "keyed", "key")
+	return keyedWithKeys(settings.from, render, function(list: { V }, wanted: number, keys: { K })
+		for index = 1, wanted do
+			keys[index] = key(list[index], index)
+		end
+	end)
 end
 
 return keyed
