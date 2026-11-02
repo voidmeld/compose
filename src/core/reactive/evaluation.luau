@@ -101,7 +101,6 @@ local stats = {
 	read = read,
 	reset = reset,
 	bump = bump,
-	zeroed = zeroed,
 }
 
 type Node = Types.Node

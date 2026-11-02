@@ -250,10 +250,6 @@ local function start(reactor: Reactor, body: Body, class: {}, label: string?, sc
 	end
 end
 
-local function watch(reactor: Reactor, body: Body, label: string?): Dispose
-	return start(reactor, body, WATCH, label)
-end
-
 local function watchGuarded(reactor: Reactor, body: Body, label: string?): Dispose
 	return start(reactor, body, GUARDED, label)
 end
@@ -279,12 +275,10 @@ local function sample<T>(body: () -> T): T
 end
 
 return {
-	watch = watch,
 	watchGuarded = watchGuarded,
 	watchScoped = watchScoped,
 	installScope = installScope,
 	watchStatic = watchStatic,
-	unlisten = Graph.unlisten,
 	terminalNode = terminalNode,
 	releaseHeld = releaseHeld,
 	releaseEdge = releaseEdge,
