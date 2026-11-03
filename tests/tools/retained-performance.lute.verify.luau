@@ -157,7 +157,7 @@ describe("retained performance", function()
 		local same = Benchmark.compare(base, stored("same", sameMounted, sameTeardown), { rule = rule })
 		local kept = Benchmark.compare(base, stored("kept", keptMounted, keptTeardown), { rule = rule })
 		local held = Benchmark.compare(base, stored("held", heldMounted, heldTeardown), { rule = rule })
-		if same.passed ~= 2 or kept.failed ~= 1 or held.failed ~= 1 then
+		if same.passed ~= 2 or kept.failed ~= 2 or held.failed ~= 1 then
 			error(
 				json.serialize {
 					baseline = { mounted = baseMounted, teardown = baseTeardown },
@@ -172,7 +172,7 @@ describe("retained performance", function()
 			)
 		end
 		expect(same.passed):toBe(2)
-		expect(kept.failed):toBe(1)
+		expect(kept.failed):toBe(2)
 		expect(held.failed):toBe(1)
 	end)
 
@@ -181,7 +181,7 @@ describe("retained performance", function()
 		expect(#entries):toBe(1)
 		entries[1].memory()
 		local result = entries[1].memory()
-		expect(result.mountedRetainedKb):toBeGreaterThan(64)
+		expect(result.mountedKb):toBeGreaterThan(64)
 		expect(result.teardownRetainedKb):toBeLessThan(1024)
 	end)
 end)

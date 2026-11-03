@@ -37,7 +37,7 @@ Lute.worker {
 										"application/json",
 										Lute.encode(result)
 									)
-									table.insert(mounted, result.mountedRetainedKb)
+									table.insert(mounted, result.mountedKb)
 									table.insert(teardown, result.teardownRetainedKb)
 								end
 								for _, metric in
