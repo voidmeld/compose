@@ -11,5 +11,5 @@ assert(entry.id == "cold-mount-100")
 entry.memory()
 for _ = 1, 3 do
 	local result = entry.memory(bytes, released)
-	print(result.mountedRetainedKb, result.teardownRetainedKb)
+	print(result.mountedKb, result.teardownRetainedKb)
 end
