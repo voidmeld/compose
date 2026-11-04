@@ -93,36 +93,26 @@ local function create(
 	local Theme = require "./theme"(ui)
 	local panel = Theme.frame("DesignPrompt", Theme.color.panel)
 	ui.set(panel, "AnchorPoint", ui.values.vector2(0, 1))
-	ui.set(panel, "Position", ui.values.udim2(0, 0, 1, 0))
-	ui.set(panel, "Size", ui.values.udim2(1, 0, 0, 140))
-	ui.set(panel, "Parent", parent)
+	Theme.place(panel, parent, ui.values.udim2(1, 0, 0, 140), ui.values.udim2(0, 0, 1, 0))
 	ui.set(canvas.root, "Size", ui.values.udim2(1, 0, 1, -140))
 	local caption = Theme.label("", Theme.color.secondary, Theme.size.small)
 	ui.set(caption, "Name", "PromptTarget")
-	ui.set(caption, "Position", ui.values.udim2(0, 12, 0, 4))
-	ui.set(caption, "Size", ui.values.udim2(1, -24, 0, 24))
-	ui.set(caption, "Parent", panel)
+	Theme.place(caption, panel, ui.values.udim2(1, -24, 0, 24), ui.values.udim2(0, 12, 0, 4))
 	local field = Theme.field ""
 	ui.set(field, "Name", "PromptRequest")
 	ui.set(field, "PlaceholderText", "Describe a change to the selected node")
 	ui.set(field, "MultiLine", true)
 	ui.set(field, "TextWrapped", true)
 	ui.set(field, "TextYAlignment", ui.values.enum("TextYAlignment", "Top"))
-	ui.set(field, "Position", ui.values.udim2(0, 12, 0, 32))
-	ui.set(field, "Size", ui.values.udim2(1, -24, 0, 56))
-	ui.set(field, "Parent", panel)
+	Theme.place(field, panel, ui.values.udim2(1, -24, 0, 56), ui.values.udim2(0, 12, 0, 32))
 	local send = Theme.button("SendPrompt", "Apply prompt", Theme.color.white)
 	ui.set(send, "BackgroundTransparency", 0)
 	ui.set(send, "BackgroundColor3", Theme.color.accent)
-	ui.set(send, "Position", ui.values.udim2(1, -152, 0, 100))
-	ui.set(send, "Size", ui.values.udim2(0, 140, 0, 32))
-	ui.set(send, "Parent", panel)
+	Theme.place(send, panel, ui.values.udim2(0, 140, 0, 32), ui.values.udim2(1, -152, 0, 100))
 	Theme.corner(send, 6)
 	local status = Theme.label("", Theme.color.secondary, Theme.size.small)
 	ui.set(status, "Name", "PromptStatus")
-	ui.set(status, "Position", ui.values.udim2(0, 12, 0, 100))
-	ui.set(status, "Size", ui.values.udim2(1, -176, 0, 32))
-	ui.set(status, "Parent", panel)
+	Theme.place(status, panel, ui.values.udim2(1, -176, 0, 32), ui.values.udim2(0, 12, 0, 100))
 	local disposed, busy = false, false
 	local draft: { dispose: () -> () }? = nil
 	local function clear()
@@ -135,8 +125,7 @@ local function create(
 	local count = 1
 	local variants = Theme.button("PromptVariants", "1 variant")
 	ui.set(variants, "Position", ui.values.udim2(1, if options.theme then -360 else -256, 0, 100))
-	ui.set(variants, "Size", ui.values.udim2(0, 96, 0, 32))
-	ui.set(variants, "Parent", panel)
+	Theme.place(variants, panel, ui.values.udim2(0, 96, 0, 32))
 	ui.set(status, "Size", ui.values.udim2(1, if options.theme then -384 else -280, 0, 32))
 	local countConnection = ui.connect(variants, "Activated", function()
 		if not busy then
@@ -148,9 +137,7 @@ local function create(
 	local scopeConnection: UI.Connection? = nil
 	if options.theme then
 		local scope = Theme.button("PromptScope", "Design")
-		ui.set(scope, "Position", ui.values.udim2(1, -256, 0, 100))
-		ui.set(scope, "Size", ui.values.udim2(0, 96, 0, 32))
-		ui.set(scope, "Parent", panel)
+		Theme.place(scope, panel, ui.values.udim2(0, 96, 0, 32), ui.values.udim2(1, -256, 0, 100))
 		scopeConnection = ui.connect(scope, "Activated", function()
 			if not busy then
 				theming = not theming

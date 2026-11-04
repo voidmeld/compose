@@ -47,8 +47,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 	local root = Theme.scroller "DesignDevices"
 	ui.set(root, "BackgroundTransparency", 0)
 	ui.set(root, "BackgroundColor3", Theme.color.canvas)
-	ui.set(root, "Size", ui.values.udim2(1, 0, 1, 0))
-	ui.set(root, "Parent", parent)
+	Theme.place(root, parent, ui.values.udim2(1, 0, 1, 0))
 	local grid = ui.new "UIGridLayout"
 	ui.set(grid, "CellPadding", ui.values.udim2(0, 16, 0, 16))
 	ui.set(grid, "SortOrder", ui.values.enum("SortOrder", "LayoutOrder"))
@@ -108,9 +107,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		local name = Theme.label(device.name, Theme.color.text, Theme.size.text, Theme.font.bold)
 		ui.set(name, "Name", "DeviceName")
 		ui.set(name, "Visible", header > 0)
-		ui.set(name, "Position", ui.values.udim2(0, 12, 0, 4))
-		ui.set(name, "Size", ui.values.udim2(1, -24, 0, 24))
-		ui.set(name, "Parent", frame)
+		Theme.place(name, frame, ui.values.udim2(1, -24, 0, 24), ui.values.udim2(0, 12, 0, 4))
 		local facts = Theme.label(
 			`{device.size.X} × {device.size.Y} · {device.inputMode} · Text {device.textScale}`,
 			Theme.color.secondary,
@@ -118,13 +115,9 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		)
 		ui.set(facts, "Name", "DeviceFacts")
 		ui.set(facts, "Visible", header > 0)
-		ui.set(facts, "Position", ui.values.udim2(0, 12, 0, 28))
-		ui.set(facts, "Size", ui.values.udim2(1, -24, 0, 24))
-		ui.set(facts, "Parent", frame)
+		Theme.place(facts, frame, ui.values.udim2(1, -24, 0, 24), ui.values.udim2(0, 12, 0, 28))
 		local body = Theme.frame "DeviceCanvas"
-		ui.set(body, "Position", ui.values.udim2(0, 0, 0, header))
-		ui.set(body, "Size", ui.values.udim2(1, 0, 1, -header))
-		ui.set(body, "Parent", frame)
+		Theme.place(body, frame, ui.values.udim2(1, 0, 1, -header), ui.values.udim2(0, 0, 0, header))
 		local library = Projection(ui, context.library or session.library, device)
 		local entry: Frame = { device = device, root = frame, scale = scale }
 		if library.space == "3d" then

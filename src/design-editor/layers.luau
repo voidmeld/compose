@@ -33,9 +33,7 @@ return function(ui: UI.UI)
 		ui.set(glyph, "Parent", button)
 		local name = Theme.label("", color.secondary, size.text)
 		ui.set(name, "Name", "Title")
-		ui.set(name, "Position", ui.values.udim2(0, 22, 0, 0))
-		ui.set(name, "Size", ui.values.udim2(1, -74, 1, 0))
-		ui.set(name, "Parent", button)
+		Theme.place(name, button, ui.values.udim2(1, -74, 1, 0), ui.values.udim2(0, 22, 0, 0))
 		return { button = button, glyph = glyph, name = name }
 	end
 

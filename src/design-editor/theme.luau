@@ -104,6 +104,14 @@ return function(ui: UI.UI)
 		return frame
 	end
 
+	function Theme.place(target: Compose.Node, parent: unknown, size: unknown, position: unknown?)
+		if position ~= nil then
+			ui.set(target, "Position", position)
+		end
+		ui.set(target, "Size", size)
+		ui.set(target, "Parent", parent)
+	end
+
 	function Theme.label(text: string, color: unknown, size: number?, font: unknown?, kind: string?): Compose.Node
 		local label = ui.new(kind or "TextLabel")
 		ui.set(label, "BackgroundTransparency", 1)
