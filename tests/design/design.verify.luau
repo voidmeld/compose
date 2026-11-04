@@ -141,6 +141,53 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("preserves ordered row and event arguments, false values and the current row key", function()
+		local value = Design.document.setContract(Design.document.new("Editable", library, "List"), library, {
+			inputs = { { id = "rows", kind = "readable", type = "list", fields = rowFields } },
+			outputs = { { id = "onChange", args = { "boolean", "string", "string" } } },
+		})
+		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, "n1", "Button")
+		local arguments: { Design.ActionArgument } = { { event = 2 }, { item = "id" }, { event = 1 } }
+		value =
+			Design.document.change(value, library, "n2", "onActivate", { output = "onChange", arguments = arguments })
+		table.clear(built)
+		local received: { { Design.Literal } } = {}
+		Core.withRootOwner(function()
+			Design.render(value, library, {
+				outputs = {
+					onChange = function(args: { Design.Literal })
+						table.insert(received, args)
+					end,
+				},
+			})
+			local row = Core.cell<<Design.Row>> { id = "first", name = "Ada" }
+			assert(built[#built].props.render.template)(row)
+			local callback = assert(built[#built].props.onActivate.callback)
+			callback("new", false)
+			row:set { id = "second", name = "Bo" }
+			callback("edited", true)
+			expect(received):toEqual { { false, "first", "new" }, { true, "second", "edited" } }
+			expect(function()
+				callback "missing"
+			end):toThrow "Missing action argument 1"
+		end)
+		local function rejected(arguments: { Design.ActionArgument }, output: string?)
+			return function()
+				Design.document.change(value, library, "n2", "onActivate", {
+					output = output or "onChange",
+					arguments = arguments,
+				})
+			end
+		end
+		expect(rejected { { event = 1 } }):toThrow "output arity"
+		expect(rejected { { event = 0 }, { item = "id" }, { event = 1 } }):toThrow "positive contiguous"
+		expect(rejected { { event = 2 }, { item = "id" }, { event = 2 } }):toThrow "conflicting types"
+		expect(rejected { { event = 2 }, { item = "missing" }, { event = 1 } }):toThrow "must match output type"
+		expect(rejected { { item = "id" }, { event = 1 }, { event = 2 } }):toThrow "must match output type"
+		expect(rejected { { event = 3 }, { item = "id" }, { item = "name" } }):toThrow "positive contiguous"
+	end)
+
 	it("validates imported interfaces and forwards outputs without owning their readable sources", function()
 		local value = Design.document.setContract(Design.document.new("Action", library, "Button"), library, {
 			inputs = {

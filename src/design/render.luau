@@ -416,6 +416,26 @@ render = function(value: Types.Document, library: Types.Library, context: Contex
 			end
 			return { readable = itemField(row, field) }
 		elseif output then
+			local arguments = property.arguments
+			if arguments then
+				return {
+					callback = function(...: Literal)
+						local handler = outputs[output]
+						if handler then
+							local event = table.pack(...)
+							local args: { Literal } = {}
+							for index, argument in arguments do
+								local current: Literal? = if argument.item
+									then assert(item, "Item arguments need a template"):peek()[argument.item]
+									else event[argument.event]
+								assert(current ~= nil, `Missing action argument {index} for {output}`)
+								args[index] = current
+							end
+							handler(args)
+						end
+					end,
+				}
+			end
 			local passed = property.fields
 			if passed then
 				local row = assert(item, "Item fields need a template")

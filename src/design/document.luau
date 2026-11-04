@@ -241,6 +241,7 @@ end
 local function checkValue(value: Document, field: Types.Field, property: Value, collection: Types.Input?, key: string)
 	assert(present(property) == 1, `{key} holds exactly one literal or binding`)
 	assert(property.path == nil or property.input ~= nil, `{key} paths belong to input bindings`)
+	assert(property.arguments == nil or property.output ~= nil, `{key} action arguments belong to output bindings`)
 	local played = property.play
 	if played ~= nil then
 		assert(sequenceOf(value, played) ~= nil, `{key} plays unknown sequence {played}`)
@@ -401,6 +402,57 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 	elseif output then
 		assert(field.type == "event", `{key} cannot call an output`)
 		assert(hasOutput(value, output), `{key} calls unknown output {output}`)
+		local arguments = property.arguments
+		if arguments then
+			assert(
+				property.args == nil and property.fields == nil,
+				`{key} cannot mix action arguments with args or fields`
+			)
+			local declared: Types.Output? = nil
+			for _, candidate in value.contract.outputs do
+				if candidate.id == output then
+					declared = candidate
+				end
+			end
+			local signature = assert(assert(declared).args, `{key} action arguments need typed output args`)
+			assert(
+				assert(declared).row == nil and #signature == #arguments,
+				`{key} action arguments must match the output arity`
+			)
+			local events: { [number]: Types.InputType } = {}
+			local count = 0
+			for index, argument in arguments do
+				local expected = signature[index]
+				if argument.item then
+					local list = assert(collection, `{key} passes item fields outside a collection template`)
+					local selected: Types.ItemField? = nil
+					for _, candidate in list.fields or {} do
+						if candidate.id == argument.item then
+							selected = candidate
+						end
+					end
+					assert(
+						selected and selected.type == expected,
+						`{key} item argument {argument.item} must match output type {expected}`
+					)
+				else
+					local event = argument.event
+					assert(
+						event >= 1 and event % 1 == 0 and event <= #arguments,
+						`{key} event arguments need positive contiguous positions`
+					)
+					assert(
+						events[event] == nil or events[event] == expected,
+						`{key} event argument {event} has conflicting types`
+					)
+					events[event] = expected
+					count = math.max(count, event)
+				end
+			end
+			for index = 1, count do
+				assert(events[index] ~= nil, `{key} event arguments need positive contiguous positions`)
+			end
+		end
 		local args = property.args
 		if args then
 			for _, argument in args do

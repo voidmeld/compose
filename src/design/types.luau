@@ -6,6 +6,7 @@ type ReadOnlyValue<T> = Core.ReadOnlyValue<T>
 
 export type Literal = string | number | boolean | { [string | number]: Literal }
 export type DatatypeComponent = number | { token: string } | { input: string }
+export type ActionArgument = { item: string, event: nil } | { item: nil, event: number }
 
 export type Value = {
 	literal: Literal?,
@@ -15,6 +16,7 @@ export type Value = {
 	output: string?,
 	args: { Literal }?,
 	fields: { string }?,
+	arguments: { ActionArgument }?,
 	node: string?,
 	nodeFrom: string?,
 	nodes: { string }?,

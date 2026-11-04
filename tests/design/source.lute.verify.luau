@@ -129,6 +129,103 @@ local function canonical(code: string)
 end
 
 describe("Design emitted source", function()
+	it("types and round trips ordered row actions and executes the emitted callbacks", function()
+		local typed = table.clone(library)
+		typed.prelude = {
+			'local Core = require "../src/core"',
+			"type Row = { id: string }",
+			"type Target = { name: string }",
+			"type InputProps = { onChange: (string) -> (), onFocus: () -> (), onMixed: (string, boolean) -> () }",
+			"type Controls = {",
+			"\tInput: (string) -> (InputProps) -> Target,",
+			"\tRows: (",
+			"\t\tstring",
+			"\t) -> ({ from: Core.Source<{ Row }>, key: string, render: (Core.ReadOnlyValue<Row>) -> Target }) -> Target,",
+			"}",
+		}
+		typed.kinds = table.clone(library.kinds)
+		local inputKind: Design.Kind = {
+			fields = { onChange = { type = "event" }, onFocus = { type = "event" }, onMixed = { type = "event" } },
+			children = "none",
+			call = "UI.Input",
+			build = build,
+		}
+		typed.kinds.Input = inputKind
+		local value = Design.document.setContract(Design.document.new("Editable", typed, "Rows"), typed, {
+			inputs = {
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					required = true,
+					fields = { { id = "id", type = "string" } },
+				},
+			},
+			outputs = {
+				{ id = "onChange", args = { "string", "string" } },
+				{ id = "onFocus", args = { "string" } },
+				{ id = "onMixed", args = { "boolean", "string", "string" } },
+			},
+		})
+		value = Design.document.bind(value, typed, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, typed, "n1", "Input")
+		local actions: { [string]: { Design.ActionArgument } } = {
+			onChange = { { item = "id" }, { event = 1 } },
+			onFocus = { { item = "id" } },
+			onMixed = { { event = 2 }, { item = "id" }, { event = 1 } },
+		}
+		for name, arguments in actions do
+			value = Design.document.change(value, typed, "n2", name, { output = name, arguments = arguments })
+		end
+		local code = Design.emit(value, typed)
+		expect(Design.emit(Design.parse(code, typed), typed)):toBe(code)
+		analyze(code)
+		canonical(code)
+		fs.writeStringToFile(".worker-tmp/typed-row.luau", code)
+		fs.writeStringToFile(
+			".worker-tmp/typed-row-run.luau",
+			[[
+--!strict
+local Core = require "../src/core"
+local editable = require "./typed-row"
+local calls = {}
+local row = Core.cell { id = "stable" }
+local input
+editable({
+    Rows = function(name)
+        return function(props)
+            props.render(row)
+            return { name = name }
+        end
+    end,
+    Input = function(name)
+        return function(props)
+            input = props
+            return { name = name }
+        end
+    end,
+}, {
+    rows = Core.cell { { id = "stable" } },
+    onChange = function(key, text) table.insert(calls, { key, text }) end,
+    onFocus = function(key) table.insert(calls, { key }) end,
+    onMixed = function(flag, key, text) table.insert(calls, { flag, key, text }) end,
+})
+assert(input)
+input.onChange("new")
+input.onFocus()
+input.onMixed("changed", false)
+row:set { id = "retained" }
+input.onChange("again")
+assert(calls[1][1] == "stable" and calls[1][2] == "new")
+assert(calls[2][1] == "stable" and #calls[2] == 1)
+assert(calls[3][1] == false and calls[3][2] == "stable" and calls[3][3] == "changed")
+assert(calls[4][1] == "retained" and calls[4][2] == "again")
+]]
+		)
+		local ran = process.run { "lute", "run", ".worker-tmp/typed-row-run.luau" }
+		expect(ran.ok, ran.stdout .. ran.stderr):toBe(true)
+	end)
+
 	it("round trips typed imported components with named slots without expanding their trees", function()
 		local nested = Design.document.setContract(Design.document.new("Reusable", library, "Box"), library, {
 			inputs = {

@@ -672,6 +672,59 @@ function source.parse(code: string, library: Library): Types.Document
 				take "end"
 				local qualifier = string.match(row, "^row_([%w]+)$")
 				return { item = if qualifier then qualifier .. "." .. field else field }, nil
+			elseif string.match(peek(), "^event%d+$") or (peek() == ")" and peek(1) == "if") then
+				local parameters: { [string]: number } = {}
+				local count = 0
+				while peek() ~= ")" do
+					count += 1
+					local parameter = name()
+					assert(parameter == `event{count}`, "Action parameters use ordered event positions")
+					parameters[parameter] = count
+					take ":"
+					local depth = 0
+					repeat
+						local text = take().text
+						if text == "(" or text == "{" or text == "[" or text == "<" then
+							depth += 1
+						elseif text == ")" or text == "}" or text == "]" or text == ">" then
+							depth -= 1
+						end
+					until depth == 0 and (peek() == "," or peek() == ")")
+					if peek() == "," then
+						take ","
+					end
+				end
+				take ")"
+				take "if"
+				take "props"
+				take "."
+				local id = name()
+				take "then"
+				take "props"
+				take "."
+				take(id)
+				take "("
+				local arguments: { Types.ActionArgument } = {}
+				while peek() ~= ")" do
+					if peek() == "current" then
+						take "current"
+						take ":"
+						take "peek"
+						take "("
+						take ")"
+						take "."
+						table.insert(arguments, { item = name() })
+					else
+						table.insert(arguments, { event = assert(parameters[name()], "Unknown action event argument") })
+					end
+					if peek() == "," then
+						take ","
+					end
+				end
+				take ")"
+				take "end"
+				take "end"
+				return { output = id, arguments = arguments }, nil
 			elseif peek() == "current" or peek() == ")" then
 				if peek() == "current" then
 					take "current"

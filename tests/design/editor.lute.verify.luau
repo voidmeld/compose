@@ -10,6 +10,113 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("delivers native text changes and focus with stable row keys in the editor and direct rendering", function()
+		local w = Support.world()
+		local inputKind: Design.Kind = {
+			fields = { onChange = { type = "event" }, onFocus = { type = "event" } },
+			children = "none",
+			call = "UI.Input",
+			build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+				local input = w.runtime.constructors.TextBox {
+					Name = name,
+					Text = "initial",
+					Size = w.values.UDim2.new(0, 120, 0, 36),
+				}
+				w.runtime.connect(input, "Changed", function(property: unknown)
+					if property == "Text" then
+						local text = w.read(input, "Text")
+						assert(type(text) == "string")
+						assert(props.onChange.callback)(text)
+					end
+				end)
+				w.runtime.connect(input, "Focused", function()
+					assert(props.onFocus.callback)()
+				end)
+				return input
+			end,
+		}
+		local rowsKind: Design.Kind = {
+			fields = {},
+			children = "template",
+			call = "UI.Rows",
+			source = "from",
+			key = "key",
+			template = "render",
+			build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+				local key = assert(props.from.key)
+				local render = assert(props.render.template)
+				return w.runtime.constructors.Frame {
+					Name = name,
+					Size = w.values.UDim2.new(0, 400, 0, 240),
+					Compose.keyed {
+						from = assert(props.from.rows),
+						key = function(row: Design.Row): Design.Literal
+							return assert(row[key])
+						end,
+						render = function(row: Compose.ReadOnlyValue<Design.Row>): Compose.Node
+							return Support.node(render(row))
+						end,
+					},
+				}
+			end,
+		}
+		local library = Design.extend(w.library, { kinds = { Input = inputKind, Rows = rowsKind } })
+		local value = Design.document.setContract(Design.document.new("Editable", library, "Rows"), library, {
+			inputs = { { id = "rows", kind = "readable", type = "list", fields = { { id = "id", type = "string" } } } },
+			outputs = { { id = "onChange", args = { "string", "string" } }, { id = "onFocus", args = { "string" } } },
+		})
+		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, "n1", "Input")
+		value.root.children[1].nameField = "id"
+		value = Design.document.change(value, library, "n2", "onChange", {
+			output = "onChange",
+			arguments = { { item = "id" }, { event = 1 } },
+		})
+		value = Design.document.change(value, library, "n2", "onFocus", {
+			output = "onFocus",
+			arguments = { { item = "id" } },
+		})
+		local source = Design.emit(value, library)
+		value = Design.parse(source, library)
+		expect(Design.emit(value, library)):toBe(source)
+		local rows = Compose.cell<<{ Design.Row }>> { { id = "stable" } }
+		local events: { { Design.Literal } } = {}
+		local function receive(args: { Design.Literal })
+			table.insert(events, args)
+		end
+		local bindings: { [string]: Design.Resolved } = { rows = { rows = rows } }
+		local outputs = { onChange = receive, onFocus = receive }
+		local stop, direct = w.runtime.mount(function(): Compose.Node
+			return Support.node(Design.render(value, library, { bindings = bindings, outputs = outputs }))
+		end, w.screen)
+		local editor = DesignEditor.create(library, value, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			bindings = bindings,
+			outputs = outputs,
+			devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] },
+		})
+		editor.execute { action = "Select", ids = {} }
+		editor.execute { action = "AllDevices", enabled = true }
+		w.settle()
+		local function exercise(root: Compose.Node)
+			table.clear(events)
+			local input = w.find(root, "stable")
+			input.Text = "new text"
+			w.fire(input, "Focused")
+			expect(events):toEqual { { "stable", "new text" }, { "stable" } }
+		end
+		exercise(direct)
+		for _, frame in editor.canvas.frames() do
+			exercise(frame.root)
+		end
+		stop()
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it(
 		"populates parent slot samples with live child Designs on every device and shares capture and close controls",
 		function()

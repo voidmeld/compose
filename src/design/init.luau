@@ -14,6 +14,7 @@ local Imports = require "@self/imports"
 export type Literal = Types.Literal
 export type DatatypeComponent = Types.DatatypeComponent
 export type Value = Types.Value
+export type ActionArgument = Types.ActionArgument
 export type Field = Types.Field
 export type FieldType = Types.FieldType
 export type Kind = Types.Kind

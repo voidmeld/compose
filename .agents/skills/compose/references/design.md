@@ -46,6 +46,12 @@ not overwrite the module. Keep every edit inside the shapes below.
   Wrap a non-text field that a text property reads in `tostring(...)`.
 - An output call: `function(...) if props.onThing then props.onThing(...) end end`.
   In a row, pass the row with `props.onThing(current:peek())`.
+  For a typed row action, set `arguments = { { item = "id" }, { event = 1 } }`
+  on its output binding and declare output `args = { "string", "string" }`.
+  It emits `function(event1: string)` calling `props.onThing(current:peek().id, event1)`.
+  A focus action uses only `{ item = "id" }` and emits `function()`.
+  Arguments keep their declared order; event positions must be positive and contiguous.
+  Supply editor/frame `outputs` to receive the same argument arrays as `Design.render`.
 - A repeated list: `from = props.list, key = "id", render = function(current) return <node> end`.
   A list inside a row reads a list field of the row:
   `from = function(use) return use(current).rows end`.

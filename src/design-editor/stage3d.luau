@@ -50,6 +50,7 @@ export type Options = {
 	resolveToken: ((name: string) -> Design.Resolved)?,
 	inputs: { [string]: Design.Literal }?,
 	bindings: { [string]: Design.Resolved }?,
+	outputs: { [string]: (args: { Design.Literal }) -> () }?,
 	slots: { [string]: () -> unknown }?,
 }
 
@@ -370,6 +371,7 @@ return function(ui: UI.UI)
 						end,
 						inputs = options.inputs,
 						bindings = options.bindings,
+						outputs = options.outputs,
 						slots = options.slots,
 						players = function(made: { [string]: Design.Player })
 							players = made

@@ -504,8 +504,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	local function tabs(depth: number): string
 		return string.rep("\t", depth)
 	end
-	local function callback(output: string, list: string, depth: number): string
-		return `function(...)\n{tabs(depth + 1)}if props.{output} then\n{tabs(depth + 2)}props.{output}({list})\n`
+	local function callback(output: string, list: string, depth: number, parameters: string?): string
+		return `function({parameters or "..."})\n{tabs(depth + 1)}if props.{output} then\n{tabs(depth + 2)}props.{output}({list})\n`
 			.. `{tabs(depth + 1)}end\n{tabs(depth)}end`
 	end
 	local function returning(params: string, body: string, depth: number, returnType: string?): string
@@ -801,6 +801,26 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		elseif item then
 			return returning("use", `use(current).{item}`, depth)
 		elseif output then
+			local arguments = property.arguments
+			if arguments then
+				local signature: { Types.InputType } = {}
+				for _, declared in value.contract.outputs do
+					if declared.id == output then
+						signature = assert(declared.args)
+					end
+				end
+				local parameters: { string } = {}
+				local reads: { string } = {}
+				for index, argument in arguments do
+					if argument.item then
+						table.insert(reads, `current:peek().{argument.item}`)
+					else
+						parameters[argument.event] = `event{argument.event}: {scalar(library, signature[index])}`
+						table.insert(reads, `event{argument.event}`)
+					end
+				end
+				return callback(output, table.concat(reads, ", "), depth, table.concat(parameters, ", "))
+			end
 			local args = property.args
 			local passed = property.fields
 			local packed: Record = {}
