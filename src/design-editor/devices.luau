@@ -43,7 +43,7 @@ local function profile(
 		size = table.freeze { X = width, Y = height },
 		aspect = width / height,
 		guiInset = insets(0, 58, 0, 0),
-		topbar = table.freeze { x = 164, y = 0, width = width - 164, height = 58 },
+		topbar = table.freeze { x = 164, y = 0, width = math.max(0, width - 164), height = 58 },
 		notch = notch or insets(0, 0, 0, 0),
 		safeArea = safe or insets(0, 58, 0, 0),
 		inputMode = input,

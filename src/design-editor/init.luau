@@ -26,7 +26,6 @@ export type Workspace = {
 	environment: Environment.Environment,
 	library: Design.Library,
 	root: string,
-	stageSize: UI.Point?,
 	devices: { Editor.Device }?,
 	device: string?,
 	frame: ((Editor.Device, Compose.ReadOnlyValue<number>) -> Canvas.Context)?,
@@ -98,8 +97,6 @@ local function kit(name: string, open: () -> Workspace): Kit
 			local options: Options = {
 				runtime = workspace.runtime,
 				environment = workspace.environment,
-				stageSize = workspace.stageSize
-					or if devices ~= nil and devices[1] ~= nil then devices[1].size else { X = 390, Y = 844 },
 				devices = devices,
 				device = workspace.device,
 				frame = workspace.frame,
