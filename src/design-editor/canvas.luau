@@ -56,13 +56,15 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 	local releases: { () -> () } = {}
 	local connections: { UI.Connection } = {}
 	local active = Compose.cell(1)
-	local device = Compose.formula(function(use: Compose.Use): Devices.Profile
+	local activeDevice = Compose.formula(function(use: Compose.Use): Devices.Profile
 		return assert(options.devices[use(active)])
 	end)
 	local revision = Compose.cell(0)
 	local all = Compose.cell(false)
 	local zoom = Compose.cell(1)
-	local cancelFit = function() end
+	local cancelFit = function(): boolean
+		return false
+	end
 	local function current(): Frame
 		return assert(entries[active:peek()], "Design canvas has no frame")
 	end
@@ -156,7 +158,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 			entry.stage = Stage(ui)(session, body, {
 				readOnly = options.readOnly,
 				library = library,
-				size = device.size,
+				size = { X = device.size.X, Y = device.size.Y },
 				compact = #options.devices > 1,
 				bindings = context.bindings or options.bindings,
 				token = context.token or options.token,
@@ -208,7 +210,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		root = root,
 		zoom = zoom,
 		all = all,
-		device = device,
+		device = activeDevice,
 		current = current,
 		frames = function(): { Frame }
 			local result: { Frame } = {}

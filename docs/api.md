@@ -2199,6 +2199,10 @@ Supplying `bindings`, including an empty table, enables live conditional childre
 
 ## Design editor
 
+### `DesignEditor.devices`
+
+`devices.all` contains the eight immutable device profiles. `devices.get(idOrName)` finds a named profile or matching captured Verify identifier. Each profile supplies its viewport size, aspect, insets, input mode, text scale and field of view. `devices.area(profile, screenInsetsMode)` returns the logical GUI rectangle; `devices.custom(name, size)` creates an explicit custom canvas profile.
+
 ### `DesignEditor.create`
 
 `create(library: Design.Library, initial: Design.Document, parent: Compose.Node, options: Options) -> Editor`

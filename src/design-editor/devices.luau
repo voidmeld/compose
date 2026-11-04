@@ -1,24 +1,24 @@
 --!strict
 
-export type Point = { X: number, Y: number }
-export type Insets = { left: number, top: number, right: number, bottom: number }
-export type Rect = { x: number, y: number, width: number, height: number }
+export type Point = { read X: number, read Y: number }
+export type Insets = { read left: number, read top: number, read right: number, read bottom: number }
+export type Rect = { read x: number, read y: number, read width: number, read height: number }
 export type Input = "touch" | "mouse" | "gamepad" | "VR"
 export type Profile = {
-	id: string,
-	name: string,
-	size: Point,
-	aspect: number,
-	guiInset: Insets,
-	topbar: Rect,
-	notch: Insets,
-	safeArea: Insets,
-	inputMode: Input,
-	textScale: number,
-	tenFoot: boolean,
-	fieldOfView: number,
-	verifyId: string?,
-	orientation: string?,
+	read id: string,
+	read name: string,
+	read size: Point,
+	read aspect: number,
+	read guiInset: Insets,
+	read topbar: Rect,
+	read notch: Insets,
+	read safeArea: Insets,
+	read inputMode: Input,
+	read textScale: number,
+	read tenFoot: boolean,
+	read fieldOfView: number,
+	read verifyId: string?,
+	read orientation: string?,
 }
 
 local function insets(left: number, top: number, right: number, bottom: number): Insets

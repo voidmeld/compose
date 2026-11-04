@@ -165,7 +165,7 @@ local function create(
 		busy = true
 		clear()
 		request.count = if theming then 1 elseif request.count > 1 then request.count else count
-		local submit = if theming then assert(options.theme) else options.submit
+		local submit: (Request) -> Result = if theming then assert(options.theme) else options.submit
 		ui.set(send, "Text", "Working...")
 		ui.set(status, "Text", "Capturing the selected frame")
 		ui.runtime.scheduler(ui.owner).after(0, function()
