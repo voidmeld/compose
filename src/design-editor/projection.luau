@@ -10,9 +10,8 @@ return function(ui: UI.UI, library: Design.Library, device: Devices.Profile): De
 	projected.kinds = {}
 	for name, kind in library.kinds do
 		local copy = table.clone(kind)
-		local build = kind.build
 		copy.build = function(props: { [string]: Design.Resolved }, children: { unknown }, name: string): unknown
-			local source = build(props, children, name)
+			local source = kind.build(props, children, name)
 			if not ui.isA(source, "LayerCollector") then
 				return source
 			end

@@ -24,23 +24,34 @@ local function instance(node: unknown): VerifyRoblox.Instance
 	return VerifyRoblox.assertInstance(node)
 end
 
-local function world(space: string?)
+local function world(space: string?, geometry: boolean?)
 	Compose.__resetForTests()
 	ComposeRoblox.__resetForTests()
 	local roots: { VerifyRoblox.Instance } = {}
 	local styled: ((VerifyRoblox.Instance, string) -> unknown)? = nil
 	local bridge = Lute.fixture.bridge(snapshot, {
 		handlerErrors = "raise",
-		ui = {
-			measureBounds = function(parameters: TextParameters): unknown
-				local width = (utf8.len(parameters.Text) or 0) * parameters.Size * 0.6
-				return values.Vector2.new(width, parameters.Size * 1.2)
-			end,
-		},
+		ui = if geometry
+			then false
+			else {
+				measureBounds = function(parameters: TextParameters): unknown
+					local width = (utf8.len(parameters.Text) or 0) * parameters.Size * 0.6
+					return values.Vector2.new(width, parameters.Size * 1.2)
+				end,
+			},
 		layout = {
 			read = function(object: VerifyRoblox.Instance, property: string): unknown
 				if property == "TextTruncate" then
 					return values.Enum.TextTruncate.None
+				end
+				if geometry then
+					if
+						property == "AutomaticSize"
+						and (object:IsA "TextLabel" or object:IsA "TextButton" or object:IsA "TextBox")
+					then
+						return values.Enum.AutomaticSize.None
+					end
+					return object[property]
 				end
 				return assert(styled)(object, property)
 			end,
@@ -52,7 +63,7 @@ local function world(space: string?)
 			end,
 		},
 	})
-	styled = assert(bridge.ui).styled
+	styled = if bridge.ui then bridge.ui.styled else nil
 	local env = bridge.environment
 	local emulator = Emulator.create(env, bridge.engine)
 	local runtime: Compose.Runtime = Compose.createRuntime(emulator.adapter)
@@ -217,6 +228,15 @@ local function world(space: string?)
 		screen = screen,
 		input = input,
 		service = place.service,
+		devices = function()
+			VerifyRoblox.createPlaceRuntime(place, { root = place.game, scripts = {}, sources = {} }, {
+				aliases = {},
+				cache = VerifyRoblox.createPlaceCache(Lute.fixture.host),
+				host = Lute.fixture.host,
+				methodDoubles = { "GuiService", "StudioDeviceSimulatorService" },
+				client = { name = "Editor", userId = 1, viewport = { x = 1400, y = 900 } },
+			})
+		end,
 		down = down,
 		values = values,
 		environment = environment,

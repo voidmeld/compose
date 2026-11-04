@@ -280,11 +280,7 @@ return function(ui: UI.UI)
 				world,
 				"Raycast",
 				ui.values.vector3(origin.X, origin.Y, origin.Z),
-				ui.values.vector3(
-					direction.X * MAX_DISTANCE * 4,
-					direction.Y * MAX_DISTANCE * 4,
-					direction.Z * MAX_DISTANCE * 4
-				),
+				ui.values.vector3(direction.X * 15000, direction.Y * 15000, direction.Z * 15000),
 				parameters
 			)
 			return if hit then nodeOf(ui.optionalNode(ui.get(hit, "Instance"))) else nil

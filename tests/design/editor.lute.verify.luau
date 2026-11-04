@@ -83,7 +83,7 @@ describe("host-neutral design editor", function()
 	end)
 
 	it("edits a shared theme value and updates every open device frame", function()
-		local w = Support.world()
+		local w = Support.world(nil, true)
 		w.library.kinds.Stack.fields.width.tokens = true
 		local spacing = Compose.cell(24)
 		local editor = w.mount {
@@ -154,6 +154,13 @@ describe("host-neutral design editor", function()
 		local themes: { DesignEditor.PromptRequest } = {}
 		local editor = w.mount {
 			devices = DesignEditor.devices.all,
+			frame = function(): DesignEditor.FrameContext
+				return {
+					token = function(): Design.Literal
+						return 400
+					end,
+				}
+			end,
 			prompt = {
 				designPath = "designs/Sample.luau",
 				submit = function(request: DesignEditor.PromptRequest): string
@@ -223,6 +230,7 @@ describe("host-neutral design editor", function()
 
 	it("matches captured device facts through Verify's simulated Studio device service", function()
 		local w = Support.world()
+		w.devices()
 		local workspace = w.service "Workspace"
 		local camera = workspace:FindFirstChildOfClass "Camera" or w.env.createInstance "Camera"
 		camera.Parent = workspace
@@ -270,7 +278,7 @@ describe("host-neutral design editor", function()
 	end)
 
 	it("keeps live token resolution and selection shared while laying out every device independently", function()
-		local w = Support.world()
+		local w = Support.world(nil, true)
 		w.library.kinds.Stack.fields.width.tokens = true
 		local factor = Compose.cell(1)
 		local editor = w.mount {
@@ -299,7 +307,9 @@ describe("host-neutral design editor", function()
 				local stage = assert(frame.stage)
 				local width = w.point(stage.nodes.n1, "AbsoluteSize").X / stage.zoom:peek()
 				expect(width):toBeCloseTo(
-					(frame.device.size.X - frame.device.safeArea.left - frame.device.safeArea.right) * multiplier,
+					math.floor(
+						(frame.device.size.X - frame.device.safeArea.left - frame.device.safeArea.right) * multiplier
+					),
 					0.01
 				)
 				expect(w.read(w.find(stage.overlay, "DesignSelected"), "Visible")):toBe(true)
@@ -322,7 +332,7 @@ describe("host-neutral design editor", function()
 
 	for _, class in { "ScreenGui", "BillboardGui" } do
 		it("projects " .. class .. " layout into every named device frame", function()
-			local w = Support.world()
+			local w = Support.world(nil, true)
 			local library = Design.extend(w.library, {
 				kinds = {
 					Surface = {

@@ -209,6 +209,7 @@ They also check disposal, failed construction and 3D raycasts.
 Selection tests also check modifier clicks, sibling ranges, marquee intersections at several zoom levels, union outlines, mixed inspector edits, group dragging, wrap menus and hide/lock history. Live Studio still needs checks for modifier chords, pointer capture outside the canvas, context-menu placement, outline and marquee appearance, and source-linked persistence after reopening the plugin.
 
 The fixture provides fixed Unicode text measurements.
+All-device geometry cases omit text measurement and text auto sizing, which Verify cannot resolve at thumbnail scales. They check logical frame bounds and reactive token propagation; native text still requires engine frames.
 Its layout reader ignores text truncation because the simulator does not model it.
 Tests still check design geometry and outline calculations.
 These measurements do not prove native text rendering.
