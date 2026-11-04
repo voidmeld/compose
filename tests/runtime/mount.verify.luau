@@ -21,14 +21,6 @@ describe("mounting", function()
 		dispose()
 		expect(world.host.isAlive(root)):toBe(false)
 		expect(world.host.childrenOf(world.root)):toEqual {}
-	end)
-
-	it("never destroys the mount target", function()
-		local world = Support.world()
-		local dispose = world.runtime.mount(function()
-			return world.create "Frame" {}
-		end, world.root)
-		dispose()
 		expect(world.host.isAlive(world.root)):toBe(true)
 		expect(Compose.custodyOf(world.root)):toBe "borrowed"
 	end)
@@ -56,22 +48,8 @@ describe("mounting", function()
 		expect(world.host.counts().createNode):toBe(0)
 
 		dispose()
-	end)
-
-	it("stops writing properties after disposal", function()
-		local world = Support.world()
-		local name = Compose.cell "first"
-		local dispose = world.runtime.mount(function()
-			return world.create "Frame" {
-				Label = function(use)
-					return use(name)
-				end,
-			}
-		end, world.root)
-
-		dispose()
 		world.host.resetCounts()
-		name:set "second"
+		name:set "third"
 		world.settle()
 		expect(world.host.counts().setProperty):toBe(0)
 	end)

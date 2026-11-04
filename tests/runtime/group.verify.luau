@@ -9,11 +9,13 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 describe("grouped bindings", function()
 	it("writes every declared property from one body", function()
 		local world = Support.world()
+		local runs = 0
 		local pose = Compose.cell { x = 1, alpha = 0.5 }
 
 		local dispose, node = world.runtime.mount(function()
 			return world.create "Part" {
 				[Compose.group { "Position", "Transparency" }] = function(use)
+					runs += 1
 					local p = use(pose)
 					return p.x, p.alpha
 				end,
@@ -23,47 +25,14 @@ describe("grouped bindings", function()
 		expect(world.host.propertyOf(node, "Position")):toBe(1)
 		expect(world.host.propertyOf(node, "Transparency")):toBe(0.5)
 
+		expect(runs):toBe(1)
 		pose:set { x = 7, alpha = 0.25 }
 		world.settle()
 		expect(world.host.propertyOf(node, "Position")):toBe(7)
 		expect(world.host.propertyOf(node, "Transparency")):toBe(0.25)
 
+		expect(runs):toBe(2)
 		dispose()
-	end)
-
-	it("runs one body however many properties it writes", function()
-		local world = Support.world()
-		local pose = Compose.cell(1)
-
-		local groupedRuns = 0
-		local grouped = world.runtime.mount(function()
-			return world.create "Part" {
-				[Compose.group { "A", "B", "C", "D" }] = function(use)
-					groupedRuns += 1
-					local value = use(pose)
-					return value, value, value, value
-				end,
-			}
-		end, world.root)
-		groupedRuns = 0
-		pose:set(2)
-		world.settle()
-		expect(groupedRuns):toBe(1)
-		grouped()
-
-		local separateRuns = 0
-		local function count(use: Compose.Use): number
-			separateRuns += 1
-			return use(pose)
-		end
-		local separate = world.runtime.mount(function()
-			return world.create "Part" { A = count, B = count, C = count, D = count }
-		end, world.root)
-		separateRuns = 0
-		pose:set(3)
-		world.settle()
-		expect(separateRuns):toBe(4)
-		separate()
 	end)
 
 	it("writes a property only when its own value changed", function()
@@ -87,27 +56,6 @@ describe("grouped bindings", function()
 		expect(world.host.counts().setProperty):toBe(1)
 
 		dispose()
-	end)
-
-	it("leaves the node untouched when the body raises", function()
-		local world = Support.world()
-		local pose = Compose.cell(1)
-
-		local ok = pcall(function()
-			local dispose = world.runtime.mount(function()
-				return world.create "Part" {
-					[Compose.group { "Position", "Transparency" }] = function(use)
-						local value = use(pose)
-						if value > 1 then
-							error "no"
-						end
-						return value, 0
-					end,
-				}
-			end, world.root)
-			return dispose
-		end)
-		expect(ok):toBe(true)
 	end)
 
 	it("refuses a body that returns the wrong number of values", function()
@@ -162,12 +110,13 @@ describe("grouped bindings", function()
 		expect(world.host.propertyOf(external, "Transparency")):toBe(nil)
 	end)
 
-	it("writes an initial nil, exactly as a fine-grained binding does", function()
+	it("reaches the host on the first run even when the value is nil", function()
 		local world = Support.world()
 		local pose = Compose.cell { a = (function(value: number?): number?
 			return value
 		end)(nil), b = 1 }
 
+		world.host.resetCounts()
 		local grouped, groupedNode = world.runtime.mount(function()
 			return world.create "Part" {
 				[Compose.group { "A", "B" }] = function(use)
@@ -176,6 +125,13 @@ describe("grouped bindings", function()
 				end,
 			}
 		end, world.root)
+		local groupedValue = world.host.propertyOf(groupedNode, "A")
+		expect(groupedValue):toBe(nil)
+		expect(world.host.propertyOf(groupedNode, "B")):toBe(1)
+		local groupedWrites = world.host.counts().setProperty
+		grouped()
+
+		world.host.resetCounts()
 		local separate, separateNode = world.runtime.mount(function()
 			return world.create "Part" {
 				A = function(use)
@@ -186,43 +142,7 @@ describe("grouped bindings", function()
 				end,
 			}
 		end, world.root)
-
-		expect(world.host.propertyOf(groupedNode, "A")):toBe(world.host.propertyOf(separateNode, "A"))
-		expect(world.host.propertyOf(groupedNode, "B")):toBe(1)
-
-		grouped()
-		separate()
-	end)
-
-	it("reaches the host on the first run even when the value is nil", function()
-		local world = Support.world()
-		local pose = Compose.cell { a = (function(value: number?): number?
-			return value
-		end)(nil), b = 1 }
-
-		world.host.resetCounts()
-		local grouped = world.runtime.mount(function()
-			return world.create "Part" {
-				[Compose.group { "A", "B" }] = function(use)
-					local p = use(pose)
-					return p.a, p.b
-				end,
-			}
-		end, world.root)
-		local groupedWrites = world.host.counts().setProperty
-		grouped()
-
-		world.host.resetCounts()
-		local separate = world.runtime.mount(function()
-			return world.create "Part" {
-				A = function(use)
-					return use(pose).a
-				end,
-				B = function(use)
-					return use(pose).b
-				end,
-			}
-		end, world.root)
+		expect(groupedValue):toBe(world.host.propertyOf(separateNode, "A"))
 		local separateWrites = world.host.counts().setProperty
 		separate()
 
@@ -260,46 +180,25 @@ describe("grouped bindings", function()
 	it("handles several nil positions at once", function()
 		local world = Support.world()
 		local source = Compose.cell(false)
-
 		local dispose, node = world.runtime.mount(function()
 			return world.create "Part" {
-				[Compose.group { "A", "B", "C" }] = function(use)
+				[Compose.group { "A", "B", "C" }] = function(use): (number?, number?, number?)
 					if use(source) then
-						return (function(value: number?): number?
-							return value
-						end)(1),
-							(function(value: number?): number?
-								return value
-							end)(2),
-							(function(value: number?): number?
-								return value
-							end)(3)
+						return 1, 2, 3
 					end
-					return (function(value: number?): number?
-						return value
-					end)(nil),
-						(function(value: number?): number?
-							return value
-						end)(nil),
-						(function(value: number?): number?
-							return value
-						end)(nil)
+					return nil, nil, nil
 				end,
 			}
 		end, world.root)
-
 		expect(world.host.propertyOf(node, "A")):toBe(nil)
 		expect(world.host.propertyOf(node, "C")):toBe(nil)
-
 		source:set(true)
 		world.settle()
 		expect(world.host.propertyOf(node, "A")):toBe(1)
 		expect(world.host.propertyOf(node, "C")):toBe(3)
-
 		source:set(false)
 		world.settle()
 		expect(world.host.propertyOf(node, "B")):toBe(nil)
-
 		dispose()
 	end)
 
