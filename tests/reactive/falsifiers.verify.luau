@@ -89,6 +89,84 @@ describe("falsifiers", function()
 	end)
 
 	describe("coroutine evaluation isolation", function()
+		it("restores a nested formula check after another coroutine evaluates", function(own)
+			Support.world()
+			local source, offset = Compose.cell(1), Compose.cell(10)
+			local suspend = false
+			local inner = Compose.formula(function(use)
+				local value = use(source)
+				if suspend then
+					coroutine.yield()
+				end
+				return value * 2
+			end)
+			local outer = Compose.formula(function(use)
+				return use(inner) + use(offset)
+			end)
+			local independent = Compose.formula(function(use)
+				return use(offset) * 3
+			end)
+			own(function()
+				outer:dispose()
+				inner:dispose()
+				independent:dispose()
+			end)
+			expect(outer:peek()):toBe(12)
+			source:set(2)
+			suspend = true
+			local seen = 0
+			local reading = coroutine.create(function()
+				seen = outer:peek()
+			end)
+			local ok, failure = coroutine.resume(reading)
+			assert(ok, tostring(failure))
+			expect(coroutine.status(reading)):toBe "suspended"
+			expect(independent:peek()):toBe(30)
+			ok, failure = coroutine.resume(reading)
+			assert(ok, tostring(failure))
+			expect(seen):toBe(14)
+			suspend = false
+			source:set(3)
+			offset:set(20)
+			expect(outer:peek()):toBe(26)
+			expect(independent:peek()):toBe(60)
+		end)
+
+		it("keeps outer formula dependencies after catching an inner refresh failure", function(own)
+			local world = Support.world()
+			local source, fallback = Compose.cell(1), Compose.cell(10)
+			local inner = Compose.formula(function(use)
+				local value = use(source)
+				if value < 0 then
+					error("inner refresh failed", 0)
+				end
+				return value * 2
+			end)
+			local outer = Compose.formula(function(use)
+				local ok, value = pcall(function()
+					return use(inner)
+				end)
+				return if ok then value else use(fallback)
+			end)
+			own(function()
+				outer:dispose()
+				inner:dispose()
+			end)
+			source:set(-1)
+			own((world.runtime.mount(function()
+				return world.create "Label" { Value = outer }
+			end, world.root)))
+			local node = world.host.childrenOf(world.root)[1]
+			expect(world.host.propertyOf(node, "Value")):toBe(10)
+			fallback:set(20)
+			expect(world.host.propertyOf(node, "Value")):toBe(20)
+			source:set(3)
+			expect(world.host.propertyOf(node, "Value")):toBe(6)
+			fallback:set(30)
+			expect(world.host.propertyOf(node, "Value")):toBe(6)
+			expect(world.pending()):toBe(0)
+		end)
+
 		it("refuses independent reads and cleanup while another unchecked reactive body is suspended", function()
 			Support.world()
 			local _, owner = domain()
