@@ -19,10 +19,12 @@ end
 describe("timeline", function()
 	it("advances progress from zero to one over its duration", function()
 		local world = Support.world()
+		local before = world.host.counts().frameListeners
 		local dispose = world.runtime.mount(function()
 			local timeline = world.runtime.timeline { duration = 0.5 }
 			expect(timeline.progress:peek()):toBe(0)
 			expect(timeline.moving:peek()):toBe(true)
+			expect(world.host.counts().frameListeners > before):toBe(true)
 
 			step(world, 0.25)
 			expect(timeline.progress:peek()):toBeCloseTo(0.5, 0.05)
@@ -31,19 +33,6 @@ describe("timeline", function()
 			expect(timeline.progress:peek()):toBe(1)
 			expect(timeline.completed:peek()):toBe(true)
 			expect(timeline.moving:peek()):toBe(false)
-			return world.create "Frame" {}
-		end, world.root)
-		dispose()
-	end)
-
-	it("holds no frame subscription once it has finished", function()
-		local world = Support.world()
-		local dispose = world.runtime.mount(function()
-			local before = world.host.counts().frameListeners
-			local timeline = world.runtime.timeline { duration = 0.1 }
-			expect(world.host.counts().frameListeners > before):toBe(true)
-			step(world, 0.2)
-			expect(timeline.completed:peek()):toBe(true)
 			expect(world.host.counts().frameListeners):toBe(before)
 			return world.create "Frame" {}
 		end, world.root)
@@ -130,6 +119,7 @@ describe("timeline", function()
 
 	it("costs one frame subscription however many properties read it", function()
 		local world = Support.world()
+		local runs = 0
 		local Label = world.create "Label"
 		local before = world.host.counts().frameListeners
 
@@ -139,6 +129,7 @@ describe("timeline", function()
 			for index = 1, 50 do
 				children[index] = Label {
 					Alpha = function(use: Compose.Use)
+						runs += 1
 						return math.clamp(use(timeline.progress) - index * 0.01, 0, 1)
 					end,
 				}
@@ -147,18 +138,10 @@ describe("timeline", function()
 		end, world.root)
 
 		expect(world.host.counts().frameListeners):toBe(before + 1)
-		dispose()
-		expect(world.host.counts().frameListeners):toBe(before)
-	end)
-
-	it("releases its frame subscription when its owner goes", function()
-		local world = Support.world()
-		local before = world.host.counts().frameListeners
-		local dispose = world.runtime.mount(function()
-			world.runtime.timeline { duration = 100 }
-			return world.create "Frame" {}
-		end, world.root)
-		expect(world.host.counts().frameListeners > before):toBe(true)
+		runs = 0
+		world.host.step(1 / 60)
+		world.settle()
+		expect(runs):toBe(50)
 		dispose()
 		expect(world.host.counts().frameListeners):toBe(before)
 	end)
@@ -185,32 +168,6 @@ describe("timeline", function()
 			end
 			return world.create "Frame" {}
 		end, world.root)
-		dispose()
-	end)
-
-	it("wakes the graph once a frame however many read it", function()
-		local world = Support.world()
-		local Label = world.create "Label"
-		local runs = 0
-
-		local dispose = world.runtime.mount(function()
-			local timeline = world.runtime.timeline { duration = 1 }
-			local children = table.create(30)
-			for index = 1, 30 do
-				children[index] = Label {
-					Alpha = function(use: Compose.Use)
-						runs += 1
-						return math.clamp(use(timeline.progress) - index * 0.01, 0, 1)
-					end,
-				}
-			end
-			return (world.create "Frame")(children)
-		end, world.root)
-
-		runs = 0
-		world.host.step(1 / 60)
-		world.settle()
-		expect(runs):toBe(30)
 		dispose()
 	end)
 
