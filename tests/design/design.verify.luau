@@ -141,6 +141,334 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("retains enum selected row roots and disposes removed alternatives", function()
+		local world = Support.world()
+		local toy = table.clone(library)
+		toy.keyed = "Toy.keyed"
+		toy.kinds = table.clone(library.kinds)
+		for _, kind in { "Stack", "Label" } do
+			toy.kinds[kind] = table.clone(library.kinds[kind])
+			toy.kinds[kind].build = function(
+				props: { [string]: Design.Resolved },
+				children: { unknown },
+				name: string
+			): unknown
+				local properties: Core.Props = {}
+				for index, child in children do
+					properties[index] = child
+				end
+				local text = props.text
+				if text then
+					properties.Text = text.readable or text.literal
+				end
+				return world.create(if kind == "Stack" then "Frame" else "TextLabel")(name)(properties)
+			end
+		end
+		local fields: { Design.ItemField } = {
+			{ id = "id", type = "string" },
+			{ id = "kind", type = "string", options = { "frame", "notice" } },
+			{ id = "name", type = "string" },
+		}
+		local value = Design.document.setContract(Design.document.new("Rows", toy, "Stack"), toy, {
+			inputs = { { id = "rows", kind = "readable", type = "list", fields = fields } },
+			outputs = {},
+		})
+		value = Design.document.insert(value, toy, "n1", "Stack")
+		value = Design.document.bind(value, toy, "n1", { from = "rows", key = "id" })
+		value = Design.document.setRowVariant(value, toy, "n2", {
+			item = "kind",
+			cases = { { value = "notice", kind = "Label", props = { text = { item = "name" } }, children = {} } },
+		})
+		local rows = Core.cell<<{ Design.Row }>> {
+			{ id = "a", kind = "frame", name = "A" },
+			{ id = "b", kind = "notice", name = "B" },
+		}
+		local dispose, root = world.runtime.mount(function(): Core.Node
+			return Support.node(Design.render(value, toy, { bindings = { rows = { rows = rows } } }))
+		end, world.root)
+		local before = world.host.childrenOf(root)
+		expect(world.host.kindOf(before[1])):toBe "Frame"
+		expect(world.host.kindOf(before[2])):toBe "TextLabel"
+		rows:set { { id = "b", kind = "notice", name = "Updated" } }
+		world.settle()
+		expect(world.host.childrenOf(root)):toEqual { before[2] }
+		expect(world.host.propertyOf(before[2], "Text")):toBe "Updated"
+		expect(world.host.isAlive(before[1])):toBe(false)
+		dispose()
+		expect(world.host.isAlive(before[2])):toBe(false)
+		expect(world.host.liveSubscriptions()):toBe(0)
+		rows:set {}
+		expect(rows:peek()):toEqual {}
+		world.runtime:dispose()
+	end)
+
+	it("selects independent root trees and builds only the selected content", function()
+		local value = Design.document.setContract(Design.document.new("Content", library, "Stack"), library, {
+			inputs = {
+				{
+					id = "presentation",
+					kind = "value",
+					type = "string",
+					required = true,
+					options = { "inline", "panel" },
+				},
+			},
+			outputs = {},
+		})
+		value = Design.document.insert(value, library, "n1", "Stack")
+		value = Design.document.insert(value, library, "n2", "Label")
+		value.nextId = 5
+		value = Design.document.setRootVariant(value, library, {
+			input = "presentation",
+			value = "panel",
+			kind = "Panel",
+			props = { title = { literal = "Separate" } },
+			children = {
+				{ id = "n4", kind = "Label", name = "Plain", props = { text = { literal = "Plain" } }, children = {} },
+			},
+		})
+		table.clear(built)
+		local inline = builtNode(Design.render(value, library, { inputs = { presentation = "inline" } }))
+		expect(inline.children[1].kind):toBe "Stack"
+		expect(#built):toBe(3)
+		table.clear(built)
+		local panel = builtNode(Design.render(value, library, { inputs = { presentation = "panel" } }))
+		expect(#built):toBe(1)
+		expect(panel.name):toBe(inline.name)
+		local plain = builtNode(assert(panel.props.content.slot)())
+		expect(plain.name):toBe "Plain"
+		expect(plain.props.text.literal):toBe "Plain"
+		expect(#built):toBe(2)
+		local copy = Design.document.copy(value)
+		assert(copy.rootVariant).children = {}
+		expect(#assert(assert(value.rootVariant).children)):toBe(1)
+	end)
+
+	it("selects row kinds props and trees from a declared enum field", function()
+		local fields: { Design.ItemField } = {
+			{ id = "id", type = "string" },
+			{ id = "kind", type = "string", options = { "button", "notice", "stack" } },
+			{ id = "name", type = "string" },
+		}
+		local value = Design.document.setContract(Design.document.new("Rows", library, "List"), library, {
+			inputs = { { id = "rows", kind = "readable", type = "list", fields = fields, required = true } },
+			outputs = {},
+		})
+		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, "n1", "Button")
+		value = Design.document.change(value, library, "n2", "label", { item = "name" })
+		value.nextId = 4
+		value = Design.document.setRowVariant(value, library, "n2", {
+			item = "kind",
+			cases = {
+				{ value = "notice", kind = "Label", props = { text = { item = "name" } }, children = {} },
+				{
+					value = "stack",
+					kind = "Stack",
+					props = {},
+					children = { { id = "n3", kind = "Label", name = "Nested", props = {}, children = {} } },
+				},
+			},
+		})
+		local list = builtNode(Design.render(value, library))
+		local render = assert(list.props.render.template)
+		for _, kind in { "button", "notice", "stack" } do
+			local item = Core.cell<<Design.Row>> { id = kind, kind = kind, name = "Prepared" }
+			local row = builtNode(render(item))
+			expect(row.name):toBe "Button"
+			if kind == "button" then
+				expect(row.kind):toBe "Button"
+				expect(assert(row.props.label.readable):peek()):toBe "Prepared"
+			elseif kind == "notice" then
+				expect(row.kind):toBe "Label"
+				expect(assert(row.props.text.readable):peek()):toBe "Prepared"
+			else
+				expect(row.kind):toBe "Stack"
+				expect(row.children[1].name):toBe "Nested"
+			end
+		end
+		for _, rowFunctions in { false, true } do
+			local options: Design.EmitOptions = { rowFunctions = rowFunctions }
+			local code = Design.emit(value, library, options)
+			expect(Design.parse(code, library)):toEqual(value)
+			expect(Design.emit(Design.parse(code, library), library, options)):toBe(code)
+		end
+		local invalid = Design.document.copy(value)
+		assert(invalid.root.children[1].rowVariant).item = "name"
+		expect(function()
+			Design.document.validate(invalid, library)
+		end):toThrow "text enum"
+		invalid = Design.document.copy(value)
+		assert(invalid.root.children[1].rowVariant).cases[1].value = "unknown"
+		expect(function()
+			Design.document.validate(invalid, library)
+		end):toThrow "enum options"
+	end)
+
+	it("updates prepared input and item tags and releases their watches", function()
+		local toy = table.clone(library)
+		local applied: { { string } } = {}
+		toy.tags = {
+			call = "UI.tag",
+			apply = function(_node: unknown, tags: { string })
+				table.insert(applied, tags)
+			end,
+		}
+		local value = Design.document.setContract(Design.document.new("Tags", toy, "List"), toy, {
+			inputs = {
+				{ id = "paint", kind = "readable", type = "string", required = true },
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					fields = { { id = "id", type = "string" }, { id = "paint", type = "list", luauType = "Tags" } },
+				},
+			},
+			outputs = {},
+		})
+		value = Design.document.bind(value, toy, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, toy, "n1", "Label")
+		value = Design.document.bindTags(value, toy, "n1", { input = "paint" })
+		value = Design.document.bindTags(value, toy, "n2", { item = "paint" })
+		local owner = Core.createOwner()
+		local paint = Core.cell<<Design.Literal?>> "compact"
+		local item = Core.cell<<Design.Row>> { id = "a", paint = { "incoming", "accent" } }
+		Core.withOwner(owner, function()
+			local list = builtNode(Design.render(value, toy, { bindings = { paint = { readable = paint } } }))
+			assert(list.props.render.template)(item)
+		end)
+		expect(applied):toEqual { { "compact" }, { "incoming", "accent" } }
+		paint:set "wide"
+		item:set { id = "a", paint = { "outgoing" } }
+		expect(applied[3]):toEqual { "wide" }
+		expect(applied[4]):toEqual { "outgoing" }
+		Core.owner.dispose(owner)
+		paint:set "borrowed"
+		item:set { id = "a", paint = {} }
+		expect(#applied):toBe(4)
+		expect(paint:peek()):toBe "borrowed"
+		local invalid = Design.document.copy(value)
+		invalid.root.tagBinding = { item = "paint" }
+		expect(function()
+			Design.document.validate(invalid, toy)
+		end):toThrow()
+	end)
+
+	it("keeps slot factories in layout order and unwinds failed slot builds", function()
+		local world = Support.world()
+		local toy = table.clone(library)
+		toy.kinds = table.clone(library.kinds)
+		toy.kinds.Stack = table.clone(library.kinds.Stack)
+		toy.kinds.Stack.build = function(
+			_props: { [string]: Design.Resolved },
+			children: { unknown },
+			name: string
+		): unknown
+			local props: Core.Props = {}
+			for index, child in children do
+				props[index] = child
+			end
+			return world.create "Frame"(name)(props)
+		end
+		local value = Design.document.setContract(Design.document.new("Layout", toy, "Stack"), toy, {
+			inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+			outputs = {},
+		})
+		value = Design.document.insert(value, toy, "n1", "Stack")
+		value = Design.document.rename(value, toy, "n2", "Before")
+		value = Design.document.insertSlot(value, toy, "n1", "body")
+		value = Design.document.insert(value, toy, "n1", "Stack")
+		value = Design.document.rename(value, toy, "n4", "After")
+		local calls, cleanups = 0, 0
+		local fail = false
+		local context: Design.RenderContext = {
+			slots = {
+				body = function(): unknown
+					calls += 1
+					Core.cleanup(function()
+						cleanups += 1
+					end)
+					local node = world.create "Frame" "Supplied" {}
+					if fail then
+						error("slot failure", 0)
+					end
+					return node
+				end,
+			},
+		}
+		local dispose, root = world.runtime.mount(function(): Core.Node
+			return Support.node(Design.render(value, toy, context))
+		end, world.root)
+		expect(calls):toBe(1)
+		local children = world.host.childrenOf(root)
+		expect(#children):toBe(3)
+		expect(world.host.nameOf(children[1])):toBe "Before"
+		expect(world.host.nameOf(children[2])):toBe "Supplied"
+		expect(world.host.nameOf(children[3])):toBe "After"
+		dispose()
+		expect(cleanups):toBe(1)
+		value.contract.inputs[1].required = nil
+		local disposeOptional, optional = world.runtime.mount(function(): Core.Node
+			return Support.node(Design.render(value, toy))
+		end, world.root)
+		expect(#world.host.childrenOf(optional)):toBe(2)
+		expect(calls):toBe(1)
+		disposeOptional()
+		value.contract.inputs[1].required = true
+		expect(function()
+			world.runtime.mount(function(): Core.Node
+				return Support.node(Design.render(value, toy))
+			end, world.root)
+		end):toThrow "required slot"
+		expect(world.host.liveNodes()):toBe(1)
+		fail = true
+		expect(function()
+			world.runtime.mount(function(): Core.Node
+				return Support.node(Design.render(value, toy, context))
+			end, world.root)
+		end):toThrow "slot failure"
+		expect(calls):toBe(2)
+		expect(cleanups):toBe(2)
+		expect(world.host.liveNodes()):toBe(1)
+		world.runtime:dispose()
+	end)
+
+	it("reads inputs inside page records beside lazy document content", function()
+		local toy = table.clone(library)
+		toy.kinds = table.clone(library.kinds)
+		local bookKind: Design.Kind =
+			{ fields = { pages = { type = "value" } }, children = "none", call = "UI.Book", build = builder "Book" }
+		toy.kinds.Book = bookKind
+		local value = Design.document.setContract(Design.document.new("Pages", toy, "Book"), toy, {
+			inputs = { { id = "title", kind = "value", type = "string", required = true } },
+			outputs = {},
+		})
+		value.root.children = { { id = "n2", kind = "Label", name = "Content", props = {}, children = {} } }
+		value.nextId = 3
+		value = Design.document.change(
+			value,
+			toy,
+			"n1",
+			"pages",
+			{ literal = { { label = { ["$input"] = "title" }, content = { ["$template"] = "n2" } } } }
+		)
+		table.clear(built)
+		local book = builtNode(Design.render(value, toy, { inputs = { title = "Prepared title" } }))
+		expect(#built):toBe(1)
+		local pages = Support.record(book.props.pages.value)
+		local page = Support.record(pages[1])
+		expect(page.label):toBe "Prepared title"
+		local content = page.content
+		assert(type(content) == "function")
+		expect(builtNode(Support.invoke(content)).name):toBe "Content"
+		expect(#built):toBe(2)
+		local invalid = Design.document.copy(value)
+		invalid.root.props.pages = { literal = { { label = { ["$input"] = "unknown" } } } }
+		expect(function()
+			Design.document.validate(invalid, toy)
+		end):toThrow "record input"
+	end)
+
 	it("retains nested keyed row ownership when an outer row replaces its qualified list", function()
 		local world = Support.world()
 		local toy = table.clone(library)

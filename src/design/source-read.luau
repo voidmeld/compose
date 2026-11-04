@@ -223,11 +223,20 @@ end
 local function fieldsFrom(entry: Record): { Types.ItemField }
 	local declared: { Types.ItemField } = {}
 	for _, field in list(entry, "fields") do
+		local options: { string }? = nil
+		if type(field.options) == "table" then
+			options = {}
+			for _, option in field.options do
+				assert(type(option) == "string", "Item options are text")
+				table.insert(options, option)
+			end
+		end
 		table.insert(declared, {
 			id = text(field, "id"),
 			type = inputType(text(field, "type")),
 			luauType = if field.luauType ~= nil then text(field, "luauType") else nil,
 			fields = if field.fields ~= nil then fieldsFrom(field) else nil,
+			options = options,
 		})
 	end
 	return declared
@@ -309,6 +318,14 @@ local function editorNodes(node: Node, path: string, visit: (Node, string) -> ()
 			editorNodes(child, `{path}/{index}`, visit)
 		end
 	end
+	if node.rowVariant then
+		for _, case in node.rowVariant.cases do
+			local wrapper = table.clone(node)
+			wrapper.rowVariant = nil
+			wrapper.props, wrapper.children = case.props, case.children
+			editorNodes(wrapper, `{path}/variant/{case.value}`, visit)
+		end
+	end
 end
 
 function source.parse(code: string, library: Library): Types.Document
@@ -362,10 +379,61 @@ function source.parse(code: string, library: Library): Types.Document
 	local typedCells: { [string]: { Node } } = {}
 	local namedRefs: { [string]: string } = {}
 	local node: () -> Node
+	local function rowBody(): Node
+		local cases: { Types.VariantCase } = {}
+		local alternatives: { Node } = {}
+		local item: string? = nil
+		while peek() == "if" do
+			take "if"
+			take "current"
+			take ":"
+			take "peek"
+			take "("
+			take ")"
+			take "."
+			local field = name()
+			assert(item == nil or item == field, "Row variants read one enum field")
+			item = field
+			take "="
+			take "="
+			local selected = take()
+			assert(selected.kind == "string", "Row variants select text enum options")
+			take "then"
+			take "return"
+			local alternative = node()
+			table.insert(alternatives, alternative)
+			table.insert(cases, {
+				value = unquote(selected.text),
+				kind = alternative.kind,
+				props = alternative.props,
+				children = alternative.children,
+			})
+			take "end"
+		end
+		take "return"
+		local root = node()
+		if item then
+			for _, alternative in alternatives do
+				assert(
+					(root.nameInput ~= nil or alternative.name == root.name)
+						and alternative.nameInput == root.nameInput
+						and alternative.nameField == root.nameField,
+					"Row variants keep one direct root name"
+				)
+			end
+			root.rowVariant = { item = item, cases = cases }
+		end
+		return root
+	end
 	local pendingCells: { Node } = {}
 	local function plain(): Literal
 		local value, after = readLiteral(tokens, at, function(position: number): (Literal, number)
 			at = position
+			if peek() == "props" then
+				take "props"
+				take "."
+				return { ["$input"] = name() }, at
+			end
 			if peek() ~= "function" then
 				local rowName = name()
 				local cell = assert(rows[rowName], `{rowName} is not a row function`)
@@ -612,6 +680,11 @@ function source.parse(code: string, library: Library): Types.Document
 				take ")"
 				annotation "return"
 				rowAlias()
+				if peek() == "if" then
+					local child = rowBody()
+					take "end"
+					return nil, child
+				end
 				take "return"
 				local next = tokens[at]
 				if next ~= nil and (next.text == "{" or next.kind == "string" or next.kind == "number") then
@@ -755,6 +828,31 @@ function source.parse(code: string, library: Library): Types.Document
 	local captured: { [string]: string } = {}
 	local sharedContent: Node? = nil
 	node = function(): Node
+		if peek() == "props" or peek() == "if" then
+			local optional = peek() == "if"
+			local condition: string? = nil
+			if optional then
+				take "if"
+				take "props"
+				take "."
+				condition = name()
+				take "then"
+			end
+			take "props"
+			take "."
+			local input = name()
+			take "("
+			take ")"
+			if optional then
+				assert(condition == input, "Optional slot children test their own factory")
+				take "else"
+				take "nil"
+			end
+			local child: Node =
+				{ id = `n{nextId}`, kind = "$slot", name = input, slot = input, props = {}, children = {} }
+			nextId += 1
+			return child
+		end
 		if peek() == "rootContent" then
 			take "rootContent"
 			take "("
@@ -779,8 +877,13 @@ function source.parse(code: string, library: Library): Types.Document
 			take "("
 			local inner = node()
 			take ","
-			local raw = plain()
+			local binding = assert(value(), "Tags need a value")
 			take ")"
+			if binding.input or binding.item then
+				inner.tagBinding = binding
+				return inner
+			end
+			local raw = binding.literal
 			local tags: { string } = {}
 			if type(raw) == "table" then
 				for _, tag in raw do
@@ -950,8 +1053,7 @@ function source.parse(code: string, library: Library): Types.Document
 						take "current"
 						annotation ")"
 						take ")"
-						take "return"
-						row = node()
+						row = rowBody()
 						take "end"
 					else
 						local rowName = name()
@@ -1015,7 +1117,9 @@ function source.parse(code: string, library: Library): Types.Document
 			take "then"
 			take "return"
 			alternative = node()
-			variant = { input = input, value = selected, kind = alternative.kind, props = alternative.props }
+			local found: Types.RootVariant =
+				{ input = input, value = selected, kind = alternative.kind, props = alternative.props }
+			variant = found
 			take "end"
 		elseif peek() == "local" and peek(1) == "function" and peek(2) == "rootContent" then
 			take "local"
@@ -1074,8 +1178,7 @@ function source.parse(code: string, library: Library): Types.Document
 			annotation ")"
 			take ")"
 			rowAlias()
-			take "return"
-			rows[rowName] = node()
+			rows[rowName] = rowBody()
 			take "end"
 		else
 			take()
@@ -1083,21 +1186,24 @@ function source.parse(code: string, library: Library): Types.Document
 	end
 	take "return"
 	local root = node()
-	if sharedContent then
-		assert(variant ~= nil and alternative ~= nil, "Shared root content needs an alternative")
+	if alternative and variant then
 		assert(
 			(root.nameInput ~= nil or alternative.name == root.name)
 				and alternative.nameInput == root.nameInput
 				and alternative.nameField == root.nameField,
 			"Root variants keep one direct root name"
 		)
-		assert(
-			#root.children == 1
-				and root.children[1] == sharedContent
-				and #alternative.children == 1
-				and alternative.children[1] == sharedContent,
-			"Root variants share their content"
-		)
+		if sharedContent then
+			assert(
+				#root.children == 1
+					and root.children[1] == sharedContent
+					and #alternative.children == 1
+					and alternative.children[1] == sharedContent,
+				"Root variants share their content"
+			)
+		else
+			variant.children = alternative.children
+		end
 	end
 	take "end"
 	local function remap(current: Node)
@@ -1119,14 +1225,22 @@ function source.parse(code: string, library: Library): Types.Document
 		for _, child in current.children do
 			remap(child)
 		end
+		if current.rowVariant then
+			for _, case in current.rowVariant.cases do
+				local wrapper = table.clone(current)
+				wrapper.rowVariant = nil
+				wrapper.props, wrapper.children = case.props, case.children
+				remap(wrapper)
+			end
+		end
 	end
 	remap(root)
 	if alternative then
 		local wrapper = table.clone(alternative)
-		wrapper.children = {}
+		wrapper.children = if sharedContent then {} else alternative.children
 		remap(wrapper)
 	end
-	if variant then
+	do
 		local ids: { [string]: string } = {}
 		nextId = 1
 		local function renumber(current: Node)
@@ -1137,8 +1251,20 @@ function source.parse(code: string, library: Library): Types.Document
 			for _, child in current.children do
 				renumber(child)
 			end
+			if current.rowVariant then
+				for _, case in current.rowVariant.cases do
+					for _, child in case.children do
+						renumber(child)
+					end
+				end
+			end
 		end
 		renumber(root)
+		if variant and variant.children then
+			for _, child in variant.children do
+				renumber(child)
+			end
+		end
 		local function markers(current: Literal)
 			if type(current) ~= "table" then
 				return
@@ -1171,17 +1297,28 @@ function source.parse(code: string, library: Library): Types.Document
 			for _, child in current.children do
 				bindings(child)
 			end
+			if current.rowVariant then
+				for _, case in current.rowVariant.cases do
+					local wrapper = table.clone(current)
+					wrapper.rowVariant = nil
+					wrapper.props, wrapper.children = case.props, case.children
+					bindings(wrapper)
+				end
+			end
 		end
 		bindings(root)
-		local wrapper = table.clone(root)
-		wrapper.children = {}
-		wrapper.props = variant.props
-		bindings(wrapper)
+		if variant then
+			local wrapper = table.clone(root)
+			wrapper.rowVariant = nil
+			wrapper.props = variant.props
+			wrapper.children = variant.children or {}
+			bindings(wrapper)
+		end
 	end
 	local editor = header.editor
 	if editor ~= nil then
 		assert(type(editor) == "table", "The editor header is a table")
-		editorNodes(root, "root", function(node: Node, path: string)
+		local function restore(node: Node, path: string)
 			local flags = editor[path]
 			if flags ~= nil then
 				assert(type(flags) == "table", "Editor flags are a table")
@@ -1193,7 +1330,14 @@ function source.parse(code: string, library: Library): Types.Document
 				node.hidden = if flags.hidden == true then true else nil
 				node.locked = if flags.locked == true then true else nil
 			end
-		end)
+		end
+		editorNodes(root, "root", restore)
+		if variant and variant.children then
+			local wrapper = table.clone(root)
+			wrapper.rowVariant = nil
+			wrapper.props, wrapper.children = variant.props, variant.children
+			editorNodes(wrapper, "alternative", restore)
+		end
 	end
 	return Document.validate({
 		schema = "compose-design/1",
