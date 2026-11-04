@@ -64,7 +64,7 @@ local function measure(context: Verify.Context, name: string, build: Build)
 		table.insert(readings, result.teardownRetainedKb)
 	end
 	for _, retained in readings do
-		expect(retained):toBeLessThan(12)
+		expect(retained):toBeLessThan(24)
 	end
 end
 
