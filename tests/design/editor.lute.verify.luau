@@ -10,6 +10,161 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("matches captured device facts through Verify's simulated Studio device service", function()
+		local w = Support.world()
+		local camera = w.env.createInstance "Camera"
+		camera.Parent = w.service "Workspace"
+		local profiles = table.clone(DesignEditor.devices.all)
+		table.insert(profiles, DesignEditor.devices.get "generic_handheld_720")
+		local simulator = w.service "StudioDeviceSimulatorService"
+		for _, device in profiles do
+			if device.verifyId == nil then
+				continue
+			end
+			w.environment.invoke(simulator, "SetDeviceAsync", device.verifyId)
+			if device.orientation then
+				w.environment.invoke(
+					simulator,
+					"SetOrientationAsync",
+					w.values.Enum.ScreenOrientation[device.orientation]
+				)
+			end
+			expect(w.point(camera, "ViewportSize")):toEqual(device.size)
+			local first, last = w.environment.invoke(w.service "GuiService", "GetGuiInset")
+			expect(device.guiInset):toEqual {
+				left = w.number(first, "X"),
+				top = w.number(first, "Y"),
+				right = w.number(last, "X"),
+				bottom = w.number(last, "Y"),
+			}
+			local expected = if device.inputMode == "touch"
+				then "Touch"
+				elseif device.inputMode == "mouse" then "KeyboardAndMouse"
+				else "Gamepad"
+			expect(tostring(w.read(w.input, "PreferredInput"))):toBe("Enum.PreferredInput." .. expected)
+		end
+		w.close()
+	end)
+
+	it("keeps live token resolution and selection shared while laying out every device independently", function()
+		local w = Support.world()
+		w.library.kinds.Stack.fields.width.tokens = true
+		local factor = Compose.cell(1)
+		local editor = w.mount {
+			devices = DesignEditor.devices.all,
+			frame = function(device: DesignEditor.Device): DesignEditor.FrameContext
+				return {
+					resolveToken = function(): Design.Resolved
+						return {
+							readable = Compose.formula(function(use: Compose.Use): Design.Literal
+								return (device.size.X - device.safeArea.left - device.safeArea.right) * use(factor)
+							end),
+						}
+					end,
+				}
+			end,
+		}
+		editor.session.select "n1"
+		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		editor.canvas.showAll(true)
+		w.settle()
+		expect(#editor.canvas.frames()):toBe(#DesignEditor.devices.all)
+		for _, multiplier in { 1, 0.5 } do
+			factor:set(multiplier)
+			w.settle()
+			for _, frame in editor.canvas.frames() do
+				local stage = assert(frame.stage)
+				local width = w.point(stage.nodes.n1, "AbsoluteSize").X / stage.zoom:peek()
+				expect(width):toBeCloseTo(
+					(frame.device.size.X - frame.device.safeArea.left - frame.device.safeArea.right) * multiplier,
+					0.01
+				)
+				expect(w.read(w.find(stage.overlay, "DesignSelected"), "Visible")):toBe(true)
+			end
+		end
+		editor.canvas.select "tv"
+		editor.canvas.showAll(false)
+		w.settle()
+		for _, frame in editor.canvas.frames() do
+			expect(w.read(frame.root, "Visible")):toBe(frame.device.id == "tv")
+		end
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	for _, class in { "ScreenGui", "BillboardGui" } do
+		it("projects " .. class .. " layout into every named device frame", function()
+			local w = Support.world()
+			local library = Design.extend(w.library, {
+				kinds = {
+					Surface = {
+						fields = {},
+						children = "list",
+						call = "UI.Surface",
+						build = function(
+							_props: { [string]: Design.Resolved },
+							children: { unknown },
+							name: string
+						): unknown
+							local props: Compose.Props = { Name = name, Enabled = true }
+							if class == "BillboardGui" then
+								props.Size = w.values.UDim2.new(0, 300, 0, 120)
+							else
+								props.ScreenInsets = w.values.Enum.ScreenInsets.CoreUISafeInsets
+							end
+							for index, child in children do
+								props[index] = Support.node(child)
+							end
+							return w.runtime.constructors[class](props)
+						end,
+					},
+				},
+			})
+			local document = Design.document.new("Surface", library, "Surface")
+			local editor = DesignEditor.create(library, document, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				devices = DesignEditor.devices.all,
+			})
+			editor.canvas.showAll(true)
+			w.settle()
+			for _, frame in editor.canvas.frames() do
+				local stage = assert(frame.stage)
+				local root = stage.nodes.n1
+				local size = w.point(root, "AbsoluteSize")
+				local expected = DesignEditor.devices.area(frame.device, "CoreUISafeInsets")
+				expect(size.X / stage.zoom:peek()):toBeCloseTo(
+					if class == "ScreenGui" then expected.width else 300,
+					0.01
+				)
+				expect(size.Y / stage.zoom:peek()):toBeCloseTo(
+					if class == "ScreenGui" then expected.height else 120,
+					0.01
+				)
+			end
+			editor.dispose()
+			w.close()
+		end)
+	end
+
+	it("preserves device aspect and camera picking across the 3D grid", function()
+		local w = Support.world "3d"
+		local editor = w.mount { devices = DesignEditor.devices.all }
+		editor.canvas.showAll(true)
+		w.settle()
+		editor.canvas.fit()
+		for _, frame in editor.canvas.frames() do
+			local scene = assert(frame.scene)
+			local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
+			expect(size.X / size.Y):toBeCloseTo(frame.device.aspect, 0.001)
+			expect(w.number(scene.camera, "FieldOfView")):toBe(frame.device.fieldOfView)
+			expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
+		end
+		editor.dispose()
+		w.close()
+	end)
+
 	it("remembers readable chrome sizing across edits and reopening without changing the canvas", function()
 		local w = Support.world()
 		local editor = w.mount()
@@ -913,10 +1068,10 @@ describe("host-neutral design editor", function()
 		stage.zoomTo(100)
 		expect(stage.zoom:peek()):toBe(8)
 		stage.zoomTo(0)
-		expect(stage.zoom:peek()):toBe(0.1)
+		expect(stage.zoom:peek()):toBe(0.02)
 		stage.fit()
 		expect(stage.zoom:peek()):toBeCloseTo(
-			math.clamp(math.min((size.X - 96) / 480, (size.Y - 120) / 320), 0.1, 1),
+			math.clamp(math.min((size.X - 96) / 480, (size.Y - 120) / 320), 0.02, 1),
 			0.001
 		)
 		position = w.read(holder, "Position")

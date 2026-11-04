@@ -6,6 +6,8 @@ local Math = require "./math"
 local Compose = require "../core"
 local Design = require "../design"
 
+local MAX_DISTANCE = 5000
+
 export type Scene = {
 	viewport: Compose.Node,
 	world: Compose.Node,
@@ -277,7 +279,11 @@ return function(ui: UI.UI)
 				world,
 				"Raycast",
 				ui.values.vector3(origin.X, origin.Y, origin.Z),
-				ui.values.vector3(direction.X * 2000, direction.Y * 2000, direction.Z * 2000),
+				ui.values.vector3(
+					direction.X * MAX_DISTANCE * 4,
+					direction.Y * MAX_DISTANCE * 4,
+					direction.Z * MAX_DISTANCE * 4
+				),
 				parameters
 			)
 			return if hit then nodeOf(ui.optionalNode(ui.get(hit, "Instance"))) else nil
@@ -393,12 +399,13 @@ return function(ui: UI.UI)
 				local viewportSize = ui.xy(viewport, "AbsoluteSize")
 				local vertical = math.rad(ui.number(camera, "FieldOfView")) / 2
 				local horizontal = math.atan(math.tan(vertical) * viewportSize.X / math.max(1, viewportSize.Y))
-				distance = math.clamp(Math.magnitude(size) * 0.575 / math.sin(math.min(vertical, horizontal)), 6, 5000)
+				distance =
+					math.clamp(Math.magnitude(size) * 0.575 / math.sin(math.min(vertical, horizontal)), 6, MAX_DISTANCE)
 			end
 			aim()
 		end
 		local function zoomTo(scale: number, _around: UI.Point?)
-			distance = math.clamp(28 / math.max(scale, 0.05), 2, 600)
+			distance = math.clamp(28 / math.max(scale, 0.005), 2, MAX_DISTANCE)
 			aim()
 		end
 		local UserInputService = ui.service "UserInputService"
@@ -547,13 +554,15 @@ return function(ui: UI.UI)
 					end
 				end
 			elseif ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseWheel") then
-				distance = math.clamp(distance * (if ui.xyz(input, "Position").Z > 0 then 0.87 else 1 / 0.87), 2, 600)
+				distance =
+					math.clamp(distance * (if ui.xyz(input, "Position").Z > 0 then 0.87 else 1 / 0.87), 2, MAX_DISTANCE)
 				aim()
 			end
 		end))
 		connect(ui.connect(viewport, "InputChanged", function(input: Compose.Node)
 			if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseWheel") then
-				distance = math.clamp(distance * (if ui.xyz(input, "Position").Z > 0 then 0.87 else 1 / 0.87), 2, 600)
+				distance =
+					math.clamp(distance * (if ui.xyz(input, "Position").Z > 0 then 0.87 else 1 / 0.87), 2, MAX_DISTANCE)
 				aim()
 			elseif
 				ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseMovement") and drag == nil

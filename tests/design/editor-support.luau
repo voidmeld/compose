@@ -212,6 +212,7 @@ local function world(space: string?)
 		env = env,
 		screen = screen,
 		input = input,
+		service = place.service,
 		down = down,
 		values = values,
 		environment = environment,
