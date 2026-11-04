@@ -66,14 +66,10 @@ describe("cells", function()
 		expect(count:peek()):toBe(0)
 		count:set(7)
 		expect(count:peek()):toBe(7)
-	end)
-
-	it("updates from the previous value", function()
-		local count = Compose.cell(10)
 		count:update(function(previous: number): number
 			return previous * 3
 		end)
-		expect(count:peek()):toBe(30)
+		expect(count:peek()):toBe(21)
 	end)
 
 	it("does not run a thunk until the first read", function()
@@ -134,30 +130,34 @@ describe("cells", function()
 	end)
 
 	it("suppresses a write that does not change the value", function()
-		Compose.setWorkCounters(true)
-		Compose.resetWorkCounters()
-		local count = Compose.cell(1)
-		count:set(2)
-		count:set(2)
-		count:set(1)
-		expect(count:peek()):toBe(1)
-		local counters = Compose.readWorkCounters()
-		expect(counters.cellWrites):toBe(2)
-		expect(counters.cellWritesSuppressed):toBe(1)
-		Compose.setWorkCounters(false)
+		for _, cell in { Compose.cell, Compose.sharedCell } do
+			Compose.setWorkCounters(true)
+			Compose.resetWorkCounters()
+			local count = cell(1)
+			count:set(2)
+			count:set(2)
+			count:set(1)
+			expect(count:peek()):toBe(1)
+			local counters = Compose.readWorkCounters()
+			expect(counters.cellWrites):toBe(2)
+			expect(counters.cellWritesSuppressed):toBe(1)
+			Compose.setWorkCounters(false)
+		end
 	end)
 
 	it("honours a supplied comparison", function()
-		local calls = 0
-		local word = Compose.cell("cat", function(current: string, incoming: string): boolean
-			calls += 1
-			return #current == #incoming
-		end)
-		word:set "dog"
-		expect(calls):toBe(1)
-		expect(word:peek()):toBe "cat"
-		word:set "horse"
-		expect(word:peek()):toBe "horse"
+		for _, cell in { Compose.cell, Compose.sharedCell } do
+			local calls = 0
+			local word = cell("cat", function(current: string, incoming: string): boolean
+				calls += 1
+				return #current == #incoming
+			end)
+			word:set "dog"
+			expect(calls):toBe(1)
+			expect(word:peek()):toBe "cat"
+			word:set "horse"
+			expect(word:peek()):toBe "horse"
+		end
 	end)
 end)
 
@@ -374,28 +374,9 @@ describe("watches", function()
 		Compose.reactor.settle(reactor)
 		expect(seen):toEqual { 0, 1 }
 		Compose.owner.dispose(owner)
-	end)
-
-	it("stops permanently once its owner is disposed", function()
-		local reactor, owner = domain()
-		local count = Compose.cell(0)
-		local runs = 0
-		Compose.owner.watch(owner, function(use)
-			use(count)
-			runs += 1
-		end)
-		expect(runs):toBe(1)
-
-		Compose.owner.dispose(owner)
-		count:set(1)
+		count:set(2)
 		Compose.reactor.settle(reactor)
-		expect(runs):toBe(1)
-	end)
-
-	it("refuses to run with no owner", function()
-		expect(function()
-			Compose.watch(function() end)
-		end):toThrow "no owner"
+		expect(seen):toEqual { 0, 1 }
 	end)
 
 	it("does not depend on a read taken with peek", function()

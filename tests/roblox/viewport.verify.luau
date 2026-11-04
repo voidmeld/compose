@@ -46,24 +46,16 @@ describe("ComposeRoblox.usableViewportSize", function()
 end)
 
 describe("ComposeRoblox.createViewport", function()
-	it("reads the camera's ViewportSize as { width, height }", function()
+	it("updates reactively when ViewportSize changes", function()
 		local emulator, camera = emulatorWithCamera()
+		local before = emulator.environment.liveConnections()
 		local reactor = Compose.reactor.create()
 		local owner = Compose.createOwner(reactor)
 		local viewport = Compose.withOwner(owner, function()
 			return ComposeRoblox.createViewport(camera, emulator.engine)
 		end)
 		expect(viewport:peek()):toEqual { width = 1280, height = 720 }
-		Compose.owner.dispose(owner)
-	end)
-
-	it("updates reactively when ViewportSize changes", function()
-		local emulator, camera = emulatorWithCamera()
-		local reactor = Compose.reactor.create()
-		local owner = Compose.createOwner(reactor)
-		local viewport = Compose.withOwner(owner, function()
-			return ComposeRoblox.createViewport(camera, emulator.engine)
-		end)
+		expect(emulator.environment.liveConnections()):toBe(before + 1)
 		local seen: { { width: number, height: number } } = {}
 		Compose.withOwner(owner, function()
 			Compose.watch(function(use)
@@ -78,21 +70,9 @@ describe("ComposeRoblox.createViewport", function()
 			{ width = 390, height = 844 },
 		}
 		Compose.owner.dispose(owner)
-	end)
-
-	it("disconnects on owner disposal and stops updating", function()
-		local emulator, camera = emulatorWithCamera()
-		local before = emulator.environment.liveConnections()
-		local reactor = Compose.reactor.create()
-		local owner = Compose.createOwner(reactor)
-		local viewport = Compose.withOwner(owner, function()
-			return ComposeRoblox.createViewport(camera, emulator.engine)
-		end)
-		expect(emulator.environment.liveConnections()):toBe(before + 1)
-		Compose.owner.dispose(owner)
 		expect(emulator.environment.liveConnections()):toBe(before)
 		camera.ViewportSize = { X = 1, Y = 1 }
-		expect(viewport:peek()):toEqual { width = 1280, height = 720 }
+		expect(viewport:peek()):toEqual { width = 390, height = 844 }
 	end)
 
 	it("holds the last known size when the camera reports one below the threshold", function()

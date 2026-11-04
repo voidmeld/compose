@@ -49,27 +49,6 @@ describe("pool identity contract", function()
 		Compose.owner.dispose(owner)
 	end)
 
-	it("reuses rather than reallocating across many cycles", function()
-		local owner = Compose.createOwner()
-		local pool, createdCount = makePool(owner, 1)
-
-		local seen: { [Resource]: true } = {}
-		for _ = 1, 50 do
-			local lease = pool.acquire()
-			seen[lease.value] = true
-			lease.release()
-		end
-
-		expect(createdCount()):toBe(1)
-		local distinct = 0
-		for _ in seen do
-			distinct += 1
-		end
-		expect(distinct):toBe(1)
-		expect(pool.idle()):toBe(1)
-		Compose.owner.dispose(owner)
-	end)
-
 	it("destroys idle and leased resources exactly once on owner disposal", function()
 		local owner = Compose.createOwner()
 		local pool, createdCount, destroyed = makePool(owner, 4)
@@ -124,13 +103,18 @@ describe("pool identity contract", function()
 
 	it("keeps a double release from freeing a slot twice", function()
 		local owner = Compose.createOwner()
-		local pool = makePool(owner, 2)
-
+		local pool, createdCount = makePool(owner, 2)
 		local lease = pool.acquire()
+		local value = lease.value
 		lease.release()
-		lease.release()
-		expect(pool.idle()):toBe(1)
-
+		for _ = 1, 50 do
+			local reused = pool.acquire()
+			expect(reused.value):toBe(value)
+			reused.release()
+			reused.release()
+			expect(pool.idle()):toBe(1)
+		end
+		expect(createdCount()):toBe(1)
 		local first = pool.acquire()
 		local second = pool.acquire()
 		expect(first.value ~= second.value):toBe(true)

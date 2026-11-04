@@ -43,9 +43,12 @@ describe("setYieldChecking", function()
 			coroutine.yield()
 			return 1
 		end)
-		expect(function()
+		local ok, err = pcall(function()
 			lazy:peek()
-		end):toThrow "yielded"
+		end)
+		expect(ok):toBe(false)
+		expect(tostring(err)):toContain "yielded"
+		expect(tostring(err)):toContain "async resource"
 	end)
 
 	it("reports an update function that yields", function()
@@ -109,19 +112,6 @@ describe("setYieldChecking", function()
 			source:set(1)
 		end):toThrow "yielded"
 		Compose.owner.dispose(owner)
-	end)
-
-	it("names the remedy: work that waits belongs in an async resource", function()
-		Compose.setYieldChecking(true)
-		local lazy = Compose.lazyCell(function(): number
-			coroutine.yield()
-			return 1
-		end)
-		local ok, err = pcall(function()
-			lazy:peek()
-		end)
-		expect(ok):toBe(false)
-		expect(tostring(err)):toContain "async resource"
 	end)
 
 	it("leaves the graph healthy after reporting a yield", function()

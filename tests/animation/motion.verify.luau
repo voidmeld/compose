@@ -241,52 +241,6 @@ describe("easing", function()
 	end)
 end)
 
-describe("spring integrator", function()
-	Test.beforeEach(function()
-		Compose.__resetForTests()
-	end)
-
-	it("converges on its target", function()
-		local state = Compose.createSpringState({ 0 }, 1)
-		for _ = 1, 600 do
-			Compose.stepSpring(state, { 10 }, FRAME, 0.5, 1)
-		end
-		expect(state.position[1]):toBeCloseTo(10, 1e-3)
-	end)
-
-	it("produces the same curve at any frame rate", function()
-		local coarse = Compose.createSpringState({ 0 }, 1)
-		local fine = Compose.createSpringState({ 0 }, 1)
-		for _ = 1, 30 do
-			Compose.stepSpring(coarse, { 1 }, 1 / 30, 0.5, 0.6)
-		end
-		for _ = 1, 240 do
-			Compose.stepSpring(fine, { 1 }, 1 / 240, 0.5, 0.6)
-		end
-		expect(coarse.position[1]):toBeCloseTo(fine.position[1], 1e-3)
-	end)
-
-	it("overshoots when underdamped and does not when critically damped", function()
-		local bouncy = Compose.createSpringState({ 0 }, 1)
-		local firm = Compose.createSpringState({ 0 }, 1)
-		local bouncyPeak, firmPeak = 0, 0
-		for _ = 1, 120 do
-			Compose.stepSpring(bouncy, { 1 }, FRAME, 0.3, 0.3)
-			Compose.stepSpring(firm, { 1 }, FRAME, 0.3, 1)
-			bouncyPeak = math.max(bouncyPeak, bouncy.position[1])
-			firmPeak = math.max(firmPeak, firm.position[1])
-		end
-		expect(bouncyPeak):toBeGreaterThan(1)
-		expect(firmPeak):toBeLessThanOrEqual(1.0001)
-	end)
-
-	it("clamps a huge delta instead of simulating it", function()
-		local state = Compose.createSpringState({ 0 }, 1)
-		local simulated = Compose.stepSpring(state, { 1 }, 30, 0.5, 1)
-		expect(simulated):toBeLessThanOrEqual(0.25)
-	end)
-end)
-
 describe("runtime.spring", function()
 	it("releases an idle spring before its first movement without claiming borrowed state", function()
 		local world = Support.world()
@@ -327,8 +281,10 @@ describe("runtime.spring", function()
 		end, world.root)
 
 		expect(world.host.propertyOf(node, "Position")):toBe(0)
+		expect(world.host.counts().frameListeners):toBe(0)
 		target:set(100)
 		world.settle()
+		expect(world.host.counts().frameListeners):toBe(1)
 
 		stepFor(world, 0.05)
 		local partway = numberValue(world.host.propertyOf(node, "Position"))
@@ -337,32 +293,7 @@ describe("runtime.spring", function()
 
 		stepFor(world, 2)
 		expect(world.host.propertyOf(node, "Position")):toBe(100)
-		dispose()
-	end)
-
-	it("stops consuming frames once it settles", function()
-		local world = Support.world()
-		local target = Compose.cell(0)
-		local dispose = world.runtime.mount(function()
-			local smooth = world.runtime.spring(function(use)
-				return use(target)
-			end, { period = 0.1 })
-			return world.create "Frame" {
-				Position = function(use)
-					return use(smooth)
-				end,
-			}
-		end, world.root)
-
 		expect(world.host.counts().frameListeners):toBe(0)
-
-		target:set(50)
-		world.settle()
-		expect(world.host.counts().frameListeners):toBe(1)
-
-		stepFor(world, 2)
-		expect(world.host.counts().frameListeners):toBe(0)
-
 		world.host.resetCounts()
 		stepFor(world, 1)
 		expect(world.host.counts().setProperty):toBe(0)

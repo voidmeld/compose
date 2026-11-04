@@ -261,11 +261,15 @@ describe("OrderedCollection", function()
 			local dispose, root = mount { count = 100, mode = "windowed", viewport = viewport }
 			expect(idsOf(root)):toEqual { "r1", "r2", "r3" }
 
+			local second = world.host.childrenOf(root)[2]
+			expect(world.host.propertyOf(second, "Offset")):toBe(10)
 			world.host.resetCounts()
 			viewport:set { offset = 10, size = 30 }
 			world.settle()
 
 			expect(idsOf(root)):toEqual { "r2", "r3", "r4" }
+			expect(world.host.childrenOf(root)[1]):toBe(second)
+			expect(world.host.propertyOf(second, "Offset")):toBe(10)
 			expect(world.host.counts().createNode):toBe(1)
 			expect(world.host.counts().destroyNode):toBe(1)
 			dispose()
@@ -279,22 +283,6 @@ describe("OrderedCollection", function()
 			viewport:set { offset = 0, size = 30 }
 			world.settle()
 			expect(world.host.counts().createNode):toBe(0)
-			dispose()
-		end)
-
-		it("moves a retained row's placement without rebuilding it", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local dispose, root = mount { count = 100, mode = "windowed", viewport = viewport }
-			local second = world.host.childrenOf(root)[2]
-			expect(world.host.propertyOf(second, "Offset")):toBe(10)
-
-			viewport:set { offset = 10, size = 30 }
-			world.settle()
-
-			local first = world.host.childrenOf(root)[1]
-			expect(first):toBe(second)
-			expect(world.host.propertyOf(first, "Offset")):toBe(10)
 			dispose()
 		end)
 
@@ -687,45 +675,8 @@ describe("OrderedCollection", function()
 
 	describe("measurement", function()
 		it("moves the retained range when a row turns out to be taller", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local initialMeasured: { [string]: number } = {}
-			local measured = Compose.cell(initialMeasured)
-			local dispose, root = mount { count = 50, mode = "windowed", viewport = viewport, measured = measured }
-			expect(idsOf(root)):toEqual { "r1", "r2", "r3" }
-
-			measured:set { r1 = 25 }
-			world.settle()
-
-			expect(idsOf(root)):toEqual { "r1", "r2" }
-			dispose()
-		end)
-
-		it("reports how many rows have a real measurement", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local initialMeasured: { [string]: number } = {}
-			local measured = Compose.cell(initialMeasured)
-			local status = Support.orderedStatus()
-			local dispose = mount {
-				count = 50,
-				mode = "windowed",
-				viewport = viewport,
-				measured = measured,
-				status = status,
-			}
-			expect(status:peek().measured):toBe(0)
-			measured:set { r1 = 25, r2 = 30 }
-			world.settle()
-			expect(status:peek().measured):toBe(2)
-			dispose()
-		end)
-
-		it("forgets a removed measurement and restores the estimate", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local initialMeasured: { [string]: number } = { r1 = 25 }
-			local measured = Compose.cell(initialMeasured)
+			local viewport = Compose.cell<<Compose.OrderedCollectionViewport>> { offset = 0, size = 30 }
+			local measured = Compose.cell<<{ [string]: number }>> {}
 			local status = Support.orderedStatus()
 			local dispose, root = mount {
 				count = 50,
@@ -734,12 +685,17 @@ describe("OrderedCollection", function()
 				measured = measured,
 				status = status,
 			}
+			expect(idsOf(root)):toEqual { "r1", "r2", "r3" }
+			expect(status:peek().measured):toBe(0)
+			measured:set { r1 = 25 }
+			world.settle()
 			expect(idsOf(root)):toEqual { "r1", "r2" }
 			expect(status:peek().measured):toBe(1)
-
+			measured:set { r1 = 25, r2 = 30 }
+			world.settle()
+			expect(status:peek().measured):toBe(2)
 			measured:set {}
 			world.settle()
-
 			expect(idsOf(root)):toEqual { "r1", "r2", "r3" }
 			expect(status:peek().measured):toBe(0)
 			dispose()
@@ -781,42 +737,11 @@ describe("OrderedCollection", function()
 
 			expect(status:peek().following):toBe(true)
 			expect(status:peek().desiredOffset):toBe(170)
-			dispose()
-		end)
-
-		it("lets go once the reader scrolls away from the end", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 70, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local status = Support.orderedStatus()
-			local dispose = mount {
-				count = 10,
-				mode = "windowed",
-				viewport = viewport,
-				follow = "end",
-				status = status,
-			}
-			expect(status:peek().following):toBe(true)
-
 			viewport:set { offset = 10, size = 30 }
 			world.settle()
 			expect(status:peek().following):toBe(false)
 			expect(status:peek().desiredOffset):toBeNil()
-			dispose()
-		end)
-
-		it("re-engages when the reader returns to the end", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 10, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local status = Support.orderedStatus()
-			local dispose = mount {
-				count = 10,
-				mode = "windowed",
-				viewport = viewport,
-				follow = "end",
-				status = status,
-			}
-			expect(status:peek().following):toBe(false)
-			viewport:set { offset = 70, size = 30 }
+			viewport:set { offset = 170, size = 30 }
 			world.settle()
 			expect(status:peek().following):toBe(true)
 			dispose()
@@ -1035,15 +960,6 @@ describe("OrderedCollection", function()
 	end)
 
 	describe("lifetime", function()
-		it("returns every node when the collection goes", function()
-			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
-			local viewport = Compose.cell(initialViewport)
-			local before = world.host.liveNodes()
-			local dispose = mount { count = 200, mode = "windowed", viewport = viewport }
-			dispose()
-			expect(world.host.liveNodes()):toBe(before)
-		end)
-
 		it("returns every node after a long scroll, not only the last window", function()
 			local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
 			local viewport = Compose.cell(initialViewport)

@@ -70,16 +70,6 @@ describe("the Attributes key", function()
 		expect(world.host.attributeOf(node, "Tier")):toBe(3)
 		expect(world.host.attributeOf(node, "Label")):toBe "elite"
 		expect(world.host.attributeOf(node, "Hidden")):toBe(false)
-		dispose()
-	end)
-
-	it("does not write the attributes as a property", function()
-		local world = Support.world()
-
-		local dispose, node = world.runtime.mount(function()
-			return world.create "Frame" { Attributes = { Tier = 3 } }
-		end, world.root)
-
 		expect(world.host.propertyOf(node, "Attributes")):toBe(nil)
 		dispose()
 	end)
@@ -99,55 +89,31 @@ describe("the Attributes key", function()
 
 	it("updates a reactive attribute when its source changes", function()
 		local world = Support.world()
-		local tier = Compose.cell(1)
-
-		local dispose, node = world.runtime.mount(function()
-			return world.create "Frame" { Attributes = { Tier = tier } }
-		end, world.root)
-
-		expect(world.host.attributeOf(node, "Tier")):toBe(1)
-		tier:set(7)
-		world.settle()
-		expect(world.host.attributeOf(node, "Tier")):toBe(7)
-		dispose()
-	end)
-
-	it("binds a body that reads through use", function()
-		local world = Support.world()
-		local tier = Compose.cell(1)
-
+		local tier = Compose.cell<<number?>>(1)
 		local dispose, node = world.runtime.mount(function()
 			return world.create "Frame" {
 				Attributes = {
+					Tier = tier,
 					Rank = function(use)
-						return ("rank-%d"):format(use(tier))
+						return ("rank-%d"):format(use(tier) or 0)
 					end,
 				},
 			}
 		end, world.root)
-
+		expect(world.host.attributeOf(node, "Tier")):toBe(1)
 		expect(world.host.attributeOf(node, "Rank")):toBe "rank-1"
-		tier:set(2)
+		tier:set(7)
 		world.settle()
-		expect(world.host.attributeOf(node, "Rank")):toBe "rank-2"
-		dispose()
-	end)
-
-	it("clears an attribute when the value becomes nil", function()
-		local world = Support.world()
-		local tier = Compose.cell((function(value: number?): number?
-			return value
-		end)(3))
-
-		local dispose, node = world.runtime.mount(function()
-			return world.create "Frame" { Attributes = { Tier = tier } }
-		end, world.root)
-
-		expect(world.host.attributeOf(node, "Tier")):toBe(3)
+		expect(world.host.attributeOf(node, "Tier")):toBe(7)
+		expect(world.host.attributeOf(node, "Rank")):toBe "rank-7"
 		tier:set(nil)
 		world.settle()
 		expect(world.host.attributeOf(node, "Tier")):toBe(nil)
 		dispose()
+		world.host.resetCounts()
+		tier:set(9)
+		world.settle()
+		expect(world.host.counts().setAttribute):toBe(0)
 	end)
 
 	it("writes a function value under static rather than calling it", function()
@@ -184,22 +150,6 @@ describe("the Attributes key", function()
 		dispose()
 	end)
 
-	it("stops updating once the subtree is disposed", function()
-		local world = Support.world()
-		local tier = Compose.cell(1)
-
-		local dispose, node = world.runtime.mount(function()
-			return world.create "Frame" { Attributes = { Tier = tier } }
-		end, world.root)
-
-		expect(world.host.attributeOf(node, "Tier")):toBe(1)
-		dispose()
-		world.host.resetCounts()
-		tier:set(9)
-		world.settle()
-		expect(world.host.counts().setAttribute):toBe(0)
-	end)
-
 	it("clears its attributes off a borrowed node on disposal", function()
 		local world = Support.world()
 		local external = world.host.makeNode "External"
@@ -215,38 +165,17 @@ describe("the Attributes key", function()
 	end)
 
 	it("refuses a non-string attribute name", function()
-		local world = Support.world()
-
-		local report = parse(function()
-			world.runtime.mount(function()
-				return world.create "Frame" { Attributes = { [1] = "one" } }
-			end, world.root)
-		end)
-		expect(report.code):toBe "props/attribute-name"
-		expect(report.fields.key):toBe "Attributes"
-	end)
-
-	it("refuses an empty attribute name", function()
-		local world = Support.world()
-
-		expect(function()
-			world.runtime.mount(function()
-				return world.create "Frame" { Attributes = { [""] = "nameless" } }
-			end, world.root)
-		end):toThrow "props/attribute-name"
-	end)
-
-	it("names every attribute before it writes any of them", function()
-		local world = Support.world()
-		world.host.resetCounts()
-
-		pcall(function()
-			world.runtime.mount(function()
-				return world.create "Frame" { Attributes = { Tier = 3, [1] = "one" } }
-			end, world.root)
-		end)
-
-		expect(world.host.counts().setAttribute):toBe(0)
+		for _, key in { 1, "" } do
+			local world = Support.world()
+			local report = parse(function()
+				world.runtime.mount(function()
+					return world.create "Frame" { Attributes = { Tier = 3, [key] = "invalid" } }
+				end, world.root)
+			end)
+			expect(report.code):toBe "props/attribute-name"
+			expect(report.fields.key):toBe "Attributes"
+			expect(world.host.counts().setAttribute):toBe(0)
+		end
 	end)
 
 	it("refuses something that is not a table", function()

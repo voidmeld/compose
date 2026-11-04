@@ -7,34 +7,6 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("lifetime handles", function()
-	it("hands back a function from every path that returns a handle", function()
-		local world = Support.world()
-		world.host.declareEvent("Frame", "Activated")
-
-		local stopWatch: () -> (), disconnect: () -> ()
-		local dispose = world.runtime.mount(function()
-			local frame = world.create "Frame" {}
-			stopWatch = world.runtime:watch(function() end)
-			disconnect = world.runtime.connect(frame, "Activated", function() end)
-			return frame
-		end, world.root)
-
-		expect(typeof(dispose)):toBe "function"
-		expect(typeof(stopWatch)):toBe "function"
-		expect(typeof(disconnect)):toBe "function"
-
-		local resource = Compose.createSharedResource(function()
-			return 1, nil
-		end)
-		local _value, release = resource.detached()
-		expect(typeof(release)):toBe "function"
-
-		release()
-		disconnect()
-		stopWatch()
-		dispose()
-	end)
-
 	it("is safe to call twice, every one of them", function()
 		local world = Support.world()
 		world.host.declareEvent("Frame", "Activated")
@@ -67,26 +39,6 @@ describe("lifetime handles", function()
 
 		expect(torn):toBe(2)
 		expect(world.host.liveNodes()):toBe(1)
-	end)
-
-	it("does nothing when called after its owner already released it", function()
-		local world = Support.world()
-		world.host.declareEvent("Frame", "Activated")
-		local fired = 0
-
-		local disconnect: () -> ()
-		local dispose = world.runtime.mount(function()
-			local frame = world.create "Frame" {}
-			disconnect = world.runtime.connect(frame, "Activated", function()
-				fired += 1
-			end)
-			return frame
-		end, world.root)
-
-		dispose()
-		local ok = pcall(disconnect)
-		expect(ok):toBe(true)
-		expect(fired):toBe(0)
 	end)
 
 	it("releases what a partially constructed subtree already took", function()
@@ -122,10 +74,11 @@ describe("lifetime handles", function()
 		local world = Support.world()
 		world.host.declareEvent("Frame", "Activated")
 		local fired = 0
+		local disconnect: () -> ()
 
 		local dispose, node = world.runtime.mount(function()
 			local frame = world.create "Frame" {}
-			world.runtime.connect(frame, "Activated", function()
+			disconnect = world.runtime.connect(frame, "Activated", function()
 				fired += 1
 			end)
 			return frame
@@ -135,6 +88,9 @@ describe("lifetime handles", function()
 		expect(fired):toBe(1)
 
 		dispose()
+		local ok = pcall(disconnect)
+		expect(ok):toBe(true)
+		expect(fired):toBe(1)
 		expect(world.host.isAlive(node)):toBe(false)
 		expect(world.host.liveNodes()):toBe(1)
 	end)

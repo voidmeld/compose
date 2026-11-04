@@ -12,18 +12,6 @@ end
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("a node under a string key", function()
-	it("refuses a node given as a property value", function()
-		local world = Support.world()
-
-		expect(function()
-			world.runtime.mount(function()
-				return world.create "Frame" {
-					Corner = world.create "UICorner" {},
-				}
-			end, world.root)
-		end):toThrow "props/child-under-string-key"
-	end)
-
 	it("names the key and the fix", function()
 		local world = Support.world()
 
@@ -39,24 +27,10 @@ describe("a node under a string key", function()
 		local parsed = Compose.parseDiagnostic(tostring(err))
 		expect(parsed ~= nil):toBe(true)
 		local report = required(parsed)
+		expect(world.host.counts().setProperty):toBe(0)
 		expect(report.code):toBe "props/child-under-string-key"
 		expect(report.fields.key):toBe "Corner"
 		expect(string.find(report.fields.fix, "positional child", 1, true) ~= nil):toBe(true)
-	end)
-
-	it("raises before any write reaches the host", function()
-		local world = Support.world()
-		world.host.resetCounts()
-
-		pcall(function()
-			world.runtime.mount(function()
-				return world.create "Frame" {
-					Corner = world.create "UICorner" {},
-				}
-			end, world.root)
-		end)
-
-		expect(world.host.counts().setProperty):toBe(0)
 	end)
 
 	it("refuses a node under a wrapped property key", function()

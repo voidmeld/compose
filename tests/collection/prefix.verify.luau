@@ -16,16 +16,11 @@ describe("prefix tree", function()
 
 	it("finds the row covering an offset, and where it starts", function()
 		local tree = Prefix.create(8, 10)
-		local row, at = Prefix.find(tree, 45)
-		expect(row):toBe(5)
-		expect(at):toBe(40)
-	end)
-
-	it("treats an offset on a boundary as belonging to the row it opens", function()
-		local tree = Prefix.create(8, 10)
-		local row, at = Prefix.find(tree, 40)
-		expect(row):toBe(5)
-		expect(at):toBe(40)
+		for _, offset in { 40, 45 } do
+			local row, at = Prefix.find(tree, offset)
+			expect(row):toBe(5)
+			expect(at):toBe(40)
+		end
 	end)
 
 	it("moves every later row when one is corrected", function()

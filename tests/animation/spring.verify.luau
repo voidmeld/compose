@@ -5,10 +5,10 @@ local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
-local function driven(start: number, target: number, deltas: { number }): Compose.SpringState
+local function driven(start: number, target: number, deltas: { number }, damping: number?): Compose.SpringState
 	local state = Compose.createSpringState({ start }, 1)
 	for _, delta in deltas do
-		Compose.stepSpring(state, { target }, delta, 0.5, 1)
+		Compose.stepSpring(state, { target }, delta, 0.5, damping or 1)
 	end
 	return state
 end
@@ -51,10 +51,12 @@ describe("spring integrator", function()
 
 	describe("stepSpring", function()
 		it("produces the same curve at 30fps and at 240fps", function()
-			local coarse = driven(0, 1, table.create(30, 1 / 30))
-			local fine = driven(0, 1, table.create(240, 1 / 240))
-			expect(coarse.position[1]):toBeCloseTo(fine.position[1], 1e-3)
-			expect(coarse.velocity[1]):toBeCloseTo(fine.velocity[1], 1e-3)
+			for _, damping in { 1, 0.6 } do
+				local coarse = driven(0, 1, table.create(30, 1 / 30), damping)
+				local fine = driven(0, 1, table.create(240, 1 / 240), damping)
+				expect(coarse.position[1]):toBeCloseTo(fine.position[1], 1e-3)
+				expect(coarse.velocity[1]):toBeCloseTo(fine.velocity[1], 1e-3)
+			end
 		end)
 
 		it("survives a hitch without diverging from the steady run", function()
@@ -72,6 +74,7 @@ describe("spring integrator", function()
 			local afterStall = Compose.createSpringState({ 0 }, 1)
 			local simulated = Compose.stepSpring(afterStall, { 1 }, 10, 0.5, 1)
 			expect(simulated):toBeLessThan(10)
+			expect(simulated):toBeLessThanOrEqual(0.25)
 
 			local afterLongerStall = Compose.createSpringState({ 0 }, 1)
 			expect(Compose.stepSpring(afterLongerStall, { 1 }, 100, 0.5, 1)):toBe(simulated)

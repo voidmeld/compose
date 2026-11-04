@@ -13,7 +13,9 @@ end
 
 describe("shared cells", function()
 	it("reads, writes, and updates exactly as a cell does", function()
+		expect(Compose.currentOwner()):toBe(nil)
 		local presses = Compose.sharedCell(0)
+		expect(Compose.isValue(presses)):toBe(true)
 		expect(presses:peek()):toBe(0)
 		presses:set(7)
 		expect(presses:peek()):toBe(7)
@@ -21,53 +23,6 @@ describe("shared cells", function()
 			return previous * 3
 		end)
 		expect(presses:peek()):toBe(21)
-	end)
-
-	it("needs no owner, which is the point", function()
-		expect(Compose.currentOwner()):toBe(nil)
-		local anchor = Compose.sharedCell "north"
-		anchor:set "south"
-		expect(anchor:peek()):toBe "south"
-	end)
-
-	it("is registered as a readable like a cell", function()
-		expect(Compose.isValue(Compose.sharedCell(0))):toBe(true)
-	end)
-
-	it("uses the explicit lazy constructor for shared deferred state", function()
-		local ran = 0
-		local lazy = Compose.lazyCell(function(): number
-			ran += 1
-			return 42
-		end)
-		expect(ran):toBe(0)
-		expect(lazy:peek()):toBe(42)
-		expect(ran):toBe(1)
-		expect(lazy:peek()):toBe(42)
-		expect(ran):toBe(1)
-	end)
-
-	it("suppresses equal writes with the same counters a cell bumps", function()
-		Compose.setWorkCounters(true)
-		Compose.resetWorkCounters()
-		local count = Compose.sharedCell(1)
-		count:set(2)
-		count:set(2)
-		count:set(1)
-		local counters = Compose.readWorkCounters()
-		expect(counters.cellWrites):toBe(2)
-		expect(counters.cellWritesSuppressed):toBe(1)
-		Compose.setWorkCounters(false)
-	end)
-
-	it("honours a supplied comparison", function()
-		local word = Compose.sharedCell("cat", function(current: string, incoming: string): boolean
-			return #current == #incoming
-		end)
-		word:set "dog"
-		expect(word:peek()):toBe "cat"
-		word:set "horse"
-		expect(word:peek()):toBe "horse"
 	end)
 
 	it("takes the single-subscriber fast path: one watch, one write, one immediate run", function()

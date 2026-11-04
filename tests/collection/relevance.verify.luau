@@ -15,32 +15,32 @@ local TIERS: { Relevance.Tier } = {
 describe("relevance", function()
 	describe("tier selection", function()
 		it("picks the nearest tier that contains the entity", function()
-			expect(Relevance.tierFor(10, nil, TIERS, 0, 1)):toBe(1)
-			expect(Relevance.tierFor(120, nil, TIERS, 0, 1)):toBe(2)
-			expect(Relevance.tierFor(250, nil, TIERS, 0, 1)):toBe(3)
-		end)
-
-		it("retains nothing past the outermost radius", function()
-			expect(Relevance.tierFor(301, nil, TIERS, 0, 1)):toBeNil()
-		end)
-
-		it("includes an entity exactly on a radius", function()
-			expect(Relevance.tierFor(80, nil, TIERS, 0, 1)):toBe(1)
+			local scenarios: { { distance: number, tier: number? } } = {
+				{ distance = 10, tier = 1 },
+				{ distance = 80, tier = 1 },
+				{ distance = 120, tier = 2 },
+				{ distance = 250, tier = 3 },
+				{ distance = 301 },
+			}
+			for _, scenario in scenarios do
+				expect(Relevance.tierFor(scenario.distance, nil, TIERS, 0, 1)):toBe(scenario.tier)
+			end
 		end)
 	end)
 
 	describe("hysteresis", function()
 		it("holds an entity at its current tier through the band", function()
-			expect(Relevance.tierFor(90, 1, TIERS, 24, 1)):toBe(1)
-		end)
-
-		it("lets it go once the band is passed", function()
-			expect(Relevance.tierFor(105, 1, TIERS, 24, 1)):toBe(2)
-		end)
-
-		it("does not delay a promotion", function()
-			expect(Relevance.tierFor(80, 2, TIERS, 24, 1)):toBe(1)
-			expect(Relevance.tierFor(81, 2, TIERS, 24, 1)):toBe(2)
+			local scenarios: { { distance: number, current: number, tier: number? } } = {
+				{ distance = 90, current = 1, tier = 1 },
+				{ distance = 105, current = 1, tier = 2 },
+				{ distance = 80, current = 2, tier = 1 },
+				{ distance = 81, current = 2, tier = 2 },
+				{ distance = 310, current = 3, tier = 3 },
+				{ distance = 330, current = 3 },
+			}
+			for _, scenario in scenarios do
+				expect(Relevance.tierFor(scenario.distance, scenario.current, TIERS, 24, 1)):toBe(scenario.tier)
+			end
 		end)
 
 		it("stops an entity oscillating on a boundary from changing tier at all", function()
@@ -52,11 +52,6 @@ describe("relevance", function()
 				current = Relevance.tierFor(79, current, TIERS, 24, 1)
 				expect(current):toBe(1)
 			end
-		end)
-
-		it("keeps a retained entity retained through the outer band", function()
-			expect(Relevance.tierFor(310, 3, TIERS, 24, 1)):toBe(3)
-			expect(Relevance.tierFor(330, 3, TIERS, 24, 1)):toBeNil()
 		end)
 	end)
 
