@@ -37,11 +37,13 @@ describe("ComposeRoblox.preferredInput", function()
 
 	it("updates when PreferredInput changes", function()
 		local emulator, service = serviceWith "Enum.PreferredInput.Touch"
+		local before = emulator.environment.liveConnections()
 		local reactor = Compose.reactor.create()
 		local owner = Compose.createOwner(reactor)
 		local source = Compose.withOwner(owner, function()
 			return ComposeRoblox.preferredInput(service, emulator.engine)
 		end)
+		expect(emulator.environment.liveConnections()):toBe(before + 1)
 		local seen: { string } = {}
 		Compose.withOwner(owner, function()
 			Compose.watch(function(use)
@@ -52,17 +54,6 @@ describe("ComposeRoblox.preferredInput", function()
 		service.PreferredInput = "Enum.PreferredInput.Gamepad"
 		Compose.reactor.settle(reactor)
 		expect(seen):toEqual { "Touch", "Gamepad" }
-		Compose.owner.dispose(owner)
-	end)
-
-	it("releases its property observer with the owner", function()
-		local emulator, service = serviceWith "Enum.PreferredInput.KeyboardAndMouse"
-		local before = emulator.environment.liveConnections()
-		local owner = Compose.createOwner(Compose.reactor.create())
-		Compose.withOwner(owner, function()
-			ComposeRoblox.preferredInput(service, emulator.engine)
-		end)
-		expect(emulator.environment.liveConnections()):toBe(before + 1)
 		Compose.owner.dispose(owner)
 		expect(emulator.environment.liveConnections()):toBe(before)
 	end)

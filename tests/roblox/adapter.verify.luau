@@ -287,6 +287,7 @@ describe("roblox adapter", function()
 
 		it("creates, parents, and destroys engine objects", function()
 			local w = world()
+			local before = w.emulator.environment.liveObjects()
 			local dispose, frame = w.runtime.mount(function()
 				return w.create "Frame" { Name = "Panel" }
 			end, w.root)
@@ -296,6 +297,7 @@ describe("roblox adapter", function()
 
 			dispose()
 			expect(w.emulator.environment.childrenOf(Support.instance(w.root))):toEqual {}
+			expect(w.emulator.environment.liveObjects()):toBe(before)
 		end)
 
 		it("detaches live children and accepts already detached or externally destroyed children", function()
@@ -343,16 +345,6 @@ describe("roblox adapter", function()
 			expect(borrowed.Parent):toBe(w.root)
 			expect(w.emulator.environment.liveConnections()):toBe(0)
 			borrowed:Destroy()
-		end)
-
-		it("leaves the mount target alone", function()
-			local w = world()
-			local before = w.emulator.environment.liveObjects()
-			local dispose = w.runtime.mount(function()
-				return w.create "Frame" {}
-			end, w.root)
-			dispose()
-			expect(w.emulator.environment.liveObjects()):toBe(before)
 		end)
 
 		it("destroys the whole subtree and leaks nothing", function()
