@@ -150,16 +150,10 @@ describe("keyed", function()
 		dispose()
 	end)
 
-	it("mounts one row per item in order", function()
-		local world = Support.world()
-		local dispose, root = mountList(world, items("a", "b", "c"))
-		expect(order(world, root)):toEqual { "a", "b", "c" }
-		dispose()
-	end)
-
 	it("keeps node identity across a reorder", function()
 		local world = Support.world()
 		local dispose, root, list = mountList(world, items("a", "b", "c"))
+		expect(order(world, root)):toEqual { "a", "b", "c" }
 		local before = world.host.childrenOf(root)
 
 		list:set(items("c", "a", "b"))
@@ -170,20 +164,6 @@ describe("keyed", function()
 		expect(after[1]):toBe(before[3])
 		expect(after[2]):toBe(before[1])
 		expect(after[3]):toBe(before[2])
-		dispose()
-	end)
-
-	it("creates and destroys nothing when only the order changes", function()
-		local world = Support.world()
-		local dispose, _root, list = mountList(world, items("a", "b", "c", "d"))
-		world.host.resetCounts()
-
-		list:set(items("d", "c", "b", "a"))
-		world.settle()
-
-		local counts = world.host.counts()
-		expect(counts.createNode):toBe(0)
-		expect(counts.destroyNode):toBe(0)
 		dispose()
 	end)
 
@@ -229,6 +209,8 @@ describe("keyed", function()
 
 		expect(order(world, root)):toEqual { "d", "c", "b", "a" }
 		expect(world.host.counts().moveChild):toBe(3)
+		expect(world.host.counts().createNode):toBe(0)
+		expect(world.host.counts().destroyNode):toBe(0)
 		dispose()
 	end)
 

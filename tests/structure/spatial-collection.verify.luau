@@ -102,13 +102,6 @@ describe("SpatialCollection", function()
 			local origin = Compose.cell(initialOrigin)
 			local dispose, root = mount { units = line(20, 50), origin = origin }
 			expect(idsOf(root)):toEqual { "u1", "u2", "u3", "u4", "u5", "u6", "u7" }
-			dispose()
-		end)
-
-		it("gives each retained entity the tier its distance earns", function()
-			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
-			local origin = Compose.cell(initialOrigin)
-			local dispose, root = mount { units = line(20, 50), origin = origin }
 			expect(tierOf(root, "u1")):toBe "full"
 			expect(tierOf(root, "u3")):toBe "simplified"
 			expect(tierOf(root, "u6")):toBe "marker"
@@ -126,6 +119,7 @@ describe("SpatialCollection", function()
 
 			expect(idsOf(root)):toEqual { "u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8" }
 			expect(world.host.counts().createNode):toBe(1)
+			expect(world.host.counts().moveChild):toBe(0)
 			dispose()
 		end)
 
@@ -141,17 +135,6 @@ describe("SpatialCollection", function()
 
 			expect(tierOf(root, "u3")):toBe "full"
 			expect(world.host.counts().destroyNode):toBe(0)
-			dispose()
-		end)
-
-		it("keeps source order, so following the origin is not a reorder", function()
-			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
-			local origin = Compose.cell(initialOrigin)
-			local dispose = mount { units = line(20, 50), origin = origin }
-			world.host.resetCounts()
-			origin:set { x = 50, y = 0, z = 0 }
-			world.settle()
-			expect(world.host.counts().moveChild):toBe(0)
 			dispose()
 		end)
 	end)
@@ -175,6 +158,9 @@ describe("SpatialCollection", function()
 			expect(idsOf(root)):toEqual { "edge" }
 			expect(world.host.counts().createNode):toBe(0)
 			expect(world.host.counts().destroyNode):toBe(0)
+			origin:set { x = -100, y = 0, z = 0 }
+			world.settle()
+			expect(idsOf(root)):toEqual {}
 			dispose()
 		end)
 
@@ -192,17 +178,6 @@ describe("SpatialCollection", function()
 				world.settle()
 			end
 			expect(world.host.counts().createNode):toBeGreaterThan(0)
-			dispose()
-		end)
-
-		it("still releases an entity that genuinely leaves", function()
-			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
-			local origin = Compose.cell(initialOrigin)
-			local units: { Unit } = { { id = "edge", x = 299, y = 0, z = 0 } }
-			local dispose, root = mount { units = units, origin = origin, hysteresis = 24 }
-			origin:set { x = -100, y = 0, z = 0 }
-			world.settle()
-			expect(idsOf(root)):toEqual {}
 			dispose()
 		end)
 	end)
@@ -391,15 +366,6 @@ describe("SpatialCollection", function()
 	end)
 
 	describe("lifetime", function()
-		it("returns every node when the collection goes", function()
-			local before = world.host.liveNodes()
-			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
-			local origin = Compose.cell(initialOrigin)
-			local dispose = mount { units = line(500, 10), origin = origin }
-			dispose()
-			expect(world.host.liveNodes()):toBe(before)
-		end)
-
 		it("returns every node after a long traversal", function()
 			local before = world.host.liveNodes()
 			local initialOrigin: Compose.SpatialCollectionPoint = { x = 0, y = 0, z = 0 }
