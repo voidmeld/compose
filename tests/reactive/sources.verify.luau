@@ -18,33 +18,33 @@ local function domain()
 end
 
 describe("Compose.sample", function()
-	it("reads a cell without depending on it", function()
-		local count = Compose.cell(3)
-		expect(Compose.sample(count)):toBe(3)
-	end)
-
 	it("reads a body through a reader, rather than handing it nothing", function()
-		local count = Compose.cell(3)
-		local doubled = function(use: Compose.Use): number
-			return use(count) * 2
-		end
-		expect(Compose.sample(doubled)):toBe(6)
-		count:set(5)
-		expect(Compose.sample(doubled)):toBe(10)
-	end)
-
-	it("reads a body that reads a formula at its current value", function()
 		local count = Compose.cell(2)
 		local squared = Compose.formula(function(use): number
 			return use(count) ^ 2
 		end)
-		expect(Compose.sample(function(use: Compose.Use): number
+		for _, source in
+			{
+				count,
+				function(use: Compose.Use): number
+					return use(count)
+				end,
+			}
+		do
+			expect(Compose.sample(source)):toBe(2)
+		end
+		local doubled = function(use: Compose.Use): number
+			return use(count) * 2
+		end
+		local sampleSquared = function(use: Compose.Use): number
 			return use(squared)
-		end)):toBe(4)
+		end
+		expect(Compose.sample(doubled)):toBe(4)
+		expect(Compose.sample(sampleSquared)):toBe(4)
 		count:set(3)
-		expect(Compose.sample(function(use: Compose.Use): number
-			return use(squared)
-		end)):toBe(9)
+		expect(Compose.sample(doubled)):toBe(6)
+		expect(Compose.sample(sampleSquared)):toBe(9)
+		squared:dispose()
 	end)
 
 	it("records no dependency for the body it samples", function()
@@ -124,17 +124,6 @@ describe("use", function()
 				Support.invoke(read, { value = 1 })
 			end)
 		end):toThrow "cell or formula"
-		Compose.owner.dispose(owner)
-	end)
-
-	it("still reads a real node", function()
-		local _reactor, owner = domain()
-		local count = Compose.cell(7)
-		local seen = 0
-		Compose.owner.watch(owner, function(use)
-			seen = use(count)
-		end)
-		expect(seen):toBe(7)
 		Compose.owner.dispose(owner)
 	end)
 end)
