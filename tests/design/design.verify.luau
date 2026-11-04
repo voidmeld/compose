@@ -856,7 +856,17 @@ describe("Compose Design documents", function()
 		end
 		expect(assert(assert(flashRecord).props.target.node):peek()):toBe(labelRecord)
 		local code = Design.emit(value, library)
-		expect(string.find(code, "local refs = { " .. label .. " = Toy.cell(nil) }", 1, true) ~= nil):toBe(true)
+		expect(
+			string.find(
+				code,
+				"local refs: { [string]: Toy.Cell<Instance?> } = { " .. label .. " = Toy.cell<<Instance?>>(nil) }",
+				1,
+				true
+			) ~= nil
+		):toBe(true)
+		expect(string.find(code, "local function capture(id: string, node: Instance): Instance", 1, true) ~= nil):toBe(
+			true
+		)
 		expect(string.find(code, `capture(\n\t\t\t"{label}",\n\t\t\tUI.Label "Label"`, 1, true) ~= nil):toBe(true)
 		expect(string.find(code, `target = refs.{label},`, 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, library)):toEqual(value)
@@ -1429,7 +1439,14 @@ describe("Compose Design views as code", function()
 		value, flash = Design.document.insert(value, toy, "n1", "Flash")
 		value = Design.document.change(value, toy, flash, "target", { nodeFrom = "source", nodes = { stage, rewards } })
 		local code = Design.emit(value, toy)
-		expect(string.find(code, "local named = { Rewards = refs.n3, Stage = refs.n2 }", 1, true) ~= nil):toBe(true)
+		expect(
+			string.find(
+				code,
+				"local named: { [string]: Toy.Readable<Instance?> } = { Rewards = refs.n3, Stage = refs.n2 }",
+				1,
+				true
+			) ~= nil
+		):toBe(true)
 		expect(string.find(code, "local chosen = named[use(state.source)]", 1, true) ~= nil):toBe(true)
 		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
 		table.clear(built)

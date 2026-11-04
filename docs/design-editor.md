@@ -88,6 +88,8 @@ These can hold readables, row sources, slots or opaque host values.
 Kind builders consume the resolved values.
 Conditional children and keyed rows then update through the runtime.
 Generated components receive typed props directly.
+Node references emit cells of the library's optional return type, including forward references.
+The capture function and selected-reference table preserve that type under strict analysis.
 
 A kit workspace can provide `token`, `resolveToken`, `tokens` and `slots`.
 `tokens` lists inspector choices.

@@ -933,10 +933,15 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local newCell = assert(library.newCell, `{library.name} cannot reference nodes; it names no cell constructor`)
 		local cells: { string } = {}
 		for _, id in referencedIds do
-			table.insert(cells, `{id} = {newCell}(nil)`)
+			table.insert(cells, `{id} = {newCell}<<{library.returnType}?>>(nil)`)
 		end
-		table.insert(lines, "\tlocal refs = { " .. table.concat(cells, ", ") .. " }")
-		table.insert(lines, "\tlocal function capture(id, node)")
+		table.insert(
+			lines,
+			`\tlocal refs: \{ [string]: {library.cell}<{library.returnType}?> } = \{ `
+				.. table.concat(cells, ", ")
+				.. " }"
+		)
+		table.insert(lines, `\tlocal function capture(id: string, node: {library.returnType}): {library.returnType}`)
 		table.insert(lines, "\t\trefs[id]:set(node)")
 		table.insert(lines, "\t\treturn node")
 		table.insert(lines, "\tend")
@@ -950,7 +955,12 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			for _, name in chosen do
 				table.insert(entries, `{name} = refs.{chosenNames[name]}`)
 			end
-			table.insert(lines, "\tlocal named = { " .. table.concat(entries, ", ") .. " }")
+			table.insert(
+				lines,
+				`\tlocal named: \{ [string]: {library.readable}<{library.returnType}?> } = \{ `
+					.. table.concat(entries, ", ")
+					.. " }"
+			)
 		end
 	end
 	local sequenceLines: { string } = {}

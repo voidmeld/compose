@@ -23,6 +23,7 @@ return table.freeze {
 	"tests/design/datatype.verify.luau",
 	"tests/design/design.verify.luau",
 	"tests/design/editor.lute.verify.luau",
+	"tests/design/source.lute.verify.luau",
 	"tests/examples/examples.verify.luau",
 	"tests/geometry/geometry.verify.luau",
 	"tests/lifecycle/context.verify.luau",

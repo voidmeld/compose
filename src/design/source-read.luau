@@ -924,9 +924,12 @@ function source.parse(code: string, library: Library): Types.Document
 	take()
 	take "function"
 	while not (peek() == "return" and peek(1) ~= "node") do
-		if peek() == "local" and peek(1) == "named" and peek(2) == "=" then
+		if peek() == "local" and peek(1) == "named" then
 			take "local"
 			take "named"
+			while peek() ~= "=" do
+				take()
+			end
 			take "="
 			take "{"
 			while peek() ~= "}" do
@@ -940,7 +943,13 @@ function source.parse(code: string, library: Library): Types.Document
 				end
 			end
 			take "}"
-		elseif peek() == "local" and tokens[at + 1] and tokens[at + 1].kind == "name" and peek(2) == ":" then
+		elseif
+			peek() == "local"
+			and tokens[at + 1]
+			and tokens[at + 1].kind == "name"
+			and peek(1) ~= "refs"
+			and peek(2) == ":"
+		then
 			take "local"
 			local literalName = name()
 			take ":"

@@ -14,3 +14,5 @@ build/
 .claude/
 .scratch/
 .verify/
+.worker-tmp/
+REPORT.md

@@ -2149,6 +2149,8 @@ Nodes may carry `hidden` and `locked` editor flags. Source stores these flags by
 
 `EmitOptions` accepts `name`, `rowFunctions`, `localControls`, `controls`, `propsType` and `prelude`. The generated component accepts the library controls parameter and typed `Props`. Readable inputs pass directly to controls. `library.show` and `library.keyed` name structural functions in generated source. A `library.token` ending in `.` writes token paths (`Tokens.font.title`); other token names become resolver calls. Token tables belong to the consumer and may contain host datatypes and reactive values. Attributes use an ordinary `value` field forwarded by the kind to the runtime's reserved `Attributes` property; Design adds no host attribute policy.
 
+Node references use `library.cell<library.returnType?>` cells with explicitly typed `library.newCell` construction and a typed capture function. References may point forward in the tree and remain nil until captured. Selected references use a string-indexed table of `library.readable<library.returnType?>`. The library return type must describe nodes accepted by its node fields; no casts or host-specific node types are inserted by Design.
+
 ### `Design.parse`
 
 `parse(source, library) -> Document` reads an emitted component and validates its contract without executing source.
