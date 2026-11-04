@@ -134,6 +134,10 @@ local function createRuntime(host: Host.Host): Runtime
 	})
 	host = scoped
 	local render = host.render
+	local nodeOwners: { [Node]: Owner.Owner } = {}
+	local protectedParents: { [Node]: boolean } = {}
+	setmetatable(nodeOwners, WEAK_KEYS)
+	setmetatable(protectedParents, WEAK_KEYS)
 
 	local function requireOwner(operation: string): Owner.Owner
 		local owner = Active.current()
@@ -155,6 +159,8 @@ local function createRuntime(host: Host.Host): Runtime
 			return Diagnostics.raise("host/node-not-a-reference", "owned node is not a reference", {})
 		end
 		local node = subject
+		nodeOwners[node] = nil
+		protectedParents[node] = nil
 		Props.forget(node)
 		if tracked.dependents == 0 then
 			render.destroyNode(node)
@@ -207,14 +213,38 @@ local function createRuntime(host: Host.Host): Runtime
 			applying.key = nil
 			local list: Children.ChildList? = nil
 			local staticSlot = 0
-			local function detachStatic(subject: unknown)
-				assert(type(subject) == "table" or type(subject) == "userdata")
-				supplied.render.removeChild(node, subject)
-			end
+			local staticChildren: { Node }? = nil
+			local hasForeignChild = false
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
-					Owner.holdSubject(owner, detachStatic, child)
+					local attached = staticChildren
+					if attached == nil then
+						local children: { Node } = {}
+						attached = children
+						staticChildren = children
+						Owner.adopt(owner, function()
+							if owner.disposed and not hasForeignChild then
+								return
+							end
+							local failures: { unknown } = {}
+							for at = #children, 1, -1 do
+								local current = children[at]
+								if not owner.disposed or nodeOwners[current] ~= owner or protectedParents[current] then
+									local ok, failure: unknown = pcall(supplied.render.removeChild, node, current)
+									if not ok then
+										table.insert(failures, failure)
+									end
+								end
+							end
+							Owner.raiseAll(failures)
+						end)
+					end
+					table.insert(assert(attached), child)
+					if nodeOwners[child] ~= owner or protectedParents[child] then
+						hasForeignChild = true
+						protectedParents[node] = true
+					end
 					if list == nil then
 						supplied.render.insertChild(node, child, index)
 					else
@@ -224,6 +254,7 @@ local function createRuntime(host: Host.Host): Runtime
 						Children.insertStatic(list, staticSlot, child)
 					end
 				elseif type(child) == "function" and constructorKinds[child] == nil then
+					protectedParents[node] = true
 					local current: Children.ChildList = list or Children.createList(host, node, supplied)
 					if list == nil then
 						if index > 1 then
@@ -280,6 +311,7 @@ local function createRuntime(host: Host.Host): Runtime
 			local heldMark = Owner.heldCount(owner)
 			local node = render.createNode(kind)
 			Nodes.markOwned(node)
+			nodeOwners[node] = owner
 			Owner.holdSubject(owner, destroyOwnedNode, node)
 			if inspecting.active then
 				inspector().node(owner, node, "owned")

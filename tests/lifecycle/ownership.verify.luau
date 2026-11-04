@@ -336,6 +336,92 @@ describe("ownership", function()
 			expect(Compose.custodyOf(external)):toBe "borrowed"
 		end)
 
+		it("lets parent destruction release static children from the ending owner", function()
+			local world = Support.world()
+			local dispose = world.runtime.mount(function()
+				local children: { Compose.Node } = {}
+				for _ = 1, 100 do
+					table.insert(children, world.create "Row" {})
+				end
+				return world.create "Frame"(children)
+			end, world.root)
+			world.host.resetCounts()
+			dispose()
+			expect(world.host.counts().removeChild):toBe(1)
+			expectClean(world)
+		end)
+
+		it("preserves static children owned by another owner", function()
+			local world = Support.world()
+			local original = Compose.createOwner(world.runtime.reactor)
+			local child = Compose.withOwner(original, function()
+				return world.create "Row" {}
+			end)
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { child, world.create "Row" {} }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "owned"
+			Compose.owner.dispose(original)
+			expectClean(world)
+		end)
+
+		it("releases protected descendants before destroying a static ancestor", function()
+			for _, dynamic in { false, true } do
+				local world = Support.world()
+				local external = world.host.makeNode "External"
+				local dispose = world.runtime.mount(function()
+					local content = if dynamic
+						then world.create "Content" {
+							Compose.show(Compose.cell(true), function()
+								return external
+							end),
+						}
+						else world.create "Content" { external }
+					return world.create "Frame" { world.create "Row" { content } }
+				end, world.root)
+				dispose()
+				expect(world.host.isAlive(external)):toBe(true)
+				expect(world.host.parentOf(external)):toBe(nil)
+				expect(world.host.liveNodes()):toBe(2)
+			end
+		end)
+
+		it("detaches same-owner static children when their parent build fails", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local child = Compose.withOwner(owner, function()
+				return world.create "Row" {}
+			end)
+			world.host.failNext("insertChild", 1)
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { child, world.create "Row" {} }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			Compose.owner.dispose(owner)
+			expectClean(world)
+		end)
+
+		it("continues releasing static attachments after one detachment fails", function()
+			local world = Support.world()
+			local first = world.host.makeNode "First"
+			local second = world.host.makeNode "Second"
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { first, second }
+			end, world.root)
+			world.host.resetCounts()
+			world.host.failNext("removeChild", 1)
+			expect(dispose):toThrow()
+			expect(world.host.isAlive(first)):toBe(true)
+			expect(world.host.parentOf(first)):toBe(nil)
+			expect(world.host.counts().removeChild):toBe(2)
+		end)
+
 		it("preserves a newer parent when an old static attachment ends", function()
 			local world = Support.world()
 			local external = world.host.makeNode "External"
