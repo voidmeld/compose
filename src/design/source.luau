@@ -143,15 +143,13 @@ end
 local function fieldsLiteral(fields: { Types.ItemField }): Record
 	local list: Record = {}
 	for _, field in fields do
-		local item: Record = { id = field.id, type = field.type }
-		if field.luauType ~= nil then
-			item.luauType = field.luauType
-		end
 		local nested = field.fields
-		if nested then
-			item.fields = fieldsLiteral(nested)
-		end
-		list[#list + 1] = item
+		list[#list + 1] = {
+			id = field.id,
+			type = field.type,
+			luauType = field.luauType,
+			fields = if nested then fieldsLiteral(nested) else nil,
+		}
 	end
 	return list
 end
@@ -159,10 +157,16 @@ end
 local function contractLiteral(contract: Types.Contract): Literal
 	local inputs: Record = {}
 	for _, input in contract.inputs do
-		local entry: Record = { id = input.id, kind = input.kind, type = input.type }
-		if input.luauType ~= nil then
-			entry.luauType = input.luauType
-		end
+		local fields = input.fields
+		local entry = {
+			id = input.id,
+			kind = input.kind,
+			type = input.type,
+			luauType = input.luauType,
+			preview = input.preview,
+			required = if input.required then true else nil,
+			fields = if fields then fieldsLiteral(fields) else nil,
+		}
 		if input.options then
 			local options: Record = {}
 			for index, option in input.options do
@@ -170,26 +174,11 @@ local function contractLiteral(contract: Types.Contract): Literal
 			end
 			entry.options = options
 		end
-		local preview = input.preview
-		if preview ~= nil then
-			entry.preview = preview
-		end
-		if input.required then
-			entry.required = true
-		end
-		local fields = input.fields
-		if fields then
-			entry.fields = fieldsLiteral(fields)
-		end
 		inputs[#inputs + 1] = entry
 	end
 	local outputs: Record = {}
 	for _, output in contract.outputs do
-		local item: Record = { id = output.id }
-		local row = output.row
-		if row ~= nil then
-			item.row = row
-		end
+		local item = { id = output.id, row = output.row }
 		local args = output.args
 		if args then
 			local list: Record = {}
@@ -200,15 +189,13 @@ local function contractLiteral(contract: Types.Contract): Literal
 		end
 		outputs[#outputs + 1] = item
 	end
-	local result: Record = { inputs = inputs, outputs = outputs }
-	return result
+	return { inputs = inputs, outputs = outputs }
 end
 
 local function stateLiteral(state: { Types.State }): Literal
 	local list: Record = {}
 	for index, entry in state do
-		local item: Record = { id = entry.id, type = entry.type, initial = entry.initial }
-		list[index] = item
+		list[index] = { id = entry.id, type = entry.type, initial = entry.initial }
 	end
 	return list
 end
@@ -218,28 +205,16 @@ local function sequencesLiteral(sequences: { Types.Sequence }): Literal
 	for index, sequence in sequences do
 		local steps: Record = {}
 		for at, step in sequence.steps do
-			local entry: Record = {}
-			local function put(key: string, found: string?)
-				if found ~= nil then
-					entry[key] = found
-				end
-			end
-			put("delay", step.delay)
-			put("duration", step.duration)
-			put("easing", step.easing)
-			put("state", step.state)
-			put("output", step.output)
-			local to = step.to
-			if to ~= nil then
-				entry.to = to
-			end
-			steps[at] = entry
+			steps[at] = {
+				delay = step.delay,
+				duration = step.duration,
+				easing = step.easing,
+				state = step.state,
+				output = step.output,
+				to = step.to,
+			}
 		end
-		local record: Record = { id = sequence.id, steps = steps }
-		if sequence.autoplay then
-			record.autoplay = true
-		end
-		entries[index] = record
+		entries[index] = { id = sequence.id, steps = steps, autoplay = if sequence.autoplay then true else nil }
 	end
 	return entries
 end
