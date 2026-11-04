@@ -323,7 +323,7 @@ describe("roblox adapter", function()
 			local child = Support.instance(emulator.engine.new "Frame")
 			child.Name = "Feed"
 			child:Destroy()
-			local ok, failure = pcall(host.render.insertChild, parent, child)
+			local ok, failure = pcall(host.render.insertChild, parent, child, nil)
 			expect(ok):toBe(false)
 			local message = tostring(failure)
 			expect(string.find(message, "host/node-destroyed", 1, true) ~= nil):toBe(true)
