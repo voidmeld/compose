@@ -477,19 +477,20 @@ describe("host-neutral design editor", function()
 				end,
 			}
 		end
-		local value = Design.document.change(
-			Design.document.new("Geometry", w.library, w.document.root.kind),
-			w.library,
-			"n1",
-			"Size",
-			{
-				literal = Design.datatype.literal { 0, { token = "size.width" }, 0, { token = "size.pill" } },
-			}
-		)
+		local value =
+			Design.document.setContract(Design.document.new("Geometry", w.library, w.document.root.kind), w.library, {
+				inputs = { { id = "width", kind = "readable", type = "number", required = true } },
+				outputs = {},
+			})
+		value = Design.document.change(value, w.library, "n1", "Size", {
+			literal = Design.datatype.literal { 0, { input = "width" }, 0, { token = "size.pill" } },
+		})
 		local initial: Design.Literal? = 48
 		local height = Compose.cell(initial)
+		local width = Compose.cell<<Design.Literal?>>(240)
 		local dispose, root = w.runtime.mount(function(): Compose.Node
 			return Support.node(Design.render(value, w.library, {
+				bindings = { width = { readable = width } },
 				resolveToken = function(name: string): Design.Resolved
 					return if name == "size.pill" then { readable = height } else { literal = 240 }
 				end,
@@ -500,7 +501,12 @@ describe("host-neutral design editor", function()
 		height:set(64)
 		w.settle()
 		expect(w.point(root, "AbsoluteSize")):toEqual { X = 240, Y = 64 }
+		width:set(280)
+		w.settle()
+		expect(w.point(root, "AbsoluteSize")):toEqual { X = 280, Y = 64 }
 		dispose()
+		width:set(300)
+		expect(width:peek()):toBe(300)
 		height:set(72)
 		expect(height:peek()):toBe(72)
 		w.close()

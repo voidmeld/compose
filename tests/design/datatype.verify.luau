@@ -69,6 +69,127 @@ local function screen(): Design.Document
 end
 
 describe("Design datatype components", function()
+	local inputCases: { { field: string, components: { Design.DatatypeComponent }, expression: string } } = {
+		{
+			field = "Size",
+			components = { 1, { input = "offset" }, 0, { input = "rise" } },
+			expression = "UDim2.new(1, props.offset, 0, use(props.rise))",
+		},
+		{
+			field = "Position",
+			components = { 0, { input = "offset" }, 0, { input = "rise" } },
+			expression = "UDim2.fromOffset(props.offset, use(props.rise))",
+		},
+		{
+			field = "Size",
+			components = { { input = "rise" }, 0, 1, 0 },
+			expression = "UDim2.fromScale(use(props.rise), 1)",
+		},
+		{ field = "Padding", components = { 0, { input = "rise" } }, expression = "UDim.new(0, use(props.rise))" },
+		{ field = "Anchor", components = { { input = "offset" }, 1 }, expression = "Vector2.new(props.offset, 1)" },
+		{
+			field = "Point",
+			components = { 1, { input = "rise" }, 3 },
+			expression = "Vector3.new(1, use(props.rise), 3)",
+		},
+		{
+			field = "Bounds",
+			components = { 0, 0, { input = "rise" }, 48 },
+			expression = "Rect.new(0, 0, use(props.rise), 48)",
+		},
+		{
+			field = "Range",
+			components = { { input = "rise" }, 48 },
+			expression = "NumberRange.new(use(props.rise), 48)",
+		},
+	}
+	for _, case in inputCases do
+		it(`round trips input components in {case.expression}`, function()
+			local value = Design.document.setContract(Design.document.new("Inputs", library, "Box"), library, {
+				inputs = {
+					{ id = "offset", kind = "value", type = "number", required = true },
+					{ id = "rise", kind = "cell", type = "number", required = true },
+				},
+				outputs = {},
+			})
+			value = Design.document.change(
+				value,
+				library,
+				"n1",
+				case.field,
+				{ literal = Design.datatype.literal(case.components) }
+			)
+			value = Design.document.change(value, library, "n1", "Visible", nil)
+			value = Design.document.change(value, library, "n1", "Style", nil)
+			local code = Design.emit(value, library)
+			expect(string.find(code, case.expression, 1, true) ~= nil):toBe(true)
+			expect(Design.parse(code, library)):toEqual(value)
+			expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		end)
+	end
+
+	it("resolves mixed input and token components reactively while preserving borrowed sources", function()
+		local value = Design.document.setContract(Design.document.new("Inputs", library, "Box"), library, {
+			inputs = {
+				{ id = "offset", kind = "value", type = "number", required = true, preview = 12 },
+				{ id = "rise", kind = "readable", type = "number", required = true, preview = -24 },
+			},
+			outputs = {},
+		})
+		value = Design.document.change(
+			value,
+			library,
+			"n1",
+			"Position",
+			{ literal = components(0, { input = "offset" }, token "gap", { input = "rise" }) }
+		)
+		Design.render(value, library, {
+			token = function(_name: string): Design.Literal
+				return 0
+			end,
+		})
+		expect(received.Position.literal):toEqual { 0, 12, 0, -24 }
+		local rise = Core.cell<<Design.Literal?>>(0)
+		Design.render(value, library, {
+			bindings = { offset = { value = 8 }, rise = { readable = rise } },
+			token = function(_name: string): Design.Literal
+				return 0
+			end,
+		})
+		local position = assert(received.Position.readable)
+		expect(position:peek()):toEqual { 0, 8, 0, 0 }
+		rise:set(-32)
+		expect(position:peek()):toEqual { 0, 8, 0, -32 }
+		expect(rise:peek()):toBe(-32)
+		expect(function()
+			Design.render(value, library, {
+				inputs = { offset = "bad" },
+				token = function(_name: string): Design.Literal
+					return 0
+				end,
+			})
+		end):toThrow "numeric token or input"
+	end)
+
+	it("rejects unknown, optional, nonnumeric and compound input components", function()
+		local value = Design.document.setContract(Design.document.new("Inputs", library, "Box"), library, {
+			inputs = {
+				{ id = "optional", kind = "value", type = "number" },
+				{ id = "text", kind = "value", type = "string", required = true },
+			},
+			outputs = {},
+		})
+		for _, input in { "missing", "optional", "text" } do
+			expect(function()
+				Design.document.change(value, library, "n1", "Padding", { literal = components(0, { input = input }) })
+			end):toThrow "input"
+		end
+		local invalid = Design.parseLiteral '{ 0, { input = "optional", token = "gap" } }'
+		expect(function()
+			Design.document.change(value, library, "n1", "Padding", { literal = invalid })
+		end):toThrow "components"
+	end)
+
 	local cases: { { field: string, expression: string, components: Design.Literal } } = {
 		{
 			field = "Size",

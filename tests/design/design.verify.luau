@@ -141,6 +141,141 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("retains nested keyed row ownership when an outer row replaces its qualified list", function()
+		local world = Support.world()
+		local toy = table.clone(library)
+		toy.keyed = "Toy.keyed"
+		toy.kinds = table.clone(library.kinds)
+		toy.kinds.Stack = table.clone(library.kinds.Stack)
+		toy.kinds.Stack.build = function(
+			props: { [string]: Design.Resolved },
+			children: { unknown },
+			name: string
+		): unknown
+			local properties: Core.Props = {}
+			for index, child in children do
+				properties[index] = child
+			end
+			local text = props.Visible
+			if text then
+				properties.Visible = text.readable or text.literal
+			end
+			return world.create "Frame"(name)(properties)
+		end
+		local fields: { Design.ItemField } = { { id = "id", type = "string" }, { id = "visible", type = "boolean" } }
+		local pageFields: { Design.ItemField } =
+			{ { id = "id", type = "string" }, { id = "rows", type = "list", fields = fields } }
+		local value = Design.document.setContract(Design.document.new("Nested", toy, "Stack"), toy, {
+			inputs = { { id = "pages", kind = "readable", type = "list", fields = pageFields, required = true } },
+			outputs = {},
+		})
+		local page, row
+		value, page = Design.document.insert(value, toy, "n1", "Stack")
+		value = Design.document.bind(value, toy, "n1", { from = "pages", key = "id" })
+		value, row = Design.document.insert(value, toy, page, "Stack")
+		value = Design.document.bind(value, toy, page, { from = "pages.rows", key = "id" })
+		value = Design.document.change(value, toy, row, "Visible", { item = "visible" })
+		local first: Design.Row = { id = "a", visible = true }
+		local second: Design.Row = { id = "b", visible = false }
+		local pages = Core.cell<<{ Design.Row }>> { { id = "page", rows = { first, second } } }
+		local dispose, root = world.runtime.mount(function(): Core.Node
+			return Support.node(Design.render(value, toy, { bindings = { pages = { rows = pages } } }))
+		end, world.root)
+		world.settle()
+		local pageNode = world.host.childrenOf(root)[1]
+		local before = world.host.childrenOf(pageNode)
+		expect(#before):toBe(2)
+		local changed: Design.Row = { id = "b", visible = true }
+		pages:set { { id = "page", rows = { changed } } }
+		world.settle()
+		expect(world.host.childrenOf(root)[1]):toBe(pageNode)
+		expect(world.host.childrenOf(pageNode)):toEqual { before[2] }
+		expect(world.host.propertyOf(before[2], "Visible")):toBe(true)
+		expect(world.host.isAlive(before[1])):toBe(false)
+		pages:set {}
+		world.settle()
+		expect(world.host.isAlive(pageNode)):toBe(false)
+		expect(world.host.isAlive(before[2])):toBe(false)
+		dispose()
+		pages:set { { id = "borrowed", rows = {} } }
+		expect(#pages:peek()):toBe(1)
+		expect(world.host.liveNodes()):toBe(1)
+		expect(world.host.liveSubscriptions()):toBe(0)
+		world.runtime:dispose()
+	end)
+
+	it("selects static root kinds with one direct name and shared content", function()
+		local value = Design.document.setContract(Design.document.new("Details", library, "Stack"), library, {
+			inputs = {
+				{
+					id = "presentation",
+					kind = "value",
+					type = "string",
+					options = { "inline", "panel" },
+					required = true,
+					preview = "inline",
+				},
+				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "rows", kind = "readable", type = "list", fields = rowFields },
+			},
+			outputs = {},
+		})
+		value = Design.document.nameFromInput(value, library, "n1", "name")
+		local content, label, flash
+		value, content = Design.document.insert(value, library, "n1", "Stack")
+		value, label = Design.document.insert(value, library, content, "Label")
+		value, flash = Design.document.insert(value, library, content, "Flash")
+		value = Design.document.change(value, library, flash, "target", { node = label })
+		local list
+		value, list = Design.document.insert(value, library, content, "List")
+		value = Design.document.bind(value, library, list, { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, list, "Label")
+		value = Design.document.setRootVariant(
+			value,
+			library,
+			{ input = "presentation", value = "panel", kind = "Panel", props = { title = { literal = "Details" } } }
+		)
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'presentation: "inline" | "panel"', 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "local function rootContent(): Instance", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local named = Design.emit(value, library, { rowFunctions = true })
+		expect(Design.parse(named, library)):toEqual(value)
+		expect(Design.emit(Design.parse(named, library), library, { rowFunctions = true })):toBe(named)
+		local inline = builtNode(Design.render(value, library, { inputs = { name = "Direct" } }))
+		expect(inline.kind):toBe "Stack"
+		expect(inline.name):toBe "Direct"
+		expect(inline.children[1].children[1].kind):toBe "Label"
+		local panel = builtNode(
+			Design.render(
+				value,
+				library,
+				{ bindings = { presentation = { value = "panel" } }, inputs = { name = "Direct" } }
+			)
+		)
+		expect(panel.kind):toBe "Panel"
+		expect(panel.name):toBe "Direct"
+		expect(panel.props.title.literal):toBe "Details"
+		expect(panel.children):toEqual {}
+		local shared = builtNode(assert(panel.props.content.slot)())
+		expect(shared.children[1].kind):toBe "Label"
+		expect(assert(shared.children[2].props.target.node):peek()):toBe(shared.children[1])
+		local invalid = Design.document.copy(value)
+		invalid.contract.inputs[1].kind = "readable"
+		expect(function()
+			Design.document.validate(invalid, library)
+		end):toThrow "static text enum"
+		invalid = Design.document.copy(value)
+		assert(invalid.rootVariant).value = "unknown"
+		expect(function()
+			Design.document.validate(invalid, library)
+		end):toThrow "enum option"
+		expect(function()
+			Design.render(value, library, { inputs = { presentation = "unknown" } })
+		end):toThrow "enum option"
+	end)
+
 	it("passes live rows to template kinds without snapshotting them", function()
 		local rows = Core.cell { ada }
 		local value = sample()
@@ -475,6 +610,22 @@ describe("Compose Design documents", function()
 		expect(string.find(code, "use(current).rows", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "use(current).sent == true", 1, true) ~= nil):toBe(true)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		value = Design.document.bind(value, library, inner, { from = "pages.rows", key = "id" })
+		code = Design.emit(value, library)
+		expect(string.find(code, "local row_pages = current", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "use(row_pages).rows", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local named = Design.emit(value, library, { rowFunctions = true })
+		expect(Design.emit(Design.parse(named, library), library, { rowFunctions = true })):toBe(named)
+		local current = value
+		local innerId: string = inner
+		expect(function()
+			Design.document.bind(current, library, innerId, { from = "other.rows", key = "id" })
+		end):toThrow "unknown input"
+		expect(function()
+			Design.document.bind(current, library, "n1", { from = "pages.rows", key = "id" })
+		end):toThrow "repeat"
 		table.clear(built)
 		Design.render(value, library)
 		local lists: { Built } = {}
@@ -856,10 +1007,50 @@ describe("Compose Design documents", function()
 		end
 		expect(assert(assert(flashRecord).props.target.node):peek()):toBe(labelRecord)
 		local code = Design.emit(value, library)
-		expect(string.find(code, "local refs = { " .. label .. " = Toy.cell(nil) }", 1, true) ~= nil):toBe(true)
+		expect(
+			string.find(
+				code,
+				"local refs: { [string]: Toy.Cell<Instance?> } = { " .. label .. " = Toy.cell<<Instance?>>(nil) }",
+				1,
+				true
+			) ~= nil
+		):toBe(true)
+		expect(string.find(code, "local function capture(id: string, node: Instance): Instance", 1, true) ~= nil):toBe(
+			true
+		)
 		expect(string.find(code, `capture(\n\t\t\t"{label}",\n\t\t\tUI.Label "Label"`, 1, true) ~= nil):toBe(true)
-		expect(string.find(code, `target = refs.{label},`, 1, true) ~= nil):toBe(true)
+		expect(string.find(code, `assert(use(refs.{label}), "Node reference is not captured")`, 1, true) ~= nil):toBe(
+			true
+		)
 		expect(Design.parse(code, library)):toEqual(value)
+	end)
+
+	it("reads forward captures after construction and rejects uncaptured node references", function()
+		local value = Design.document.new("Forward", library, "Stack")
+		local flash, label
+		value, flash = Design.document.insert(value, library, "n1", "Flash")
+		value, label = Design.document.insert(value, library, "n1", "Label")
+		value = Design.document.change(value, library, flash, "target", { node = label })
+		local root = builtNode(Design.render(value, library))
+		expect(assert(root.children[1].props.target.node):peek()):toBe(root.children[2])
+		local missing = builtNode(Design.render(value, library, {
+			exclude = function(node: Design.Node): boolean
+				return node.id == label
+			end,
+		}))
+		expect(function()
+			assert(missing.children[1].props.target.node):peek()
+		end):toThrow "Node reference is not captured"
+		value = Design.document.setContract(
+			value,
+			library,
+			{ inputs = { { id = "selected", kind = "value", type = "string", required = true } }, outputs = {} }
+		)
+		value = Design.document.change(value, library, flash, "target", { nodeFrom = "selected", nodes = { label } })
+		local unknown = builtNode(Design.render(value, library, { inputs = { selected = "Missing" } }))
+		expect(function()
+			assert(unknown.children[1].props.target.node):peek()
+		end):toThrow "Node reference is not captured"
 	end)
 
 	it("names built nodes and names template rows from an item field", function()
@@ -1429,7 +1620,14 @@ describe("Compose Design views as code", function()
 		value, flash = Design.document.insert(value, toy, "n1", "Flash")
 		value = Design.document.change(value, toy, flash, "target", { nodeFrom = "source", nodes = { stage, rewards } })
 		local code = Design.emit(value, toy)
-		expect(string.find(code, "local named = { Rewards = refs.n3, Stage = refs.n2 }", 1, true) ~= nil):toBe(true)
+		expect(
+			string.find(
+				code,
+				"local named: { [string]: Toy.Readable<Instance?> } = { Rewards = refs.n3, Stage = refs.n2 }",
+				1,
+				true
+			) ~= nil
+		):toBe(true)
 		expect(string.find(code, "local chosen = named[use(state.source)]", 1, true) ~= nil):toBe(true)
 		expect(Design.emit(Design.parse(code, toy), toy)):toBe(code)
 		table.clear(built)

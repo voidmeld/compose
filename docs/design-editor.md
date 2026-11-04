@@ -48,6 +48,9 @@ With `tokens = true`, each component's ◆ button cycles through token choices.
 A token component displays its name. Enter a number to replace it.
 The document stores it as `{ token = "size.pill" }` inside the component array.
 For example, `{ 1, 0, 0, { token = "size.pill" } }` emits `UDim2.new(1, 0, 0, T.size.pill)` with a `T.` token prefix.
+Source-authored components can also use `{ input = "offset" }` with a required numeric input.
+Static inputs become constructor arguments; readable and cell inputs wrap the constructor in a reactive formula.
+The caller prepares the number, including any arithmetic. Component input bindings remain editable through source.
 It selects design nodes for `node` fields.
 `Design.literal` writes literals. `Design.parseLiteral` reads them.
 An invalid literal sets `session.problem` and preserves the previous value.
@@ -64,6 +67,8 @@ A kind's `seeds` supplies children that `insert` adds with it.
 A library's `tags = { call, apply }` supports style tags.
 The source uses `call(node, { "tag" })`. Direct rendering uses `apply`.
 Inside a repeated row, a list can bind a list field of the current item.
+`Bind.from = "pages.rows"` explicitly selects `rows` on the current `pages` row.
+The qualifier must match the current collection. It does not traverse arbitrary inputs or ancestors.
 `when` can name a boolean item field.
 `{ ["$template"] = childId }` renders a child for each item, such as a table column cell.
 An output marker with `["$row"] = true` passes the current item.
@@ -88,6 +93,17 @@ These can hold readables, row sources, slots or opaque host values.
 Kind builders consume the resolved values.
 Conditional children and keyed rows then update through the runtime.
 Generated components receive typed props directly.
+Node references emit cells of the library's optional return type, including forward references.
+The capture function and selected-reference table preserve that type under strict analysis.
+Node fields receive formulas returning the captured non-nil node. Read them after construction;
+uncaptured targets and unknown selected names raise `Node reference is not captured`.
+
+A document can set `rootVariant = { input, value, kind, props }` through `Design.document.setRootVariant`.
+The required static string input declares its enum `options`.
+The matching option selects the alternative wrapper; the others select the ordinary root.
+Both wrappers share one unconditional content subtree and keep one direct root name.
+List and slot wrappers are supported. The emitted `rootContent` function owns the shared composition.
+This selection occurs when the view is built. Prepare the selector in the caller.
 
 A kit workspace can provide `token`, `resolveToken`, `tokens` and `slots`.
 `tokens` lists inspector choices.
