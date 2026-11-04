@@ -23,16 +23,7 @@ describe("Compose.sample", function()
 		local squared = Compose.formula(function(use): number
 			return use(count) ^ 2
 		end)
-		for _, source in
-			{
-				count,
-				function(use: Compose.Use): number
-					return use(count)
-				end,
-			}
-		do
-			expect(Compose.sample(source)):toBe(2)
-		end
+		expect(Compose.sample(count)):toBe(2)
 		local doubled = function(use: Compose.Use): number
 			return use(count) * 2
 		end
