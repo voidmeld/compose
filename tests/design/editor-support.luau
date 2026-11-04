@@ -156,6 +156,7 @@ local function world(space: string?)
 		onExport: ((string) -> ())?,
 		devices: { Editor.Device }?,
 		previews: { Editor.Preview }?,
+		frame: ((Editor.Device, Compose.ReadOnlyValue<number>) -> Editor.FrameContext)?,
 	}
 	local function mount(options: MountOptions?): Editor.Editor
 		return Editor.create(library, document, screen, {
@@ -165,6 +166,7 @@ local function world(space: string?)
 			link = if options then options.link else nil,
 			onExport = if options then options.onExport else nil,
 			devices = if options then options.devices else nil,
+			frame = if options then options.frame else nil,
 			previews = if options then options.previews else nil,
 		})
 	end

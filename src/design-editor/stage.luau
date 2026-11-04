@@ -20,6 +20,8 @@ export type Stage = {
 
 export type Options = {
 	size: UI.Point,
+	library: Design.Library?,
+	compact: boolean?,
 	accent: unknown?,
 	token: ((name: string) -> Design.Literal)?,
 	resolveToken: ((name: string) -> Design.Resolved)?,
@@ -82,6 +84,7 @@ return function(ui: UI.UI)
 	end
 
 	return function(session: Design.Session, parent: Compose.Node, options: Options): Stage
+		local library = options.library or session.library
 		local accent = options.accent or Theme.color.accent
 		local width, height = options.size.X, options.size.Y
 		local holder = frame "DesignStage"
@@ -593,7 +596,7 @@ return function(ui: UI.UI)
 				table.clear(nodes)
 				stopDesign = runtime.mountFragment(function(): { Compose.Child }
 					local rendered, content = pcall(function(): unknown
-						return Design.render(value, session.library, {
+						return Design.render(value, library, {
 							exclude = function(node: Design.Node): boolean
 								return node.hidden == true
 							end,
@@ -636,7 +639,7 @@ return function(ui: UI.UI)
 						session.problem:set(`This design does not render: {content}`)
 						return {}
 					end
-					local provide = session.library.provide
+					local provide = library.provide
 					return { ui.node(if provide then provide(content) else content) }
 				end, surface)
 			end)
@@ -681,7 +684,7 @@ return function(ui: UI.UI)
 		end
 		local function zoomTo(scale: number, around: UI.Point?)
 			local before = zoom:peek()
-			local after = math.clamp(scale, 0.1, 8)
+			local after = math.clamp(scale, 0.02, 8)
 			if around and ui.get(holder, "Parent") and ui.isA(ui.get(holder, "Parent"), "GuiObject") then
 				local host = ui.get(holder, "Parent")
 				local center = Math.add(
@@ -697,8 +700,11 @@ return function(ui: UI.UI)
 			pan = { X = 0, Y = 0 }
 			local host = ui.get(holder, "Parent")
 			if host and ui.isA(host, "GuiObject") and ui.xy(host, "AbsoluteSize").X > 0 then
-				local room = Math.sub(ui.xy(host, "AbsoluteSize"), { X = 96, Y = 120 })
-				zoom:set(math.clamp(math.min(room.X / width, room.Y / height), 0.1, 1))
+				local room = Math.sub(
+					ui.xy(host, "AbsoluteSize"),
+					if options.compact then { X = 32, Y = 56 } else { X = 96, Y = 120 }
+				)
+				zoom:set(math.clamp(math.min(room.X / width, room.Y / height), 0.02, 1))
 			else
 				zoom:set(1)
 			end

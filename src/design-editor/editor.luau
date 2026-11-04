@@ -4,8 +4,8 @@ local UI = require "./ui"
 
 local Compose = require "../core"
 local Design = require "../design"
-local Stage = require "./stage"
-local Stage3D = require "./stage3d"
+local Canvas = require "./canvas"
+local Devices = require "./devices"
 local Layers = require "./layers"
 local LibraryPanel = require "./library-panel"
 local Inspector = require "./inspector"
@@ -13,19 +13,19 @@ local Inspector = require "./inspector"
 export type Editor = {
 	root: Compose.Node,
 	session: Design.Session,
-	stage: Stage.Stage?,
-	scene: Stage3D.Scene?,
+	canvas: Canvas.Canvas,
 	dispose: () -> (),
 }
 
-export type Device = { name: string, size: UI.Point, select: (() -> ())? }
+export type Device = Devices.Profile
 
 export type Preview = { name: string, choices: { string }, initial: string?, select: (choice: string) -> () }
 
 export type Options = {
-	stageSize: UI.Point,
+	stageSize: UI.Point?,
 	devices: { Device }?,
 	device: string?,
+	frame: ((Device, Compose.ReadOnlyValue<number>) -> Canvas.Context)?,
 	bindings: { [string]: Design.Resolved }?,
 	previews: { Preview }?,
 	token: ((name: string) -> Design.Literal)?,
@@ -63,7 +63,7 @@ return function(ui: UI.UI)
 	local function group(name: string, order: number, alignment: unknown): Compose.Node
 		local frame = Theme.frame(name)
 		ui.set(frame, "AutomaticSize", ui.values.enum("AutomaticSize", "X"))
-		ui.set(frame, "Size", ui.values.udim2(0, 0, 1, 0))
+		ui.set(frame, "Size", ui.values.udim2(0, 0, 0, size.toolbar / 2))
 		ui.set(frame, "LayoutOrder", order)
 		local layout = Theme.list(
 			frame,
@@ -93,7 +93,7 @@ return function(ui: UI.UI)
 		ui.set(toolRule, "Size", ui.values.udim2(1, 0, 0, 1))
 		ui.set(toolRule, "Parent", toolbar)
 		local leftTools = group("Insert", 1, ui.values.enum("HorizontalAlignment", "Left"))
-		ui.set(leftTools, "Position", ui.values.udim2(0, size.gutter, 0, 0))
+		ui.set(leftTools, "Position", ui.values.udim2(0, size.gutter, 0, size.toolbar / 2))
 		ui.set(leftTools, "Parent", toolbar)
 		local brand = Theme.label("◆", color.accent, 18, Theme.font.bold)
 		ui.set(brand, "Name", "Brand")
@@ -173,49 +173,29 @@ return function(ui: UI.UI)
 		ui.set(syncButton, "FontFace", Theme.font.bold)
 		ui.set(syncButton, "Parent", status)
 		ui.set(root, "Parent", parent)
-		type View = {
-			zoom: Compose.Value<number>,
-			fit: () -> (),
-			zoomTo: (scale: number, around: UI.Point?) -> (),
-			dispose: () -> (),
-		}
-		local stage: Stage.Stage? = nil
-		local scene: Stage3D.Scene? = nil
-		local view: View
-		if library.space == "3d" then
-			local built = Stage3D(ui)(session, center, {
-				accent = color.accent,
-				token = options.token,
-				resolveToken = options.resolveToken,
-				bindings = options.bindings,
-				slots = options.slots,
-			})
-			scene = built
-			view = { zoom = built.zoom, fit = built.fit, zoomTo = built.zoomTo, dispose = built.dispose }
-		else
-			local built = Stage(ui)(session, center, {
-				size = options.stageSize,
-				accent = color.accent,
-				token = options.token,
-				resolveToken = options.resolveToken,
-				bindings = options.bindings,
-				slots = options.slots,
-			})
-			stage = built
-			view = { zoom = built.zoom, fit = built.fit, zoomTo = built.zoomTo, dispose = built.dispose }
-		end
+		local devices = options.devices
+			or if options.stageSize then { Devices.custom("Canvas", options.stageSize) } else Devices.all
+		local view = Canvas(ui, session, center, {
+			devices = devices,
+			device = options.device,
+			frame = options.frame,
+			bindings = options.bindings,
+			token = options.token,
+			resolveToken = options.resolveToken,
+			slots = options.slots,
+		})
 		local layers = Layers(ui)(session, left)
 		local libraryPanel = LibraryPanel(ui)(session, libraryBody)
 		local inspector = Inspector(ui)(session, right, {
 			tokens = options.tokens,
 			play = function(sequence: string)
-				local flat = stage
+				local flat = view.current().stage
 				if flat then
 					flat.play(sequence)
 				end
 			end,
 			measure = function(id: string, key: string): number?
-				local flat = stage
+				local flat = view.current().stage
 				local instance: Compose.Node? = if flat then flat.nodes[id] else nil
 				if instance == nil then
 					return nil
@@ -270,25 +250,20 @@ return function(ui: UI.UI)
 			end)
 			previewOrder += 1
 		end
-		local devices = options.devices
-		if devices and #devices > 0 and stage then
-			local flat = stage
+		if #devices > 1 then
 			local names: { string } = {}
 			for _, device in devices do
 				table.insert(names, device.name)
 			end
 			ui.set(divider(previewOrder), "Parent", leftTools)
 			previewOrder += 1
-			cycling("Device", names, options.device, function(choice: string)
-				for _, device in devices do
-					if device.name == choice then
-						flat.resize(device.size)
-						if device.select then
-							device.select()
-						end
-					end
-				end
+			cycling("Device", names, view.current().device.name, view.select)
+			local gridButton: Compose.Node? = nil
+			gridButton = action("AllDevices", "All devices", previewOrder, leftTools, false, function()
+				view.showAll(not view.all:peek())
+				ui.set(assert(gridButton), "Text", if view.all:peek() then "Single device" else "All devices")
 			end)
+			previewOrder += 1
 		end
 		local previews = options.previews
 		if previews then
@@ -477,8 +452,7 @@ return function(ui: UI.UI)
 		return {
 			root = root,
 			session = session,
-			stage = stage,
-			scene = scene,
+			canvas = view,
 			dispose = function()
 				release()
 				if unlink then

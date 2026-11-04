@@ -33,7 +33,7 @@ return function(ui: UI.UI)
 	}
 
 	Theme.size = {
-		toolbar = 48,
+		toolbar = 88,
 		status = 26,
 		side = 340,
 		row = 32,

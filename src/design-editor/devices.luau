@@ -78,7 +78,7 @@ local capturedHandheld = profile("generic_handheld_720", "Handheld", 1279, 720, 
 
 local function get(id: string): Profile
 	for _, device in profiles do
-		if device.id == id or device.name == id or device.verifyId == id then
+		if device.id == id or device.name == id or (device.verifyId == id and device.orientation ~= "Portrait") then
 			return device
 		end
 	end
