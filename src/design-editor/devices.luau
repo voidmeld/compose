@@ -10,6 +10,7 @@ export type Profile = {
 	size: Point,
 	aspect: number,
 	guiInset: Insets,
+	topbar: Rect,
 	notch: Insets,
 	safeArea: Insets,
 	inputMode: Input,
@@ -42,6 +43,7 @@ local function profile(
 		size = table.freeze { X = width, Y = height },
 		aspect = width / height,
 		guiInset = insets(0, 58, 0, 0),
+		topbar = table.freeze { x = 164, y = 0, width = width - 164, height = 58 },
 		notch = notch or insets(0, 0, 0, 0),
 		safeArea = safe or insets(0, 58, 0, 0),
 		inputMode = input,
@@ -87,6 +89,9 @@ local function get(id: string): Profile
 end
 
 local function area(device: Profile, mode: string): Rect
+	if mode == "TopbarSafeInsets" then
+		return table.clone(device.topbar)
+	end
 	local inset = if mode == "None"
 		then insets(-device.notch.left, -device.notch.top, -device.notch.right, -device.notch.bottom)
 		elseif mode == "DeviceSafeInsets" then insets(0, 0, 0, 0)

@@ -12,8 +12,9 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 describe("host-neutral design editor", function()
 	it("matches captured device facts through Verify's simulated Studio device service", function()
 		local w = Support.world()
-		local camera = w.env.createInstance "Camera"
-		camera.Parent = w.service "Workspace"
+		local workspace = w.service "Workspace"
+		local camera = workspace:FindFirstChildOfClass "Camera" or w.env.createInstance "Camera"
+		camera.Parent = workspace
 		local profiles = table.clone(DesignEditor.devices.all)
 		table.insert(profiles, DesignEditor.devices.get "generic_handheld_720")
 		local simulator = w.service "StudioDeviceSimulatorService"
@@ -37,6 +38,17 @@ describe("host-neutral design editor", function()
 				right = w.number(last, "X"),
 				bottom = w.number(last, "Y"),
 			}
+			for _, mode in { "None", "CoreUISafeInsets", "DeviceSafeInsets" } do
+				local actual =
+					w.environment.invoke(w.service "GuiService", "GetInsetArea", w.values.Enum.ScreenInsets[mode])
+				local low, high = w.read(actual, "Min"), w.read(actual, "Max")
+				expect(DesignEditor.devices.area(device, mode)):toEqual {
+					x = w.number(low, "X") + device.guiInset.left,
+					y = w.number(low, "Y") + device.guiInset.top,
+					width = w.number(high, "X") - w.number(low, "X"),
+					height = w.number(high, "Y") - w.number(low, "Y"),
+				}
+			end
 			local expected = if device.inputMode == "touch"
 				then "Touch"
 				elseif device.inputMode == "mouse" then "KeyboardAndMouse"
