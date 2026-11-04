@@ -11,6 +11,7 @@ local Roblox3DLibrary = require "@self/roblox-3d-library"
 local Devices = require "@self/devices"
 local Canvas = require "@self/canvas"
 local Prompt = require "@self/prompt"
+local ThemePanel = require "@self/theme-panel"
 
 export type Environment = Environment.Environment
 export type Values = Environment.Values
@@ -21,6 +22,9 @@ export type Frame = Canvas.Frame
 export type FrameContext = Canvas.Context
 export type PromptRequest = Prompt.Request
 export type PromptOptions = Prompt.Options
+export type ThemeValue = ThemePanel.Value
+export type ThemeField = ThemePanel.Field
+export type ThemeStore = ThemePanel.Store
 export type Preview = Editor.Preview
 export type Sequences = Roblox3DLibrary.Sequences
 export type Options = Editor.Options & { environment: Environment.Environment }
@@ -33,6 +37,7 @@ export type Workspace = {
 	device: string?,
 	frame: ((Editor.Device, Compose.ReadOnlyValue<number>) -> Canvas.Context)?,
 	prompt: Prompt.Options?,
+	theme: ThemePanel.Store?,
 	bindings: { [string]: Design.Resolved }?,
 	previews: { Editor.Preview }?,
 	token: ((name: string) -> Design.Literal)?,
@@ -105,6 +110,7 @@ local function kit(name: string, open: () -> Workspace): Kit
 				device = workspace.device,
 				frame = workspace.frame,
 				prompt = workspace.prompt,
+				theme = workspace.theme,
 				bindings = workspace.bindings,
 				previews = workspace.previews,
 				token = workspace.token,

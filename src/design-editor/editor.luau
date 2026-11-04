@@ -10,6 +10,7 @@ local Layers = require "./layers"
 local LibraryPanel = require "./library-panel"
 local Inspector = require "./inspector"
 local Prompt = require "./prompt"
+local ThemePanel = require "./theme-panel"
 
 export type Editor = {
 	root: Compose.Node,
@@ -36,6 +37,7 @@ export type Options = {
 	onExport: ((source: string) -> ())?,
 	link: Design.LinkStore?,
 	prompt: Prompt.Options?,
+	theme: ThemePanel.Store?,
 	runtime: Compose.Runtime,
 }
 
@@ -189,6 +191,7 @@ return function(ui: UI.UI)
 		local layers = Layers(ui)(session, left)
 		local prompt = if options.prompt then Prompt.create(ui, session, view, center, options.prompt) else nil
 		local libraryPanel = LibraryPanel(ui)(session, libraryBody)
+		local theme = if options.theme then ThemePanel.create(ui, libraryBody, options.theme) else nil
 		local inspector = Inspector(ui)(session, right, {
 			tokens = options.tokens,
 			play = function(sequence: string)
@@ -280,6 +283,14 @@ return function(ui: UI.UI)
 		local _ = action("Duplicate", "Duplicate", 4, rightTools, false, session.duplicate)
 		local _ = action("Delete", "Delete", 5, rightTools, false, session.remove)
 		local textControl: Compose.Node? = nil
+		if theme then
+			local opened = false
+			local _ = action("Theme", "Theme", 9, rightTools, false, function()
+				opened = not opened
+				ui.set(theme.root, "Visible", opened)
+				ui.set(libraryPanel.root, "Visible", not opened)
+			end)
+		end
 		textControl = action("TextSize", `Text {textSize}`, 8, rightTools, false, function()
 			local chosen = if textSize < 17 then 17 elseif textSize < 19 then 19 else 15
 			local changed =
@@ -470,6 +481,9 @@ return function(ui: UI.UI)
 				end
 				layers.dispose()
 				libraryPanel.dispose()
+				if theme then
+					theme.dispose()
+				end
 				inspector.dispose()
 				ui.destroy(root)
 			end,
