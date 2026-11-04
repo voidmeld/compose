@@ -15,15 +15,14 @@ local TIERS: { Relevance.Tier } = {
 describe("relevance", function()
 	describe("tier selection", function()
 		it("picks the nearest tier that contains the entity", function()
-			for _, scenario in
-				{
-					{ distance = 10, tier = 1 },
-					{ distance = 80, tier = 1 },
-					{ distance = 120, tier = 2 },
-					{ distance = 250, tier = 3 },
-					{ distance = 301 },
-				}
-			do
+			local scenarios: { { distance: number, tier: number? } } = {
+				{ distance = 10, tier = 1 },
+				{ distance = 80, tier = 1 },
+				{ distance = 120, tier = 2 },
+				{ distance = 250, tier = 3 },
+				{ distance = 301 },
+			}
+			for _, scenario in scenarios do
 				expect(Relevance.tierFor(scenario.distance, nil, TIERS, 0, 1)):toBe(scenario.tier)
 			end
 		end)
@@ -31,16 +30,15 @@ describe("relevance", function()
 
 	describe("hysteresis", function()
 		it("holds an entity at its current tier through the band", function()
-			for _, scenario in
-				{
-					{ distance = 90, current = 1, tier = 1 },
-					{ distance = 105, current = 1, tier = 2 },
-					{ distance = 80, current = 2, tier = 1 },
-					{ distance = 81, current = 2, tier = 2 },
-					{ distance = 310, current = 3, tier = 3 },
-					{ distance = 330, current = 3 },
-				}
-			do
+			local scenarios: { { distance: number, current: number, tier: number? } } = {
+				{ distance = 90, current = 1, tier = 1 },
+				{ distance = 105, current = 1, tier = 2 },
+				{ distance = 80, current = 2, tier = 1 },
+				{ distance = 81, current = 2, tier = 2 },
+				{ distance = 310, current = 3, tier = 3 },
+				{ distance = 330, current = 3 },
+			}
+			for _, scenario in scenarios do
 				expect(Relevance.tierFor(scenario.distance, scenario.current, TIERS, 24, 1)):toBe(scenario.tier)
 			end
 		end)
