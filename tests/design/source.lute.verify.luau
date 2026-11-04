@@ -21,6 +21,7 @@ local library: Design.Library = {
 		"type Controls = {",
 		"\tBox: (string) -> ({ Target }) -> Target,",
 		"\tFlash: (string) -> ({ target: Core.ReadOnlyValue<Target?> | ((Core.Use) -> Target?) }) -> Target,",
+		"\tPanel: (string) -> ({ content: () -> Target }) -> Target,",
 		"}",
 	},
 	returnType = "Target",
@@ -30,6 +31,7 @@ local library: Design.Library = {
 	kinds = {
 		Box = { fields = {}, children = "list", call = "UI.Box", build = build },
 		Flash = { fields = { target = { type = "node" } }, children = "none", call = "UI.Flash", build = build },
+		Panel = { fields = {}, children = "slot", slot = "content", call = "UI.Panel", build = build },
 	},
 }
 
@@ -50,6 +52,31 @@ local function analyze(code: string)
 end
 
 describe("Design emitted source", function()
+	it("strictly types both static root wrappers around one shared content function", function()
+		local value = Design.document.setContract(Design.document.new("Roots", library, "Box"), library, {
+			inputs = {
+				{
+					id = "presentation",
+					kind = "value",
+					type = "string",
+					options = { "inline", "panel" },
+					required = true,
+				},
+			},
+			outputs = {},
+		})
+		value = Design.document.insert(value, library, "n1", "Box")
+		value = Design.document.setRootVariant(
+			value,
+			library,
+			{ input = "presentation", value = "panel", kind = "Panel", props = {} }
+		)
+		local code = Design.emit(value, library)
+		expect(Design.parse(code, library)):toEqual(value)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		analyze(code)
+	end)
+
 	it("strictly types forward node references and selected node bindings without casts", function()
 		local value = Design.document.setContract(Design.document.new("References", library, "Box"), library, {
 			inputs = { { id = "selected", kind = "readable", type = "string", required = true } },

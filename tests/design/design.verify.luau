@@ -141,6 +141,70 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("selects static root kinds with one direct name and shared content", function()
+		local value = Design.document.setContract(Design.document.new("Details", library, "Stack"), library, {
+			inputs = {
+				{
+					id = "presentation",
+					kind = "value",
+					type = "string",
+					options = { "inline", "panel" },
+					required = true,
+					preview = "inline",
+				},
+				{ id = "name", kind = "value", type = "string", required = true },
+			},
+			outputs = {},
+		})
+		value = Design.document.nameFromInput(value, library, "n1", "name")
+		local content, label, flash
+		value, content = Design.document.insert(value, library, "n1", "Stack")
+		value, label = Design.document.insert(value, library, content, "Label")
+		value, flash = Design.document.insert(value, library, content, "Flash")
+		value = Design.document.change(value, library, flash, "target", { node = label })
+		value = Design.document.setRootVariant(
+			value,
+			library,
+			{ input = "presentation", value = "panel", kind = "Panel", props = { title = { literal = "Details" } } }
+		)
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'presentation: "inline" | "panel"', 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "local function rootContent(): Instance", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local inline = builtNode(Design.render(value, library, { inputs = { name = "Direct" } }))
+		expect(inline.kind):toBe "Stack"
+		expect(inline.name):toBe "Direct"
+		expect(inline.children[1].children[1].kind):toBe "Label"
+		local panel = builtNode(
+			Design.render(
+				value,
+				library,
+				{ bindings = { presentation = { value = "panel" } }, inputs = { name = "Direct" } }
+			)
+		)
+		expect(panel.kind):toBe "Panel"
+		expect(panel.name):toBe "Direct"
+		expect(panel.props.title.literal):toBe "Details"
+		expect(panel.children):toEqual {}
+		local shared = builtNode(assert(panel.props.content.slot)())
+		expect(shared.children[1].kind):toBe "Label"
+		expect(assert(shared.children[2].props.target.node):peek()):toBe(shared.children[1])
+		local invalid = Design.document.copy(value)
+		invalid.contract.inputs[1].kind = "readable"
+		expect(function()
+			Design.document.validate(invalid, library)
+		end):toThrow "static text enum"
+		invalid = Design.document.copy(value)
+		assert(invalid.rootVariant).value = "unknown"
+		expect(function()
+			Design.document.validate(invalid, library)
+		end):toThrow "enum option"
+		expect(function()
+			Design.render(value, library, { inputs = { presentation = "unknown" } })
+		end):toThrow "enum option"
+	end)
+
 	it("passes live rows to template kinds without snapshotting them", function()
 		local rows = Core.cell { ada }
 		local value = sample()

@@ -239,6 +239,16 @@ local function contractOf(header: Record): Types.Contract
 	local inputs: { Types.Input } = {}
 	for _, entry in list(found, "inputs") do
 		local fields: { Types.ItemField }? = if entry.fields ~= nil then fieldsFrom(entry) else nil
+		local options: { string }? = nil
+		if entry.options ~= nil then
+			assert(type(entry.options) == "table", "Input options are a list")
+			local choices: { string } = {}
+			for _, option in entry.options do
+				assert(type(option) == "string", "Input options are text")
+				table.insert(choices, option)
+			end
+			options = choices
+		end
 		table.insert(inputs, {
 			id = text(entry, "id"),
 			kind = inputKind(text(entry, "kind")),
@@ -247,6 +257,7 @@ local function contractOf(header: Record): Types.Contract
 			preview = entry.preview,
 			fields = fields,
 			required = if entry.required == true then true else nil,
+			options = options,
 		})
 	end
 	local outputs: { Types.Output } = {}
@@ -682,7 +693,15 @@ function source.parse(code: string, library: Library): Types.Document
 		return { literal = plain() }, nil
 	end
 	local captured: { [string]: string } = {}
+	local sharedContent: Node? = nil
 	node = function(): Node
+		if peek() == "rootContent" then
+			take "rootContent"
+			take "("
+			take ")"
+			local content = assert(sharedContent, "Root content needs its shared function")
+			return content
+		end
 		if peek() == "capture" then
 			take "capture"
 			take "("
@@ -923,8 +942,34 @@ function source.parse(code: string, library: Library): Types.Document
 	end
 	take()
 	take "function"
+	local variant: Types.RootVariant? = nil
+	local alternative: Node? = nil
 	while not (peek() == "return" and peek(1) ~= "node") do
-		if peek() == "local" and peek(1) == "named" then
+		if peek() == "if" and peek(1) == "props" then
+			take "if"
+			take "props"
+			take "."
+			local input = name()
+			take "="
+			take "="
+			local selected = plain()
+			assert(type(selected) == "string", "A root variant selects an enum option")
+			take "then"
+			take "return"
+			alternative = node()
+			variant = { input = input, value = selected, kind = alternative.kind, props = alternative.props }
+			take "end"
+		elseif peek() == "local" and peek(1) == "function" and peek(2) == "rootContent" then
+			take "local"
+			take "function"
+			take "rootContent"
+			take "("
+			take ")"
+			returnAnnotation()
+			take "return"
+			sharedContent = node()
+			take "end"
+		elseif peek() == "local" and peek(1) == "named" then
 			take "local"
 			take "named"
 			while peek() ~= "=" do
@@ -979,6 +1024,22 @@ function source.parse(code: string, library: Library): Types.Document
 	end
 	take "return"
 	local root = node()
+	if sharedContent then
+		assert(variant ~= nil and alternative ~= nil, "Shared root content needs an alternative")
+		assert(
+			(root.nameInput ~= nil or alternative.name == root.name)
+				and alternative.nameInput == root.nameInput
+				and alternative.nameField == root.nameField,
+			"Root variants keep one direct root name"
+		)
+		assert(
+			#root.children == 1
+				and root.children[1] == sharedContent
+				and #alternative.children == 1
+				and alternative.children[1] == sharedContent,
+			"Root variants share their content"
+		)
+	end
 	take "end"
 	local function remap(current: Node)
 		for _, property in current.props do
@@ -1001,6 +1062,63 @@ function source.parse(code: string, library: Library): Types.Document
 		end
 	end
 	remap(root)
+	if alternative then
+		local wrapper = table.clone(alternative)
+		wrapper.children = {}
+		remap(wrapper)
+	end
+	if variant then
+		local ids: { [string]: string } = {}
+		nextId = 1
+		local function renumber(current: Node)
+			local id = `n{nextId}`
+			nextId += 1
+			ids[current.id] = id
+			current.id = id
+			for _, child in current.children do
+				renumber(child)
+			end
+		end
+		renumber(root)
+		local function markers(current: Literal)
+			if type(current) ~= "table" then
+				return
+			end
+			local template = current["$template"]
+			if type(template) == "string" then
+				current["$template"] = ids[template]
+			end
+			for _, item in current do
+				markers(item)
+			end
+		end
+		local function bindings(current: Node)
+			for _, property in current.props do
+				if property.node then
+					property.node = ids[property.node]
+				end
+				if property.nodes then
+					for index, id in property.nodes do
+						property.nodes[index] = ids[id]
+					end
+				end
+				if property.literal ~= nil then
+					markers(property.literal)
+				end
+			end
+			if current.bind and current.bind.row then
+				current.bind.row = ids[current.bind.row]
+			end
+			for _, child in current.children do
+				bindings(child)
+			end
+		end
+		bindings(root)
+		local wrapper = table.clone(root)
+		wrapper.children = {}
+		wrapper.props = variant.props
+		bindings(wrapper)
+	end
 	local editor = header.editor
 	if editor ~= nil then
 		assert(type(editor) == "table", "The editor header is a table")
@@ -1027,6 +1145,7 @@ function source.parse(code: string, library: Library): Types.Document
 		state = stateFrom(header),
 		sequences = sequencesFrom(header),
 		root = root,
+		rootVariant = variant,
 	}, library)
 end
 

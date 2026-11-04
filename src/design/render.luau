@@ -34,6 +34,25 @@ end
 return function(value: Types.Document, library: Types.Library, context: Context?): unknown
 	local supplied: { [string]: Literal } = if context and context.inputs then context.inputs else {}
 	local bindings: { [string]: Resolved } = if context and context.bindings then context.bindings else {}
+	local variant = value.rootVariant
+	if variant then
+		local declared = assert(Document.input(value, variant.input))
+		local binding = bindings[variant.input]
+		assert(binding == nil or binding.readable == nil, "A root variant needs a static enum binding")
+		local selected = if binding
+			then binding.value or binding.literal
+			else supplied[variant.input] or declared.preview
+		assert(
+			type(selected) == "string" and table.find(assert(declared.options), selected) ~= nil,
+			"A root variant needs an enum option"
+		)
+		if selected == variant.value then
+			value = table.clone(value)
+			value.root = table.clone(value.root)
+			value.root.kind = variant.kind
+			value.root.props = variant.props
+		end
+	end
 	local live = context ~= nil and context.bindings ~= nil
 	local outputs: { [string]: (args: { Literal }) -> () } = if context and context.outputs then context.outputs else {}
 	local slots: { [string]: () -> unknown } = if context and context.slots then context.slots else {}

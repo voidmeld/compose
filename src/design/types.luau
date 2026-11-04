@@ -152,6 +152,7 @@ export type Input = {
 	fields: { ItemField }?,
 	required: boolean?,
 	luauType: string?,
+	options: { string }?,
 }
 
 export type Output = { id: string, args: { InputType }?, row: string? }
@@ -186,7 +187,10 @@ export type Document = {
 	state: { State }?,
 	sequences: { Sequence }?,
 	root: Node,
+	rootVariant: RootVariant?,
 }
+
+export type RootVariant = { input: string, value: string, kind: string, props: { [string]: Value } }
 
 export type EmitOptions = {
 	name: string?,

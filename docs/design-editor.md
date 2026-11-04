@@ -91,6 +91,13 @@ Generated components receive typed props directly.
 Node references emit cells of the library's optional return type, including forward references.
 The capture function and selected-reference table preserve that type under strict analysis.
 
+A document can set `rootVariant = { input, value, kind, props }` through `Design.document.setRootVariant`.
+The required static string input declares its enum `options`.
+The matching option selects the alternative wrapper; the others select the ordinary root.
+Both wrappers share one unconditional content subtree and keep one direct root name.
+List and slot wrappers are supported. The emitted `rootContent` function owns the shared composition.
+This selection occurs when the view is built. Prepare the selector in the caller.
+
 A kit workspace can provide `token`, `resolveToken`, `tokens` and `slots`.
 `tokens` lists inspector choices.
 `resolveToken(name)` returns `Design.Resolved`, including native or reactive values.

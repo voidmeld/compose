@@ -144,6 +144,13 @@ local function contractLiteral(contract: Types.Contract): Literal
 		if input.luauType ~= nil then
 			entry.luauType = input.luauType
 		end
+		if input.options then
+			local options: Record = {}
+			for index, option in input.options do
+				options[index] = option
+			end
+			entry.options = options
+		end
 		local preview = input.preview
 		if preview ~= nil then
 			entry.preview = preview
@@ -276,6 +283,13 @@ local function listItemName(input: Types.Input): string
 end
 
 local function base(library: Library, input: Types.Input): string
+	if input.options then
+		local choices: { string } = {}
+		for _, option in input.options do
+			table.insert(choices, literal(option))
+		end
+		return table.concat(choices, " | ")
+	end
 	if input.luauType ~= nil then
 		return input.luauType
 	end
@@ -429,10 +443,19 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 	end
 	collect(value.root)
+	local variant = value.rootVariant
+	local alternative: Node? = nil
+	if variant then
+		alternative = table.clone(value.root)
+		alternative.kind = variant.kind
+		alternative.props = variant.props
+		collect(alternative)
+	end
 	table.sort(referencedIds)
 	local rowFunctions = options ~= nil and options.rowFunctions == true
 	local rowDefinitions: { string } = {}
-	local rowNames: { [string]: boolean } = { props = true, state = true, refs = true, capture = true }
+	local rowNames: { [string]: boolean } =
+		{ props = true, state = true, refs = true, capture = true, rootContent = true }
 	rowNames[library.parameter] = true
 	local emitNode: (node: Node, depth: number) -> string
 	local emit: (node: Node, depth: number) -> string
@@ -735,7 +758,11 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local list = "{ " .. table.concat(quoted, ", ") .. " }"
 		return `{tagging.call}(\n{inner}{emitNode(node, depth + 1)},\n{inner}{list}\n{tabs(depth)})`
 	end
+	local sharedContent: Node? = nil
 	emit = function(node: Node, depth: number): string
+		if node == sharedContent then
+			return "rootContent()"
+		end
 		if referenced[node.id] then
 			local inner = tabs(depth + 1)
 			return `capture(\n{inner}"{node.id}",\n{inner}{tagged(node, depth + 1)}\n{tabs(depth)})`
@@ -914,7 +941,14 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	if controls ~= nil and localControls then
 		table.insert(lines, "\t" .. controls)
 	end
+	local contentSource: string? = nil
+	if variant then
+		local content = value.root.children[1]
+		contentSource = emit(content, 2)
+		sharedContent = content
+	end
 	local rootSource = emit(value.root, 1)
+	local alternativeSource = if alternative then emit(alternative, 2) else nil
 	for index, line in rowTypeLines do
 		table.insert(lines, rowTypesAt + 2 * index - 2, line)
 		table.insert(lines, rowTypesAt + 2 * index - 1, "")
@@ -922,7 +956,8 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	for _, definition in hoisted do
 		table.insert(lines, definition)
 	end
-	local readsState = string.find(rootSource, "state.", 1, true) ~= nil
+	local readsState = string.find(rootSource .. (contentSource or "") .. (alternativeSource or ""), "state.", 1, true)
+		~= nil
 	for _, definition in lateHoisted do
 		readsState = readsState or string.find(definition, "state.", 1, true) ~= nil
 	end
@@ -1029,6 +1064,13 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	end
 	for _, definition in lateHoisted do
 		table.insert(lines, definition)
+	end
+	if contentSource and variant and alternativeSource then
+		table.insert(lines, `\tlocal function rootContent(): {library.returnType}\n\t\treturn {contentSource}\n\tend`)
+		table.insert(
+			lines,
+			`\tif props.{variant.input} == {literal(variant.value)} then\n\t\treturn {alternativeSource}\n\tend`
+		)
 	end
 	table.insert(lines, `\treturn {rootSource}`)
 	table.insert(lines, "end")

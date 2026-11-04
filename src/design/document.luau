@@ -104,6 +104,22 @@ local function checkContract(contract: Types.Contract)
 		seen[input.id] = true
 		checkTypeName(input.luauType)
 		checkFields(input.fields)
+		local options = input.options
+		if options then
+			assert(
+				input.kind == "value" and input.type == "string" and #options >= 2,
+				`Input {input.id} options need a static text enum`
+			)
+			local choices: { [string]: true } = {}
+			for _, option in options do
+				assert(#option > 0 and not choices[option], `Input {input.id} options must be unique nonempty text`)
+				choices[option] = true
+			end
+			assert(
+				input.preview == nil or (type(input.preview) == "string" and choices[input.preview] == true),
+				`Input {input.id} preview must be an option`
+			)
+		end
 		assert(input.type ~= "slot" or input.luauType == nil, `Slot input {input.id} uses the library return type`)
 		local preview = input.preview
 		assert(preview == nil or plain(preview, 0), `Preview for {input.id} must be plain data`)
@@ -601,7 +617,40 @@ function document.validate(value: Document, library: Library): Document
 		assert(names[name] == nil or names[name] == candidate, `Two chosen nodes share the name {name}`)
 		names[name] = candidate
 	end
+	local variant = value.rootVariant
+	if variant then
+		local input = assert(inputOf(value, variant.input), "A root variant needs an enum input")
+		assert(
+			input.kind == "value" and input.type == "string" and input.required == true and input.options ~= nil,
+			"A root variant needs a required static text enum"
+		)
+		assert(table.find(assert(input.options), variant.value) ~= nil, "A root variant value must be an enum option")
+		local root = value.root
+		local base = assert(library.kinds[root.kind])
+		local alternative = assert(library.kinds[variant.kind], `Unknown {library.name} kind {variant.kind}`)
+		assert(
+			(base.children == "list" or base.children == "slot")
+				and (alternative.children == "list" or alternative.children == "slot"),
+			"Root variants need list or slot kinds"
+		)
+		assert(
+			root.bind == nil and #root.children == 1 and root.children[1].when == nil,
+			"Root variants share one unconditional content node"
+		)
+		local copy = copyDocument(value)
+		local copied = assert(copy.rootVariant)
+		copy.rootVariant = nil
+		copy.root.kind = variant.kind
+		copy.root.props = copied.props
+		document.validate(copy, library)
+	end
 	return value
+end
+
+function document.setRootVariant(value: Document, library: Library, variant: Types.RootVariant?): Document
+	local copy = copyDocument(value)
+	copy.rootVariant = variant
+	return document.validate(copyDocument(copy), library)
 end
 
 local function defaults(kind: Types.Kind): { [string]: Value }

@@ -54,6 +54,9 @@ not overwrite the module. Keep every edit inside the shapes below.
 - A style tag: `<tag>(<node>, { "tag-name" })`, where `<tag>` is the library's
   tag call (Facet: `Facet.tag`).
 - A node reference: `refs.nN`, with the node wrapped in `capture("nN", <node>)`.
+- A static root variant: a required string input declares enum `options`.
+  `Design.document.setRootVariant` selects one alternative kind and its props
+  for a matching option. Both roots share one content function and one name.
 - A content property that holds a subtree: `glyph = function() return <node> end`.
   The node is a child of the control in the editor.
 - A moving value: `<follow>(state.id, "role")`, where `<follow>` is the
