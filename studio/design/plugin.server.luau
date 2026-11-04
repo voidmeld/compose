@@ -96,6 +96,8 @@ local widget = plugin:CreateDockWidgetPluginGuiAsync(
 )
 widget.Title = "Compose Design"
 widget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+local remembered = plugin:GetSetting "TextSize"
+widget:SetAttribute("ComposeDesignTextSize", if type(remembered) == "number" then remembered else 15)
 
 local current: ModuleScript? = nil
 local close: (() -> ())? = nil
@@ -126,6 +128,9 @@ local function show()
 end
 
 local connections = {
+	widget:GetAttributeChangedSignal("ComposeDesignTextSize"):Connect(function()
+		plugin:SetSetting("TextSize", widget:GetAttribute "ComposeDesignTextSize")
+	end),
 	widget:GetPropertyChangedSignal("Enabled"):Connect(show),
 	button.Click:Connect(function()
 		widget.Enabled = not widget.Enabled
