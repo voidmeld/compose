@@ -315,6 +315,22 @@ describe("roblox adapter", function()
 			parent:Destroy()
 		end)
 
+		it("names a destroyed node that is placed again", function()
+			local emulator = Support.emulator()
+			local host = ComposeRoblox.createHost(emulator.engine)
+			local parent = Support.instance(emulator.engine.new "Frame")
+			parent.Name = "Race"
+			local child = Support.instance(emulator.engine.new "Frame")
+			child.Name = "Feed"
+			child:Destroy()
+			local ok, failure = pcall(host.render.insertChild, parent, child, nil)
+			expect(ok):toBe(false)
+			local message = tostring(failure)
+			expect(string.find(message, "host/node-destroyed", 1, true) ~= nil):toBe(true)
+			expect(string.find(message, "Feed was placed in Race after it was destroyed", 1, true) ~= nil):toBe(true)
+			parent:Destroy()
+		end)
+
 		it("disposes once after an external subtree reset and releases borrowed-node subscriptions", function()
 			local w = world()
 			local borrowed = Support.instance(w.emulator.engine.new "TextButton")
