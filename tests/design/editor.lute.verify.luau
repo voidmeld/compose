@@ -297,6 +297,11 @@ describe("host-neutral design editor", function()
 		}
 		editor.session.select "n1"
 		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		expect(editor.session.insert "Frame"):toBe(true)
+		local detail = editor.session.selected:peek()
+		expect(editor.session.change("width", { literal = 3 })):toBe(true)
+		expect(editor.session.change("height", { literal = 16 })):toBe(true)
+		editor.session.select "n1"
 		editor.canvas.showAll(true)
 		w.settle()
 		expect(#editor.canvas.frames()):toBe(#DesignEditor.devices.all)
@@ -305,6 +310,9 @@ describe("host-neutral design editor", function()
 			w.settle()
 			for _, frame in editor.canvas.frames() do
 				local stage = assert(frame.stage)
+				local extent = w.point(stage.nodes[detail], "AbsoluteSize")
+				expect(extent.X / stage.zoom:peek()):toBeCloseTo(3, 0.01)
+				expect(extent.Y / stage.zoom:peek()):toBeCloseTo(16, 0.01)
 				local width = w.point(stage.nodes.n1, "AbsoluteSize").X / stage.zoom:peek()
 				expect(width):toBeCloseTo(
 					math.floor(
