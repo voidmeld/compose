@@ -50,23 +50,7 @@ describe("createSharedResource", function()
 		Compose.owner.dispose(first)
 		expect(torn):toBe(0)
 		Compose.owner.dispose(second)
-		expect(torn):toBe(1)
-	end)
-
-	it("releases exactly once however the owner is disposed", function()
-		local torn = 0
-		local acquire = Compose.createSharedResource(function()
-			return "value", function()
-				torn += 1
-			end
-		end)
-
-		local owner = Compose.createOwner()
-		Compose.withOwner(owner, function()
-			acquire()
-		end)
-		Compose.owner.dispose(owner)
-		Compose.owner.dispose(owner)
+		Compose.owner.dispose(second)
 		expect(torn):toBe(1)
 	end)
 

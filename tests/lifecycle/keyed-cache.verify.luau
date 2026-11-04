@@ -38,38 +38,25 @@ describe("keyed cache", function()
 	end)
 
 	it("evicts the least-recently-used entry once over the cap", function()
-		local owner = Compose.createOwner()
-		local cache, destroyed = makeCache(owner, 2, function(key: string)
-			return { key = key }
-		end)
-
-		local sword = cache.get "sword"
-		cache.get "shield"
-		expect(cache.size()):toBe(2)
-		cache.get "helmet"
-		expect(cache.size()):toBe(2)
-		expect(destroyed):toEqual { sword }
-		expect(cache.peek "sword"):toBe(nil)
-		expect(cache.peek "shield" ~= nil):toBe(true)
-		expect(cache.peek "helmet" ~= nil):toBe(true)
-		Compose.owner.dispose(owner)
-	end)
-
-	it("a get() refreshes recency so a touched entry survives the next eviction", function()
-		local owner = Compose.createOwner()
-		local cache, destroyed = makeCache(owner, 2, function(key: string)
-			return { key = key }
-		end)
-
-		local sword = cache.get "sword"
-		local shield = cache.get "shield"
-		cache.get "sword"
-		cache.get "helmet"
-
-		expect(destroyed):toEqual { shield }
-		expect(cache.peek "sword"):toBe(sword)
-		expect(cache.peek "shield"):toBe(nil)
-		Compose.owner.dispose(owner)
+		for _, touch in { false, true } do
+			local owner = Compose.createOwner()
+			local cache, destroyed = makeCache(owner, 2, function(key: string)
+				return { key = key }
+			end)
+			local sword = cache.get "sword"
+			local shield = cache.get "shield"
+			expect(cache.size()):toBe(2)
+			if touch then
+				cache.get "sword"
+			end
+			cache.get "helmet"
+			expect(cache.size()):toBe(2)
+			expect(destroyed):toEqual { if touch then shield else sword }
+			expect(cache.peek(if touch then "shield" else "sword")):toBe(nil)
+			expect(cache.peek(if touch then "sword" else "shield")):toBe(if touch then sword else shield)
+			expect(cache.peek "helmet" ~= nil):toBe(true)
+			Compose.owner.dispose(owner)
+		end
 	end)
 
 	it("keys() reports recency order, least-recently-used first", function()
@@ -127,14 +114,6 @@ describe("keyed cache", function()
 		expect(#destroyed):toBe(2)
 		Compose.owner.dispose(owner)
 		expect(#destroyed):toBe(2)
-	end)
-
-	it("a get() after disposal raises rather than resurrecting an entry", function()
-		local owner = Compose.createOwner()
-		local cache = makeCache(owner, 4, function(key: string)
-			return { key = key }
-		end)
-		Compose.owner.dispose(owner)
 		expect(function()
 			cache.get "sword"
 		end):toThrow "disposed"
