@@ -141,6 +141,69 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("retains nested keyed row ownership when an outer row replaces its qualified list", function()
+		local world = Support.world()
+		local toy = table.clone(library)
+		toy.keyed = "Toy.keyed"
+		toy.kinds = table.clone(library.kinds)
+		toy.kinds.Stack = table.clone(library.kinds.Stack)
+		toy.kinds.Stack.build = function(
+			props: { [string]: Design.Resolved },
+			children: { unknown },
+			name: string
+		): unknown
+			local properties: Core.Props = {}
+			for index, child in children do
+				properties[index] = child
+			end
+			local text = props.Visible
+			if text then
+				properties.Visible = text.readable or text.literal
+			end
+			return world.create "Frame"(name)(properties)
+		end
+		local fields: { Design.ItemField } = { { id = "id", type = "string" }, { id = "visible", type = "boolean" } }
+		local pageFields: { Design.ItemField } =
+			{ { id = "id", type = "string" }, { id = "rows", type = "list", fields = fields } }
+		local value = Design.document.setContract(Design.document.new("Nested", toy, "Stack"), toy, {
+			inputs = { { id = "pages", kind = "readable", type = "list", fields = pageFields, required = true } },
+			outputs = {},
+		})
+		local page, row
+		value, page = Design.document.insert(value, toy, "n1", "Stack")
+		value = Design.document.bind(value, toy, "n1", { from = "pages", key = "id" })
+		value, row = Design.document.insert(value, toy, page, "Stack")
+		value = Design.document.bind(value, toy, page, { from = "pages.rows", key = "id" })
+		value = Design.document.change(value, toy, row, "Visible", { item = "visible" })
+		local first: Design.Row = { id = "a", visible = true }
+		local second: Design.Row = { id = "b", visible = false }
+		local pages = Core.cell<<{ Design.Row }>> { { id = "page", rows = { first, second } } }
+		local dispose, root = world.runtime.mount(function(): Core.Node
+			return Support.node(Design.render(value, toy, { bindings = { pages = { rows = pages } } }))
+		end, world.root)
+		world.settle()
+		local pageNode = world.host.childrenOf(root)[1]
+		local before = world.host.childrenOf(pageNode)
+		expect(#before):toBe(2)
+		local changed: Design.Row = { id = "b", visible = true }
+		pages:set { { id = "page", rows = { changed } } }
+		world.settle()
+		expect(world.host.childrenOf(root)[1]):toBe(pageNode)
+		expect(world.host.childrenOf(pageNode)):toEqual { before[2] }
+		expect(world.host.propertyOf(before[2], "Visible")):toBe(true)
+		expect(world.host.isAlive(before[1])):toBe(false)
+		pages:set {}
+		world.settle()
+		expect(world.host.isAlive(pageNode)):toBe(false)
+		expect(world.host.isAlive(before[2])):toBe(false)
+		dispose()
+		pages:set { { id = "borrowed", rows = {} } }
+		expect(#pages:peek()):toBe(1)
+		expect(world.host.liveNodes()):toBe(1)
+		expect(world.host.liveSubscriptions()):toBe(0)
+		world.runtime:dispose()
+	end)
+
 	it("selects static root kinds with one direct name and shared content", function()
 		local value = Design.document.setContract(Design.document.new("Details", library, "Stack"), library, {
 			inputs = {
@@ -539,6 +602,21 @@ describe("Compose Design documents", function()
 		expect(string.find(code, "use(current).rows", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "use(current).sent == true", 1, true) ~= nil):toBe(true)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		value = Design.document.bind(value, library, inner, { from = "pages.rows", key = "id" })
+		code = Design.emit(value, library)
+		expect(string.find(code, "local row_pages = current", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "use(row_pages).rows", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, library)):toEqual(value)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local named = Design.emit(value, library, { rowFunctions = true })
+		expect(Design.emit(Design.parse(named, library), library, { rowFunctions = true })):toBe(named)
+		local current = value
+		expect(function()
+			Design.document.bind(current, library, inner, { from = "other.rows", key = "id" })
+		end):toThrow "unknown input"
+		expect(function()
+			Design.document.bind(current, library, "n1", { from = "pages.rows", key = "id" })
+		end):toThrow "repeat"
 		table.clear(built)
 		Design.render(value, library)
 		local lists: { Built } = {}

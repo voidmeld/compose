@@ -126,7 +126,8 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			return if use then use(rows) else rows:peek()
 		end
 		if Document.input(value, from) == nil and item ~= nil then
-			return rowsOf((if use then use(item) else item:peek())[from])
+			local selected = string.match(from, "^[%w]+%.([%w_]+)$") or from
+			return rowsOf((if use then use(item) else item:peek())[selected])
 		end
 		return rowsOf(inputValue(from, use))
 	end

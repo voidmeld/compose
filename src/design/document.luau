@@ -146,10 +146,14 @@ local function listOf(value: Document, from: string, collection: Types.Input?): 
 		return declared
 	end
 	local fields = if collection then collection.fields else nil
+	local qualifier, selected = string.match(from, "^([%w]+)%.([%w_]+)$")
+	if qualifier ~= nil and (collection == nil or qualifier ~= collection.id) then
+		return nil
+	end
 	if fields ~= nil then
 		for _, field in fields do
-			if field.id == from and field.type == "list" then
-				return { id = from, kind = "readable", type = "list", fields = field.fields }
+			if field.id == (selected or from) and field.type == "list" then
+				return { id = field.id, kind = "readable", type = "list", fields = field.fields }
 			end
 		end
 	end

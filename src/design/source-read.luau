@@ -343,6 +343,14 @@ function source.parse(code: string, library: Library): Types.Document
 			end
 		end
 	end
+	local function rowAlias()
+		if peek() == "local" and string.match(peek(1), "^row_[%w]+$") then
+			take "local"
+			take()
+			take "="
+			take "current"
+		end
+	end
 	local calls: { [string]: string } = {}
 	for kindName, kind in library.kinds do
 		calls[kind.call] = kindName
@@ -553,7 +561,11 @@ function source.parse(code: string, library: Library): Types.Document
 				end
 				take "use"
 				take "("
-				take "current"
+				local row = name()
+				assert(
+					row == "current" or string.match(row, "^row_[%w]+$") ~= nil,
+					"Item bindings read the current row"
+				)
 				take ")"
 				take "."
 				local field = name()
@@ -561,7 +573,8 @@ function source.parse(code: string, library: Library): Types.Document
 					take ")"
 				end
 				take "end"
-				return { item = field }, nil
+				local qualifier = string.match(row, "^row_([%w]+)$")
+				return { item = if qualifier then qualifier .. "." .. field else field }, nil
 			elseif peek() == "current" or peek() == ")" then
 				if peek() == "current" then
 					take "current"
@@ -569,6 +582,7 @@ function source.parse(code: string, library: Library): Types.Document
 				end
 				take ")"
 				returnAnnotation()
+				rowAlias()
 				take "return"
 				local next = tokens[at]
 				if next ~= nil and (next.text == "{" or next.kind == "string" or next.kind == "number") then
@@ -822,6 +836,7 @@ function source.parse(code: string, library: Library): Types.Document
 						take "("
 						take "use"
 						take ")"
+						rowAlias()
 						take "return"
 						take "use"
 						take "("
@@ -1015,6 +1030,7 @@ function source.parse(code: string, library: Library): Types.Document
 			take "current"
 			annotation()
 			take ")"
+			rowAlias()
 			take "return"
 			rows[rowName] = node()
 			take "end"

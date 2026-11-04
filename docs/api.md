@@ -2127,6 +2127,8 @@ A field's `type` is `string`, `number`, `boolean`, `choice`, `color`, `vector3`,
 
 A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can provide fixed `args` and current item `fields`. A `content` field binds a slot input or a content subtree. `Bind` is `{ from, key, row? }`. `from` names a list input or the enclosing row's list field. `key` names its stable key. `row` selects the template child. Other children stay beside the repeated content. Template kinds receive `rows` and `template` values through the properties named by `source` and `template`.
 
+`Bind.from` also accepts `"pages.rows"` when the current outer collection is `pages` and its row declares a `rows` list field. The qualifier must name that current collection, rather than another input or an arbitrary ancestor. This form emits a local `row_pages` alias and reads `use(row_pages).rows`, retaining the qualified address through parsing. Unqualified row list fields remain supported. Inner rows keep their own keys, bindings and ownership when the outer row changes.
+
 Numeric datatype literals are component arrays. With `tokens = true`, each component accepts a number or `{ token = "size.pill" }`. For example, `{ literal = { 1, 0, 0, { token = "size.pill" } } }` describes `UDim2.new(1, 0, 0, T.size.pill)` when `library.token = "T."`. Names follow the library's token syntax. Plain `value` tables keep their usual meaning.
 
 ### `Design.datatype`

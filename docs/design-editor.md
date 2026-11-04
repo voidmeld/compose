@@ -64,6 +64,8 @@ A kind's `seeds` supplies children that `insert` adds with it.
 A library's `tags = { call, apply }` supports style tags.
 The source uses `call(node, { "tag" })`. Direct rendering uses `apply`.
 Inside a repeated row, a list can bind a list field of the current item.
+`Bind.from = "pages.rows"` explicitly selects `rows` on the current `pages` row.
+The qualifier must match the current collection. It does not traverse arbitrary inputs or ancestors.
 `when` can name a boolean item field.
 `{ ["$template"] = childId }` renders a child for each item, such as a table column cell.
 An output marker with `["$row"] = true` passes the current item.

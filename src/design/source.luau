@@ -499,9 +499,10 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		local enclosing = scopes[#scopes]
 		local around = if enclosing then enclosing.fields else nil
+		local selected = string.match(from, "^[%w]+%.([%w_]+)$") or from
 		if around ~= nil then
 			for _, field in around do
-				if field.id == from then
+				if field.id == selected then
 					return field.fields
 				end
 			end
@@ -511,6 +512,10 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	local function sourceOf(from: string, depth: number): string
 		if Document.input(value, from) ~= nil then
 			return `props.{from}`
+		end
+		local qualifier, selected = string.match(from, "^([%w]+)%.([%w_]+)$")
+		if qualifier then
+			return returning("use", `use(row_{qualifier}).{selected}`, depth)
 		end
 		return returning("use", `use(current).{from}`, depth)
 	end
@@ -576,11 +581,20 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		local parameter = if typed then `current: {library.rowReadable or library.readable}<{typed}>` else "current"
 		table.insert(scopes, { fields = provided or (if from then fieldsOf(from) else nil) })
 		local written
+		local function rowBody(level: number): string
+			local body = emit(template, level + 1)
+			local source = if from then string.match(from, "%.([%w_]+)$") or from else nil
+			local alias = if source then `row_{source}` else nil
+			local declaration = if alias and string.find(body, `use({alias})`, 1, true)
+				then `{tabs(level + 1)}local {alias} = current\n`
+				else ""
+			return declaration .. `{tabs(level + 1)}return {body}`
+		end
 		if not rowFunctions then
-			written = returning(parameter, emit(template, depth + 1), depth)
+			written = `function({parameter})\n{rowBody(depth)}\n{tabs(depth)}end`
 		else
 			local name = unique(rowBase(template))
-			table.insert(rowDefinitions, `\tlocal function {name}({parameter})\n\t\treturn {emit(template, 2)}\n\tend`)
+			table.insert(rowDefinitions, `\tlocal function {name}({parameter})\n{rowBody(1)}\n\tend`)
 			written = name
 		end
 		table.remove(scopes)

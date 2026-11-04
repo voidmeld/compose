@@ -45,6 +45,8 @@ not overwrite the module. Keep every edit inside the shapes below.
 - A repeated list: `from = props.list, key = "id", render = function(current) return <node> end`.
   A list inside a row reads a list field of the row:
   `from = function(use) return use(current).rows end`.
+  A qualified `Bind.from = "pages.rows"` emits a local `row_pages` alias
+  and `from = function(use) return use(row_pages).rows end` in that page row.
 - A conditional child: `<show>(props.flag, function() return <node> end)`, where
   `<show>` is the library's show call (Facet: `Facet.Compose.show`).
   In a row, the condition can read a boolean item field.
