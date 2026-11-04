@@ -27,6 +27,7 @@ export type Canvas = {
 	root: Compose.Node,
 	zoom: Compose.Value<number>,
 	all: Compose.Value<boolean>,
+	device: Compose.ReadOnlyValue<Devices.Profile>,
 	current: () -> Frame,
 	frames: () -> { Frame },
 	select: (id: string) -> (),
@@ -55,9 +56,13 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 	local releases: { () -> () } = {}
 	local connections: { UI.Connection } = {}
 	local active = Compose.cell(1)
+	local device = Compose.formula(function(use: Compose.Use): Devices.Profile
+		return assert(options.devices[use(active)])
+	end)
 	local revision = Compose.cell(0)
 	local all = Compose.cell(false)
 	local zoom = Compose.cell(1)
+	local cancelFit = function() end
 	local function current(): Frame
 		return assert(entries[active:peek()], "Design canvas has no frame")
 	end
@@ -86,7 +91,8 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 			ui.set(entry.root, "Size", ui.values.udim2(1, 0, 1, 0))
 			ui.set(entry.root, "Position", ui.values.udim2(0, 0, 0, 0))
 		end
-		ui.runtime.scheduler(ui.owner).after(0, fit)
+		cancelFit()
+		cancelFit = ui.runtime.scheduler(ui.owner).after(0, fit)
 	end
 	local function ensure(index: number): Frame
 		local existing = entries[index]
@@ -202,6 +208,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		root = root,
 		zoom = zoom,
 		all = all,
+		device = device,
 		current = current,
 		frames = function(): { Frame }
 			local result: { Frame } = {}
@@ -239,6 +246,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 			assert(current().stage or current().scene).zoomTo(value, around)
 		end,
 		dispose = function()
+			cancelFit()
 			release()
 			for _, connection in connections do
 				connection:Disconnect()

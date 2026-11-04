@@ -262,14 +262,15 @@ return function(ui: UI.UI)
 			end)
 			previewOrder += 1
 		end
+		local deviceButton: Compose.Node? = nil
 		if #devices > 1 then
-			local names: { string } = {}
-			for _, device in devices do
-				table.insert(names, device.name)
-			end
 			ui.set(divider(previewOrder), "Parent", leftTools)
 			previewOrder += 1
-			cycling("Device", names, view.current().device.name, view.select)
+			deviceButton = action("Device", view.current().device.name, previewOrder, leftTools, false, function()
+				local at = table.find(devices, view.device:peek()) or 1
+				view.select(devices[at % #devices + 1].id)
+			end)
+			previewOrder += 1
 			local gridButton: Compose.Node? = nil
 			gridButton = action("AllDevices", "All devices", previewOrder, leftTools, false, function()
 				view.showAll(not view.all:peek())
@@ -429,6 +430,12 @@ return function(ui: UI.UI)
 			)
 		end
 		local owner = Compose.createRootOwner(function()
+			if deviceButton then
+				local button = deviceButton
+				Compose.watch(function(use: Compose.Use)
+					ui.set(button, "Text", use(view.device).name)
+				end)
+			end
 			if link then
 				local active = link
 				Compose.watch(function(use: Compose.Use)

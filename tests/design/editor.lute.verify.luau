@@ -311,6 +311,10 @@ describe("host-neutral design editor", function()
 		for _, frame in editor.canvas.frames() do
 			expect(w.read(frame.root, "Visible")):toBe(frame.device.id == "tv")
 		end
+		expect(w.find(editor.root, "Device").Text):toBe(DesignEditor.devices.get("tv").name)
+		w.fire(w.find(editor.root, "Device"), "Activated")
+		w.settle()
+		expect(editor.canvas.current().device.id):toBe "vr"
 		editor.dispose()
 		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
 		w.close()

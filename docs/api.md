@@ -2217,6 +2217,8 @@ A 2D `stage` exposes `surface`, `overlay`, `nodes`, `zoom`, `zoomTo(scale, aroun
 
 `theme = { fields, write }` enables shared colour, type and spacing controls. Each `ThemeField` has `id`, `label`, `kind` (`color`, `type` or `spacing`), `read(use) -> string | number`, and optional numeric `minimum` and `maximum`. `write(id, value) -> boolean` persists a change. Colours use `#RRGGBB`; numbers must be finite and within the field's range. The provider validates again at its write boundary and updates the reactive inputs used by every frame. These controls do not change the editor chrome theme.
 
+`canvas.device` is a reactive read-only value containing the active profile. The toolbar follows direct frame selections and cycles from that profile.
+
 ### `DesignEditor.kit`
 
 `kit(name: string, open: () -> Workspace) -> Kit`
