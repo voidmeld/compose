@@ -553,6 +553,8 @@ describe("Compose Design documents", function()
 		):toBe(true)
 		expect(string.find(code, "sequences.intro.play()", 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, library)
+		expect(parsed.sequences):toEqual(sequences)
+		expect(parsed.state):toEqual(glow)
 		expect(Design.emit(parsed, library)):toBe(code)
 		local revealed = 0
 		table.clear(built)
@@ -822,11 +824,15 @@ describe("Compose Design documents", function()
 
 	it("emits typed source and reads the same design back", function()
 		local value = sample()
+		value.contract.inputs[1].required = false
+		value.contract.inputs[3].preview = false
 		local code = Design.emit(value, library)
 		expect(string.find(code, "export type Props", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "title: Toy.Readable<string>?", 1, true) ~= nil):toBe(true)
 		expect(string.find(code, "return use(current).name\n", 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, library)
+		expect(parsed.contract.inputs[1].required):toBeNil()
+		expect(parsed.contract.inputs[3].preview):toBe(false)
 		expect(Design.emit(parsed, library)):toBe(code)
 		expect(parsed.root.children[2].bind):toEqual { from = "rows", key = "id" }
 		expect(parsed.root.children[3].props.onActivate.output):toBe "onClose"
