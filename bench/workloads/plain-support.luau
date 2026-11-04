@@ -4,7 +4,7 @@ local Environment = require "../cost-model"
 
 type Context = { env: Environment.Environment, container: Environment.Instance }
 
-local function instances(context: Context): Environment.InstanceFactory
+local function instances(context: { env: Environment.Environment }): Environment.InstanceFactory
 	return context.env.globals.Instance
 end
 

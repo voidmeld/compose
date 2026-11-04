@@ -263,5 +263,4 @@ return {
 	generate = generate,
 	effectsOf = effectsOf,
 	tierOf = tierOf,
-	EFFECTS = EFFECTS,
 }
