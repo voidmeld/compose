@@ -393,19 +393,85 @@ describe("host-neutral design editor", function()
 		end)
 	end
 
-	it("preserves device aspect and camera picking across the 3D grid", function()
+	it("keeps one full-size 3D scene when all devices is requested", function()
 		local w = Support.world "3d"
 		local editor = w.mount { devices = DesignEditor.devices.all }
 		editor.canvas.showAll(true)
 		w.settle()
 		editor.canvas.fit()
-		for _, frame in editor.canvas.frames() do
-			local scene = assert(frame.scene)
-			local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
-			expect(size.X / size.Y):toBeCloseTo(frame.device.aspect, 0.001)
-			expect(w.number(scene.camera, "FieldOfView")):toBe(frame.device.fieldOfView)
-			expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
-		end
+		expect(#editor.canvas.frames()):toBe(1)
+		local scene = assert(editor.canvas.current().scene)
+		local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
+		expect(size):toEqual(w.point(editor.canvas.root, "AbsoluteSize"))
+		expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("renders into a borrowed world and restores its camera without destroying foreign content", function()
+		local w = Support.world "3d"
+		w.devices()
+		local world = w.service "Workspace"
+		local camera = Support.instance(assert(world.CurrentCamera))
+		local before = { camera.CFrame, camera.Focus, camera.FieldOfView, camera.CameraType }
+		local foreign = w.env.createInstance "Folder"
+		foreign.Parent = world
+		local editor = w.mount {
+			scene = { world = world, camera = camera },
+			identity = {
+				commit = "fixture",
+				path = "Scene.luau",
+			},
+		}
+		w.settle()
+		local scene = assert(editor.canvas.current().scene)
+		expect(w.read(scene.world, "Parent")):toBe(world)
+		local changed = editor.execute { action = "Camera", preset = "approach-20" }
+		expect(changed.ok):toBe(true)
+		expect(changed.commit):toBe "fixture"
+		expect(assert(changed.camera).preset):toBe "approach-20"
+		expect(w.find(editor.root, "Camera").Text):toBe "Camera · Approach at 20 studs"
+		local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
+		editor.execute { action = "Fit" }
+		expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
+		editor.dispose()
+		expect({ camera.CFrame, camera.Focus, camera.FieldOfView, camera.CameraType }):toEqual(before)
+		expect(foreign.Parent):toBe(world)
+		expect(Support.instance(scene.world).Parent):toBe(nil)
+		w.close()
+	end)
+
+	it("shares named preview choices and undoable edits between commands and controls", function()
+		local w = Support.world()
+		local chosen = "ordinary"
+		local editor = w.mount {
+			previews = {
+				{
+					name = "State",
+					choices = { "ordinary", "empty", "busy", "error" },
+					select = function(choice)
+						chosen = choice
+					end,
+				},
+			},
+		}
+		editor.execute { action = "Preview", name = "State", choice = "busy" }
+		expect(chosen):toBe "busy"
+		w.fire(w.find(editor.root, "State"), "Activated")
+		expect(chosen):toBe "error"
+		expect(editor.execute({ action = "Read" }).previews.State):toBe "error"
+		editor.execute { action = "Select", ids = { w.first } }
+		editor.execute { action = "Change", field = "width", value = { literal = 180 } }
+		expect(assert((Design.document.find(editor.session.document:peek().root, w.first))).props.width.literal):toBe(
+			180
+		)
+		editor.execute { action = "Undo" }
+		expect(assert((Design.document.find(editor.session.document:peek().root, w.first))).props.width.literal):toBe(
+			120
+		)
+		local invalid = editor.execute { action = "Device", id = "missing" }
+		expect(invalid.ok):toBe(false)
+		expect(invalid.next):toBe 'execute({ action = "Read" })'
 		editor.dispose()
 		w.close()
 	end)

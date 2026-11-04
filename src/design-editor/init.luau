@@ -12,11 +12,14 @@ local Devices = require "@self/devices"
 local Canvas = require "@self/canvas"
 local Prompt = require "@self/prompt"
 local ThemePanel = require "@self/theme-panel"
+local Stage3D = require "@self/stage3d"
 
 export type Environment = Environment.Environment
 export type Values = Environment.Values
 export type Point = UI.Point
 export type Editor = Editor.Editor
+export type Command = Editor.Command
+export type Result = Editor.Result
 export type Device = Editor.Device
 export type Frame = Canvas.Frame
 export type FrameContext = Canvas.Context
@@ -28,8 +31,13 @@ export type ThemeField = ThemePanel.Field
 export type ThemeStore = ThemePanel.Store
 export type Preview = Editor.Preview
 export type Sequences = Roblox3DLibrary.Sequences
+export type SceneTarget = Stage3D.Target
+export type CameraPreset = Stage3D.Preset
+export type CameraState = Stage3D.CameraState
 export type Options = Editor.Options & { environment: Environment.Environment }
 export type Workspace = {
+	identity: { commit: string, path: string }?,
+	scene: Stage3D.Target?,
 	runtime: Compose.Runtime,
 	environment: Environment.Environment,
 	library: Design.Library,
@@ -73,6 +81,7 @@ local function create(
 		root = result.root,
 		session = result.session,
 		canvas = result.canvas,
+		execute = result.execute,
 		dispose = function()
 			if disposed then
 				return
@@ -107,6 +116,8 @@ local function kit(name: string, open: () -> Workspace): Kit
 			local options: Options = {
 				runtime = workspace.runtime,
 				environment = workspace.environment,
+				scene = workspace.scene,
+				identity = workspace.identity,
 				devices = devices,
 				device = workspace.device,
 				frame = workspace.frame,

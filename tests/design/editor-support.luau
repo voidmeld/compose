@@ -163,6 +163,8 @@ local function world(space: string?, geometry: boolean?)
 	local objectsBefore = env.liveObjects()
 	local connectionsBefore = env.liveConnections()
 	type MountOptions = {
+		scene: Editor.SceneTarget?,
+		identity: { commit: string, path: string }?,
 		link: Design.LinkStore?,
 		onExport: ((string) -> ())?,
 		devices: { Editor.Device }?,
@@ -173,6 +175,8 @@ local function world(space: string?, geometry: boolean?)
 	}
 	local function mount(options: MountOptions?): Editor.Editor
 		return Editor.create(library, document, screen, {
+			scene = if options then options.scene else nil,
+			identity = if options then options.identity else nil,
 			runtime = runtime,
 			environment = environment,
 			stageSize = { X = 480, Y = 320 },

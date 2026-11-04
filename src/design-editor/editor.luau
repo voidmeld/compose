@@ -11,11 +11,49 @@ local LibraryPanel = require "./library-panel"
 local Inspector = require "./inspector"
 local Prompt = require "./prompt"
 local ThemePanel = require "./theme-panel"
+local Stage3D = require "./stage3d"
+
+export type Command =
+	{ action: "Read" }
+	| { action: "Fit" }
+	| { action: "Undo" }
+	| { action: "Redo" }
+	| { action: "Duplicate" }
+	| { action: "Delete" }
+	| { action: "Copy" }
+	| { action: "Paste" }
+	| { action: "Wrap" }
+	| { action: "Unwrap" }
+	| { action: "Camera", preset: Stage3D.Preset }
+	| { action: "Orbit", yaw: number, pitch: number }
+	| { action: "Zoom", scale: number }
+	| { action: "Select", ids: { string } }
+	| { action: "Change", field: string, value: Design.Value }
+	| { action: "Insert", kind: string }
+	| { action: "Device", id: string }
+	| { action: "AllDevices", enabled: boolean }
+	| { action: "Preview", name: string, choice: string }
+
+export type Result = {
+	ok: boolean,
+	action: string,
+	design: string,
+	commit: string?,
+	path: string?,
+	files: { string },
+	selection: { string },
+	device: string,
+	previews: { [string]: string },
+	camera: Stage3D.CameraState?,
+	problem: string?,
+	next: string?,
+}
 
 export type Editor = {
 	root: Compose.Node,
 	session: Design.Session,
 	canvas: Canvas.Canvas,
+	execute: (Command) -> Result,
 	dispose: () -> (),
 }
 
@@ -24,6 +62,8 @@ export type Device = Devices.Profile
 export type Preview = { name: string, choices: { string }, initial: string?, select: (choice: string) -> () }
 
 export type Options = {
+	identity: { commit: string, path: string }?,
+	scene: Stage3D.Target?,
 	stageSize: UI.Point?,
 	devices: { Device }?,
 	device: string?,
@@ -87,6 +127,9 @@ return function(ui: UI.UI)
 		ui.setTextSize(textSize)
 		local session = Design.session(library, initial)
 		local root = Theme.frame("ComposeDesign", color.canvas)
+		if options.scene and library.space == "3d" then
+			ui.set(root, "BackgroundTransparency", 1)
+		end
 		ui.set(root, "Size", ui.values.udim2(1, 0, 1, 0))
 		local toolbar = Theme.frame("Toolbar", color.panel)
 		Theme.place(toolbar, root, ui.values.udim2(1, 0, 0, size.toolbar))
@@ -129,6 +172,9 @@ return function(ui: UI.UI)
 		ui.set(layersFrame, "Size", ui.values.udim2(0, size.side, 0.55, -size.status))
 		local _, right = side("InspectorPanel", "Design", 1)
 		local center = Theme.frame("StagePanel", color.canvas)
+		if options.scene and library.space == "3d" then
+			ui.set(center, "BackgroundTransparency", 1)
+		end
 		ui.set(center, "Position", ui.values.udim2(0, size.side, 0, size.toolbar))
 		ui.set(center, "Size", ui.values.udim2(1, -2 * size.side, 1, -size.toolbar - size.status))
 		ui.set(center, "ClipsDescendants", true)
@@ -165,9 +211,13 @@ return function(ui: UI.UI)
 		ui.set(syncButton, "FontFace", Theme.font.bold)
 		ui.set(syncButton, "Parent", status)
 		ui.set(root, "Parent", parent)
-		local devices = options.devices
-			or if options.stageSize then { Devices.custom("Canvas", options.stageSize) } else Devices.all
+		local devices = if library.space == "3d"
+			then { Devices.custom("Scene", options.stageSize or { X = 1280, Y = 720 }) }
+			else options.devices or if options.stageSize
+				then { Devices.custom("Canvas", options.stageSize) }
+				else Devices.all
 		local canvasOptions: Canvas.Options = {
+			scene = options.scene,
 			devices = devices,
 			device = options.device,
 			frame = options.frame,
@@ -177,6 +227,66 @@ return function(ui: UI.UI)
 			slots = options.slots,
 		}
 		local view = Canvas(ui, session, center, canvasOptions)
+		local previewCommands: { [string]: (string) -> () } = {}
+		local previewValues: { [string]: string } = {}
+		local ordinary: { [string]: () -> ...unknown } = {
+			Read = function() end,
+			Fit = view.fit,
+			Undo = session.undo,
+			Redo = session.redo,
+			Duplicate = session.duplicate,
+			Delete = session.remove,
+			Copy = session.copy,
+			Paste = session.paste,
+			Wrap = session.wrap,
+			Unwrap = session.unwrap,
+		}
+		local function execute(request: Command): Result
+			local ok, failure = pcall(function()
+				local run = ordinary[request.action]
+				if run then
+					run()
+				elseif request.action == "Camera" then
+					assert(view.current().scene, "Open a 3D Design before Camera").setCamera(request.preset)
+				elseif request.action == "Orbit" then
+					assert(view.current().scene, "Open a 3D Design before Orbit").orbit(request.yaw, request.pitch)
+				elseif request.action == "Zoom" then
+					view.zoomTo(request.scale)
+				elseif request.action == "Select" then
+					session.selectMany(request.ids)
+				elseif request.action == "Change" then
+					session.change(request.field, request.value)
+				elseif request.action == "Insert" then
+					session.insert(request.kind)
+				elseif request.action == "Device" then
+					view.select(request.id)
+				elseif request.action == "AllDevices" then
+					view.showAll(request.enabled)
+				elseif request.action == "Preview" then
+					assert(previewCommands[request.name], "Unknown Preview; Read lists available previews")(
+						request.choice
+					)
+				else
+					error "Unknown editor action; use Read"
+				end
+			end)
+			local scene = view.current().scene
+			local identity = options.identity
+			return {
+				ok = ok,
+				action = request.action,
+				design = session.document:peek().name,
+				commit = if identity then identity.commit else nil,
+				path = if identity then identity.path else nil,
+				files = {},
+				selection = table.clone(session.selection:peek()),
+				device = view.device:peek().id,
+				previews = table.clone(previewValues),
+				camera = if scene then scene.readCamera() else nil,
+				problem = if ok then session.problem:peek() else tostring(failure),
+				next = if ok then nil else 'execute({ action = "Read" })',
+			}
+		end
 		local layers = Layers(ui)(session, left)
 		local prompt = if options.prompt
 			then Prompt.create(
@@ -252,17 +362,37 @@ return function(ui: UI.UI)
 			if #choices == 0 then
 				return
 			end
-			local at = math.max(1, table.find(choices, initial or choices[1]) or 1)
+			previewValues[name] = initial or choices[1]
 			local button: Compose.Node? = nil
-			button = action(name, choices[at], previewOrder, leftTools, false, function()
-				at = at % #choices + 1
-				local chosen = choices[at]
-				ui.set(assert(button), "Text", chosen)
-				select(chosen)
+			previewCommands[name] = function(choice: string)
+				assert(table.find(choices, choice), "Unknown choice for " .. name .. "; Read returns current previews")
+				previewValues[name] = choice
+				ui.set(assert(button), "Text", choice)
+				select(choice)
+			end
+			button = action(name, previewValues[name], previewOrder, leftTools, false, function()
+				local at = table.find(choices, previewValues[name]) or 1
+				execute { action = "Preview", name = name, choice = choices[at % #choices + 1] }
 			end)
 			previewOrder += 1
 		end
 		local deviceButton: Compose.Node? = nil
+		local cameraButton: Compose.Node? = nil
+		local scene = view.current().scene
+		if scene then
+			local presets: { Stage3D.Preset } = { "fit", "eye-height", "approach-20", "close-up", "top-down" }
+			cameraButton = action("Camera", "Camera", previewOrder, leftTools, false, function()
+				local at = 1
+				for index, preset in presets do
+					if preset == scene.preset:peek() then
+						at = index
+						break
+					end
+				end
+				execute { action = "Camera", preset = presets[at % #presets + 1] }
+			end)
+			previewOrder += 1
+		end
 		if #devices > 1 then
 			ui.set(divider(previewOrder), "Parent", leftTools)
 			previewOrder += 1
@@ -430,6 +560,23 @@ return function(ui: UI.UI)
 			)
 		end
 		local owner = Compose.createRootOwner(function()
+			if cameraButton and scene then
+				local button = cameraButton
+				local activeScene = scene
+				local names: { [string]: string } = {
+					fit = "Fit",
+					["eye-height"] = "Player eye height",
+					["approach-20"] = "Approach at 20 studs",
+					["close-up"] = "Close-up",
+					["top-down"] = "Top-down",
+					orbit = "Orbit",
+					custom = "Custom",
+				}
+				Compose.watch(function(use: Compose.Use)
+					local chosen = use(activeScene.preset)
+					ui.set(button, "Text", "Camera · " .. (names[chosen] or chosen))
+				end)
+			end
 			if deviceButton then
 				local button = deviceButton
 				Compose.watch(function(use: Compose.Use)
@@ -480,6 +627,7 @@ return function(ui: UI.UI)
 			root = root,
 			session = session,
 			canvas = view,
+			execute = execute,
 			dispose = function()
 				release()
 				if unlink then

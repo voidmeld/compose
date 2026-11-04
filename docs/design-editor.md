@@ -118,7 +118,15 @@ Pass their results through contract inputs and outputs.
 ### Stages and source links
 
 The 2D stage supports zoom around the cursor, pan, fit, selection outlines, resize controls and a size label.
-The 3D stage supports orbit, pan, filtered raycast selection and axis movement.
+The 3D stage opens one large scene with orbit, pan, filtered raycast selection and axis movement.
+Its Camera control offers Fit, Player eye height, Approach at 20 studs, Close-up and Top-down.
+Pass `scene = { world = workspace, camera = workspace.CurrentCamera, eyeHeight = 5.5 }` to render
+through the host's actual world camera. Mount that editor as a transparent viewport overlay.
+The host supplies Lighting, Atmosphere, materials and environment effects; the editor keeps them.
+Owned geometry, emitters, lights and beams then use the normal world renderer and simulation.
+Closing releases the preview geometry and restores the borrowed camera's frame, focus, field of view and type.
+Without a scene target, the embedded ViewportFrame remains suitable for geometry inspection;
+its rendering limits do not establish an in-world appearance match.
 The 3D `Pattern` control plans its rows with [geometric patterns](../src/design/patterns.md).
 Fit runs once on the next host frame.
 The stage and scene APIs can request another fit.
@@ -152,7 +160,26 @@ Profiles include aspect, native GUI insets, cutouts, safe area and camera field 
 
 Supply `Workspace.frame(device, scale)` to build each frame's library using the same layout sources as the game. A shared viewport cell cannot represent simultaneous frames. Frame-local sources resolve at the profile's full logical resolution; zoom scales their display. Native measurements used for layout must normalize by `scale`.
 
-Screen roots project their authored ScreenInsets into the frame. Billboard roots project authored stud/offset sizes and world offsets against a centered, 12-stud camera fixture; pixel offsets keep their authored sizes. This is a layout fixture, with its camera declared independently from gameplay. 3D frames preserve each profile's aspect and use its field of view for fitting and picking. The VR frame uses a 90-degree field of view; it does not simulate head tracking or stereo presentation.
+Screen roots project their authored ScreenInsets into the frame. Billboard roots project authored stud/offset sizes and world offsets against a centered, 12-stud camera fixture; pixel offsets keep their authored sizes. This is a layout fixture, with its camera declared independently from gameplay. Device grids apply to UI Designs. A 3D Design has one scene and ignores grid requests.
+
+### Editor commands
+
+`editor.execute(request)` returns plain structured state for Read, Camera, Orbit, Zoom, Fit, Select,
+Change, Insert, Device, AllDevices, Preview, Undo, Redo, Duplicate, Delete, Copy, Paste, Wrap and Unwrap.
+The commands use the same session, camera and preview callbacks as the visible controls.
+Supply `identity = { commit = commit, path = sourcePath }` to bind results to a source revision.
+Results include the selected nodes, current camera, device and named preview choices; failures include
+the problem and the next Read command. The library writes no files itself; the host reports its actual
+source writes and named native captures. The host also owns open, capture and close commands.
+
+```luau
+editor.execute({ action = "Camera", preset = "approach-20" })
+editor.execute({ action = "Orbit", yaw = 35, pitch = -20 })
+editor.execute({ action = "Select", ids = { "n2" } })
+editor.execute({ action = "Change", field = "size", value = { literal = { 4, 6, 4 } } })
+editor.execute({ action = "Undo" })
+editor.execute({ action = "Read" })
+```
 
 ## Motion
 
