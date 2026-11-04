@@ -10,12 +10,404 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("renders three isolated drafts and commits only the chosen source through its pick callback", function()
+		local w = Support.world()
+		local source = Design.emit(w.document, w.library)
+		local original = source
+		local notify: (() -> ())? = nil
+		local writes, picks = 0, 0
+		local variants: { { title: string, source: string } } = {}
+		for index = 1, 3 do
+			table.insert(variants, {
+				title = "Variant " .. index,
+				source = Design.emit(
+					Design.document.change(w.document, w.library, "n1", "width", { literal = 300 + index * 60 }),
+					w.library
+				),
+			})
+		end
+		local editor = w.mount {
+			link = {
+				read = function(): string
+					return source
+				end,
+				write = function(): boolean
+					writes += 1
+					return false
+				end,
+				watch = function(listener: () -> ()): () -> ()
+					notify = listener
+					return function()
+						notify = nil
+					end
+				end,
+			},
+			prompt = {
+				designPath = "designs/Sample.luau",
+				submit = function(request: DesignEditor.PromptRequest): DesignEditor.PromptResult
+					expect(request.count):toBe(3)
+					return {
+						message = "Choose a draft",
+						variants = variants,
+						pick = function(index: number): string
+							picks += 1
+							source = variants[index].source
+							assert(notify)()
+							return "Source updated"
+						end,
+					}
+				end,
+			},
+		}
+		w.find(editor.root, "PromptRequest").Text = "Make three variants with different spacing"
+		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		w.settle()
+		local comparison = w.find(editor.root, "DesignDrafts")
+		for index = 1, 3 do
+			local card = w.find(comparison, "Draft" .. index)
+			local rendered = w.find(card, w.document.root.name)
+			expect(w.number(w.read(w.read(rendered, "Size"), "X"), "Offset")):toBe(300 + index * 60)
+		end
+		expect(source):toBe(original)
+		expect(writes):toBe(0)
+		expect(editor.session.document:peek().root.props.width.literal):toBe(400)
+		w.fire(w.find(w.find(comparison, "Draft2"), "ChooseVariant"), "Activated")
+		w.settle()
+		expect(picks):toBe(1)
+		expect(source):toBe(variants[2].source)
+		expect(editor.session.document:peek().root.props.width.literal):toBe(420)
+		expect(writes):toBe(0)
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("edits a shared theme value and updates every open device frame", function()
+		local w = Support.world(nil, true)
+		w.library.kinds.Stack.fields.width.tokens = true
+		local spacing = Compose.cell(24)
+		local editor = w.mount {
+			devices = DesignEditor.devices.all,
+			frame = function(device: DesignEditor.Device): DesignEditor.FrameContext
+				return {
+					resolveToken = function(): Design.Resolved
+						return {
+							readable = Compose.formula(function(use: Compose.Use): Design.Literal
+								return device.size.X - use(spacing) * 2
+							end),
+						}
+					end,
+				}
+			end,
+			theme = {
+				fields = {
+					{
+						id = "spacing.gutter",
+						label = "Gutter",
+						kind = "spacing",
+						maximum = 128,
+						read = function(use: Compose.Use): number
+							return use(spacing)
+						end,
+					},
+				},
+				write = function(id: string, value: DesignEditor.ThemeValue): boolean
+					expect(id):toBe "spacing.gutter"
+					assert(type(value) == "number")
+					spacing:set(value)
+					return true
+				end,
+			},
+		}
+		editor.session.select "n1"
+		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		editor.canvas.showAll(true)
+		w.settle()
+		w.fire(w.find(editor.root, "Theme"), "Activated")
+		local panel = w.find(editor.root, "DesignTheme")
+		expect(panel.Visible):toBe(true)
+		local input = w.find(w.find(panel, "spacing.gutter"), "TokenValue")
+		input.Text = "48"
+		w.fire(input, "FocusLost", false)
+		w.settle()
+		expect(spacing:peek()):toBe(48)
+		for _, frame in editor.canvas.frames() do
+			local stage = assert(frame.stage)
+			expect(w.point(stage.nodes.n1, "AbsoluteSize").X / stage.zoom:peek()):toBeCloseTo(
+				frame.device.size.X - 96,
+				0.01
+			)
+		end
+		input.Text = "999"
+		w.fire(input, "FocusLost", false)
+		w.settle()
+		expect(spacing:peek()):toBe(48)
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("snapshots the selected node and frame before a deferred prompt submission", function()
+		local w = Support.world()
+		w.library.kinds.Stack.fields.width.tokens = true
+		local requests: { DesignEditor.PromptRequest } = {}
+		local themes: { DesignEditor.PromptRequest } = {}
+		local editor = w.mount {
+			devices = DesignEditor.devices.all,
+			frame = function(): DesignEditor.FrameContext
+				return {
+					token = function(): Design.Literal
+						return 400
+					end,
+				}
+			end,
+			prompt = {
+				designPath = "designs/Sample.luau",
+				submit = function(request: DesignEditor.PromptRequest): string
+					table.insert(requests, request)
+					return "Source updated"
+				end,
+				theme = function(request: DesignEditor.PromptRequest): string
+					table.insert(themes, request)
+					return "Theme saved"
+				end,
+			},
+		}
+		editor.session.select "n1"
+		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		editor.canvas.select "tv"
+		w.find(editor.root, "PromptRequest").Text = "Give this node more breathing room"
+		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		editor.session.change("width", { literal = 240 })
+		editor.canvas.select "phone-portrait"
+		w.settle()
+		expect(#requests):toBe(1)
+		local request = requests[1]
+		expect(request.designPath):toBe "designs/Sample.luau"
+		expect(request.nodePath[#request.nodePath].id):toBe "n1"
+		expect(request.props.width.token):toBe "frame.width"
+		expect(request.tokens):toEqual { "frame.width" }
+		expect(request.frame.id):toBe "tv"
+		expect(Design.parse(request.source, w.library).root.props.width.token):toBe "frame.width"
+		expect(w.find(editor.root, "PromptStatus").Text):toBe "Source updated"
+		w.fire(w.find(editor.root, "PromptScope"), "Activated")
+		w.find(editor.root, "PromptRequest").Text = "Warm the shared accent colour"
+		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		w.settle()
+		expect(#requests):toBe(1)
+		expect(#themes):toBe(1)
+		expect(themes[1].frame.id):toBe "phone-portrait"
+		expect(w.find(editor.root, "PromptStatus").Text):toBe "Theme saved"
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("keeps prompt failures generic and rejects an empty request without invoking the adapter", function()
+		local w = Support.world()
+		local calls = 0
+		local editor = w.mount {
+			prompt = {
+				designPath = "designs/Sample.luau",
+				submit = function(): string
+					calls += 1
+					error "private adapter diagnostic"
+				end,
+			},
+		}
+		local send = w.find(editor.root, "SendPrompt")
+		w.fire(send, "Activated")
+		w.settle()
+		expect(calls):toBe(0)
+		w.find(editor.root, "PromptRequest").Text = "Make it taller"
+		w.fire(send, "Activated")
+		w.settle()
+		expect(calls):toBe(1)
+		expect(w.find(editor.root, "PromptStatus").Text):toBe "Prompt failed; source preserved"
+		editor.dispose()
+		w.close()
+	end)
+
+	it("matches captured device facts through Verify's simulated Studio device service", function()
+		local w = Support.world()
+		w.devices()
+		local workspace = w.service "Workspace"
+		local camera = workspace:FindFirstChildOfClass "Camera" or w.env.createInstance "Camera"
+		camera.Parent = workspace
+		local profiles = table.clone(DesignEditor.devices.all)
+		table.insert(profiles, DesignEditor.devices.get "generic_handheld_720")
+		local simulator = w.service "StudioDeviceSimulatorService"
+		for _, device in profiles do
+			if device.verifyId == nil then
+				continue
+			end
+			w.environment.invoke(simulator, "SetDeviceAsync", device.verifyId)
+			if device.orientation then
+				w.environment.invoke(
+					simulator,
+					"SetOrientationAsync",
+					w.values.Enum.ScreenOrientation[device.orientation]
+				)
+			end
+			expect(w.point(camera, "ViewportSize")):toEqual(device.size)
+			local first, last = w.environment.invoke(w.service "GuiService", "GetGuiInset")
+			expect(device.guiInset):toEqual {
+				left = w.number(first, "X"),
+				top = w.number(first, "Y"),
+				right = w.number(last, "X"),
+				bottom = w.number(last, "Y"),
+			}
+			for _, mode in { "None", "CoreUISafeInsets", "DeviceSafeInsets" } do
+				local actual =
+					w.environment.invoke(w.service "GuiService", "GetInsetArea", w.values.Enum.ScreenInsets[mode])
+				local low, high = w.read(actual, "Min"), w.read(actual, "Max")
+				expect(DesignEditor.devices.area(device, mode)):toEqual {
+					x = w.number(low, "X") + device.guiInset.left,
+					y = w.number(low, "Y") + device.guiInset.top,
+					width = w.number(high, "X") - w.number(low, "X"),
+					height = w.number(high, "Y") - w.number(low, "Y"),
+				}
+			end
+			local expected = if device.inputMode == "touch"
+				then "Touch"
+				elseif device.inputMode == "mouse" then "KeyboardAndMouse"
+				else "Gamepad"
+			expect(tostring(w.read(w.input, "PreferredInput"))):toBe("Enum.PreferredInput." .. expected)
+		end
+		w.close()
+	end)
+
+	it("keeps live token resolution and selection shared while laying out every device independently", function()
+		local w = Support.world(nil, true)
+		w.library.kinds.Stack.fields.width.tokens = true
+		local factor = Compose.cell(1)
+		local editor = w.mount {
+			devices = DesignEditor.devices.all,
+			frame = function(device: DesignEditor.Device): DesignEditor.FrameContext
+				return {
+					resolveToken = function(): Design.Resolved
+						return {
+							readable = Compose.formula(function(use: Compose.Use): Design.Literal
+								return (device.size.X - device.safeArea.left - device.safeArea.right) * use(factor)
+							end),
+						}
+					end,
+				}
+			end,
+		}
+		editor.session.select "n1"
+		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		editor.canvas.showAll(true)
+		w.settle()
+		expect(#editor.canvas.frames()):toBe(#DesignEditor.devices.all)
+		for _, multiplier in { 1, 0.5 } do
+			factor:set(multiplier)
+			w.settle()
+			for _, frame in editor.canvas.frames() do
+				local stage = assert(frame.stage)
+				local width = w.point(stage.nodes.n1, "AbsoluteSize").X / stage.zoom:peek()
+				expect(width):toBeCloseTo(
+					math.floor(
+						(frame.device.size.X - frame.device.safeArea.left - frame.device.safeArea.right) * multiplier
+					),
+					0.01
+				)
+				expect(w.read(w.find(stage.overlay, "DesignSelected"), "Visible")):toBe(true)
+			end
+		end
+		editor.canvas.select "tv"
+		editor.canvas.showAll(false)
+		w.settle()
+		for _, frame in editor.canvas.frames() do
+			expect(w.read(frame.root, "Visible")):toBe(frame.device.id == "tv")
+		end
+		expect(w.find(editor.root, "Device").Text):toBe(DesignEditor.devices.get("tv").name)
+		w.fire(w.find(editor.root, "Device"), "Activated")
+		w.settle()
+		expect(editor.canvas.current().device.id):toBe "vr"
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	for _, class in { "ScreenGui", "BillboardGui" } do
+		it("projects " .. class .. " layout into every named device frame", function()
+			local w = Support.world(nil, true)
+			local library = Design.extend(w.library, {
+				kinds = {
+					Surface = {
+						fields = {},
+						children = "list",
+						call = "UI.Surface",
+						build = function(
+							_props: { [string]: Design.Resolved },
+							children: { unknown },
+							name: string
+						): unknown
+							local props: Compose.Props = { Name = name, Enabled = true }
+							if class == "BillboardGui" then
+								props.Size = w.values.UDim2.new(0, 300, 0, 120)
+							else
+								props.ScreenInsets = w.values.Enum.ScreenInsets.CoreUISafeInsets
+							end
+							for index, child in children do
+								props[index] = Support.node(child)
+							end
+							return w.runtime.constructors[class](props)
+						end,
+					},
+				},
+			})
+			local document = Design.document.new("Surface", library, "Surface")
+			local editor = DesignEditor.create(library, document, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				devices = DesignEditor.devices.all,
+			})
+			editor.canvas.showAll(true)
+			w.settle()
+			for _, frame in editor.canvas.frames() do
+				local stage = assert(frame.stage)
+				local root = stage.nodes.n1
+				local size = w.point(root, "AbsoluteSize")
+				local expected = DesignEditor.devices.area(frame.device, "CoreUISafeInsets")
+				expect(size.X / stage.zoom:peek()):toBeCloseTo(
+					if class == "ScreenGui" then expected.width else 300,
+					0.01
+				)
+				expect(size.Y / stage.zoom:peek()):toBeCloseTo(
+					if class == "ScreenGui" then expected.height else 120,
+					0.01
+				)
+			end
+			editor.dispose()
+			w.close()
+		end)
+	end
+
+	it("preserves device aspect and camera picking across the 3D grid", function()
+		local w = Support.world "3d"
+		local editor = w.mount { devices = DesignEditor.devices.all }
+		editor.canvas.showAll(true)
+		w.settle()
+		editor.canvas.fit()
+		for _, frame in editor.canvas.frames() do
+			local scene = assert(frame.scene)
+			local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
+			expect(size.X / size.Y):toBeCloseTo(frame.device.aspect, 0.001)
+			expect(w.number(scene.camera, "FieldOfView")):toBe(frame.device.fieldOfView)
+			expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
+		end
+		editor.dispose()
+		w.close()
+	end)
+
 	it("remembers readable chrome sizing across edits and reopening without changing the canvas", function()
 		local w = Support.world()
 		local editor = w.mount()
 		w.settle()
-		local surface = w.point(assert(editor.stage).surface, "AbsoluteSize")
-		local designText = w.number(assert(editor.stage).nodes[w.first], "TextSize")
+		local surface = w.point(assert(editor.canvas.current().stage).surface, "AbsoluteSize")
+		local designText = w.number(assert(editor.canvas.current().stage).nodes[w.first], "TextSize")
 		local function chrome()
 			return {
 				w.find(w.find(editor.root, "DesignLibrary"), "Search"),
@@ -37,8 +429,8 @@ describe("host-neutral design editor", function()
 		w.settle()
 		expect(w.find(editor.root, "TextSize").Text):toBe "Text 17"
 		expect(w.find(w.find(editor.root, "DesignLibrary"), "Search").TextSize):toBe(17)
-		expect(w.point(assert(editor.stage).surface, "AbsoluteSize")):toEqual(surface)
-		expect(w.number(assert(editor.stage).nodes[w.first], "TextSize")):toBe(designText)
+		expect(w.point(assert(editor.canvas.current().stage).surface, "AbsoluteSize")):toEqual(surface)
+		expect(w.number(assert(editor.canvas.current().stage).nodes[w.first], "TextSize")):toBe(designText)
 		for _, chosen in { 19, 15 } do
 			w.fire(w.find(editor.root, "TextSize"), "Activated")
 			expect(w.screen:GetAttribute "ComposeDesignTextSize"):toBe(chosen)
@@ -458,7 +850,7 @@ describe("host-neutral design editor", function()
 	it("places selection outlines and constant-screen-size grips at 100% and 200%", function()
 		local w = Support.world()
 		local editor = w.mount()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		editor.session.select(w.first)
 		for _, zoom in { 1, 2 } do
 			stage.zoomTo(zoom)
@@ -490,7 +882,7 @@ describe("host-neutral design editor", function()
 		local layers = w.find(editor.root, "DesignLayers")
 		expect(w.number(w.find(layers, w.second), "LayoutOrder")):toBe(2)
 		expect(w.number(w.find(layers, w.first), "LayoutOrder")):toBe(3)
-		expect(w.number(assert(editor.stage).nodes[w.second], "LayoutOrder")):toBe(1)
+		expect(w.number(assert(editor.canvas.current().stage).nodes[w.second], "LayoutOrder")):toBe(1)
 		expect(editor.session.undo()):toBe(true)
 		w.settle()
 		expect(w.number(w.find(layers, w.first), "LayoutOrder")):toBe(2)
@@ -545,8 +937,8 @@ describe("host-neutral design editor", function()
 		local chosen: { string } = {}
 		local editor = w.mount {
 			devices = {
-				{ name = "Phone", size = { X = 390, Y = 844 } },
-				{ name = "Tablet", size = { X = 820, Y = 1180 } },
+				DesignEditor.devices.custom("Phone", { X = 390, Y = 844 }),
+				DesignEditor.devices.custom("Tablet", { X = 820, Y = 1180 }),
 			},
 			previews = {
 				{
@@ -564,7 +956,7 @@ describe("host-neutral design editor", function()
 		w.fire(device, "Activated")
 		w.settle()
 		expect(device.Text):toBe "Tablet"
-		expect(w.find(editor.root, "ArtboardSize").Text):toBe "820 × 1180"
+		expect(w.find(editor.canvas.current().root, "ArtboardSize").Text):toBe "820 × 1180"
 		w.fire(w.find(editor.root, "Theme"), "Activated")
 		w.settle()
 		expect(chosen[1]):toBe "Dark"
@@ -582,7 +974,7 @@ describe("host-neutral design editor", function()
 				environment = w.environment,
 				library = w.library,
 				root = w.document.root.kind,
-				devices = { { name = "Phone", size = { X = 390, Y = 844 } } },
+				devices = { DesignEditor.devices.custom("Phone", { X = 390, Y = 844 }) },
 				dispose = function()
 					released += 1
 				end,
@@ -675,7 +1067,7 @@ describe("host-neutral design editor", function()
 		rootKind.build = build
 		editor.session.change("Visible", { literal = true })
 		w.settle()
-		expect(assert(editor.stage).nodes[w.document.root.id] ~= nil):toBe(true)
+		expect(assert(editor.canvas.current().stage).nodes[w.document.root.id] ~= nil):toBe(true)
 		editor.dispose()
 		w.close()
 	end)
@@ -726,7 +1118,7 @@ describe("host-neutral design editor", function()
 		editor.session.select(w.first)
 		w.settle()
 		edit("text", "Edited headlessly")
-		expect(w.read(assert(editor.stage).nodes[w.first], "Text")):toBe "Edited headlessly"
+		expect(w.read(assert(editor.canvas.current().stage).nodes[w.first], "Text")):toBe "Edited headlessly"
 		editor.dispose()
 		w.close()
 	end)
@@ -735,7 +1127,7 @@ describe("host-neutral design editor", function()
 		local w = Support.world()
 		local editor = w.mount()
 		editor.session.select(w.first)
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		stage.zoomTo(1)
 		w.settle()
 		local outline = w.find(stage.overlay, "DesignSelected")
@@ -763,7 +1155,7 @@ describe("host-neutral design editor", function()
 	it("drags a node on the canvas past its sibling and drops it there as one undo step", function()
 		local w = Support.world()
 		local editor = w.mount()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		stage.zoomTo(1)
 		w.settle()
 		local first, second = stage.nodes[w.first], stage.nodes[w.second]
@@ -790,7 +1182,7 @@ describe("host-neutral design editor", function()
 	it("keeps a short press on a node a selection, not a move", function()
 		local w = Support.world()
 		local editor = w.mount()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		stage.zoomTo(1)
 		w.settle()
 		local second = stage.nodes[w.second]
@@ -900,7 +1292,7 @@ describe("host-neutral design editor", function()
 		local w = Support.world()
 		local editor = w.mount()
 		w.settle()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		local panel = w.find(editor.root, "StagePanel")
 		local holder = w.find(panel, "DesignStage")
 		stage.zoomTo(1)
@@ -913,10 +1305,10 @@ describe("host-neutral design editor", function()
 		stage.zoomTo(100)
 		expect(stage.zoom:peek()):toBe(8)
 		stage.zoomTo(0)
-		expect(stage.zoom:peek()):toBe(0.1)
+		expect(stage.zoom:peek()):toBe(0.02)
 		stage.fit()
 		expect(stage.zoom:peek()):toBeCloseTo(
-			math.clamp(math.min((size.X - 96) / 480, (size.Y - 120) / 320), 0.1, 1),
+			math.clamp(math.min((size.X - 96) / 480, (size.Y - 120) / 320), 0.02, 1),
 			0.001
 		)
 		position = w.read(holder, "Position")
@@ -930,8 +1322,8 @@ describe("host-neutral design editor", function()
 		local w = Support.world "3d"
 		local editor = w.mount()
 		w.settle()
-		local scene = assert(editor.scene)
-		expect(editor.stage):toBeNil()
+		local scene = assert(editor.canvas.current().scene)
+		expect(editor.canvas.current().stage):toBeNil()
 		scene.fit()
 		local at, size = w.point(scene.viewport, "AbsolutePosition"), w.point(scene.viewport, "AbsoluteSize")
 		expect(scene.pick { X = at.X + size.X / 2, Y = at.Y + size.Y / 2 }):toBe(w.first)
@@ -957,7 +1349,7 @@ describe("host-neutral design editor", function()
 	it("translates through a raycast gizmo, commits once, and orbits without changing the document", function()
 		local w = Support.world "3d"
 		local editor = w.mount()
-		local scene = assert(editor.scene)
+		local scene = assert(editor.canvas.current().scene)
 		for _, selection in { w.first, "n1" } do
 			editor.session.select(selection)
 			w.settle()
@@ -1012,7 +1404,7 @@ describe("host-neutral design editor", function()
 		editor.session.select(w.first)
 		editor.session.change("rotation", { literal = { 30, 45, 60 } })
 		w.settle()
-		local frame = w.read(assert(editor.scene).nodes[w.first], "CFrame")
+		local frame = w.read(assert(editor.canvas.current().scene).nodes[w.first], "CFrame")
 		local expected = w.values.CFrame.new(0, 3, 0)
 			* w.values.CFrame.fromEulerAnglesYXZ(math.rad(30), math.rad(45), math.rad(60))
 		local actual = { w.environment.invoke(frame, "GetComponents") }
@@ -1037,7 +1429,7 @@ describe("host-neutral design editor", function()
 		expect(editor.session.insert "Decal"):toBe(true)
 		editor.session.change("image", { literal = "test-image" })
 		w.settle()
-		local part = Support.instance(assert(editor.scene).nodes[w.first])
+		local part = Support.instance(assert(editor.canvas.current().scene).nodes[w.first])
 		expect(part.MaterialVariant):toBe "Moss"
 		expect(assert(part:FindFirstChildWhichIsA "SpecialMesh").MeshId):toBe "test-mesh"
 		expect(assert(part:FindFirstChildWhichIsA "PointLight").Brightness):toBe(2)
@@ -1056,7 +1448,7 @@ describe("host-neutral design editor", function()
 		editor.session.change("offsetU", { literal = 8.5 })
 		editor.session.change("offsetV", { literal = 2 })
 		w.settle()
-		local part = Support.instance(assert(editor.scene).nodes[w.first])
+		local part = Support.instance(assert(editor.canvas.current().scene).nodes[w.first])
 		local texture = assert(part:FindFirstChildWhichIsA "Texture")
 		expect(texture.StudsPerTileU):toBe(27.2)
 		expect(texture.StudsPerTileV):toBe(13.6)
@@ -1092,7 +1484,7 @@ describe("host-neutral design editor", function()
 		expect(editor.session.insert "Sound"):toBe(true)
 		editor.session.change("volume", { literal = 0.5 })
 		w.settle()
-		local part = Support.instance(assert(editor.scene).nodes[w.first])
+		local part = Support.instance(assert(editor.canvas.current().scene).nodes[w.first])
 		expect(part.CanCollide):toBe(false)
 		expect(part.CanQuery):toBe(false)
 		expect(part.CanTouch):toBe(true)
@@ -1136,7 +1528,7 @@ end)
 
 describe("design editor selection sets", function()
 	local function click(w: typeof(Support.world()), editor: DesignEditor.Editor, id: string)
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		local instance = stage.nodes[id]
 		local at, extent = w.point(instance, "AbsolutePosition"), w.point(instance, "AbsoluteSize")
 		local input = w.pointer("MouseButton1", at.X + extent.X / 2, at.Y + extent.Y / 2)
@@ -1148,7 +1540,7 @@ describe("design editor selection sets", function()
 	it("toggles stage selections, draws their union and individual outlines, and clears with Escape", function()
 		local w = Support.world()
 		local editor = w.mount()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		w.settle()
 		stage.zoomTo(1)
 		w.settle()
@@ -1219,7 +1611,7 @@ describe("design editor selection sets", function()
 	it("marquees intersecting bounds from empty canvas at multiple zoom levels", function()
 		local w = Support.world()
 		local editor = w.mount()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		w.settle()
 		for _, zoom in { 0.5, 1, 2 } do
 			stage.zoomTo(zoom)
@@ -1252,7 +1644,7 @@ describe("design editor selection sets", function()
 		session.changeMany { width = { literal = 120 }, height = { literal = 36 } }
 		session.selectMany { w.first, w.second }
 		w.settle()
-		local stage = assert(editor.stage)
+		local stage = assert(editor.canvas.current().stage)
 		local at, extent =
 			w.point(stage.nodes[w.first], "AbsolutePosition"), w.point(stage.nodes[w.first], "AbsoluteSize")
 		local last, size = w.point(stage.nodes[third], "AbsolutePosition"), w.point(stage.nodes[third], "AbsoluteSize")
@@ -1321,7 +1713,7 @@ describe("design editor selection sets", function()
 		local w = Support.world()
 		local editor = w.mount()
 		w.settle()
-		local session, stage = editor.session, assert(editor.stage)
+		local session, stage = editor.session, assert(editor.canvas.current().stage)
 		local layers = w.find(editor.root, "DesignLayers")
 		w.fire(w.find(w.find(layers, w.first), "Hide"), "Activated")
 		w.settle()
@@ -1389,7 +1781,7 @@ describe("design editor selection sets", function()
 	it("keeps scene selection offsets through a group gizmo move and respects hidden and locked subtrees", function()
 		local w = Support.world "3d"
 		local editor = w.mount()
-		local session, scene = editor.session, assert(editor.scene)
+		local session, scene = editor.session, assert(editor.canvas.current().scene)
 		session.select "n1"
 		expect(session.insert "Part"):toBe(true)
 		local second = session.selected:peek()
@@ -1441,7 +1833,7 @@ describe("design editor selection sets", function()
 	it("toggles scene picks and marquees projected bounds without adding an edit", function()
 		local w = Support.world "3d"
 		local editor = w.mount()
-		local scene = assert(editor.scene)
+		local scene = assert(editor.canvas.current().scene)
 		w.settle()
 		scene.fit()
 		local at, size = w.point(scene.viewport, "AbsolutePosition"), w.point(scene.viewport, "AbsoluteSize")

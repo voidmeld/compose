@@ -33,7 +33,7 @@ return function(ui: UI.UI)
 	}
 
 	Theme.size = {
-		toolbar = 48,
+		toolbar = 88,
 		status = 26,
 		side = 340,
 		row = 32,
@@ -102,6 +102,14 @@ return function(ui: UI.UI)
 			ui.set(frame, "BackgroundTransparency", 1)
 		end
 		return frame
+	end
+
+	function Theme.place(target: Compose.Node, parent: unknown, size: unknown, position: unknown?)
+		if position ~= nil then
+			ui.set(target, "Position", position)
+		end
+		ui.set(target, "Size", size)
+		ui.set(target, "Parent", parent)
 	end
 
 	function Theme.label(text: string, color: unknown, size: number?, font: unknown?, kind: string?): Compose.Node

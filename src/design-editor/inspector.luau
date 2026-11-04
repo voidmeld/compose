@@ -389,22 +389,16 @@ return function(ui: UI.UI)
 			ui.set(name, "BackgroundTransparency", 1)
 			ui.set(name, "TextSize", size.title)
 			ui.set(name, "FontFace", Theme.font.bold)
-			ui.set(name, "Position", ui.values.udim2(0, 36, 0, 0))
-			ui.set(name, "Size", ui.values.udim2(1, -36, 0, 26))
-			ui.set(name, "Parent", header)
+			Theme.place(name, header, ui.values.udim2(1, -36, 0, 26), ui.values.udim2(0, 36, 0, 0))
 			local kindLabel = Theme.label(node.kind, color.tertiary, size.small)
-			ui.set(kindLabel, "Position", ui.values.udim2(0, 44, 0, 26))
-			ui.set(kindLabel, "Size", ui.values.udim2(1, -44, 0, 24))
-			ui.set(kindLabel, "Parent", header)
+			Theme.place(kindLabel, header, ui.values.udim2(1, -44, 0, 24), ui.values.udim2(0, 44, 0, 26))
 			local function section(title: string)
 				local frame = block(title, 40)
 				local rule = Theme.frame("Rule", color.divider)
-				ui.set(rule, "Size", ui.values.udim2(1, 0, 0, 1))
-				ui.set(rule, "Parent", frame)
+				Theme.place(rule, frame, ui.values.udim2(1, 0, 0, 1))
 				local caption = Theme.label(title, color.text, size.small, Theme.font.bold)
 				ui.set(caption, "Position", ui.values.udim2(0, size.gutter, 0, 12))
-				ui.set(caption, "Size", ui.values.udim2(1, -2 * size.gutter, 0, 24))
-				ui.set(caption, "Parent", frame)
+				Theme.place(caption, frame, ui.values.udim2(1, -2 * size.gutter, 0, 24))
 			end
 			local function row(key: string, title: string): (Compose.Node, Compose.Node)
 				local frame = block(key, 40)
@@ -446,12 +440,10 @@ return function(ui: UI.UI)
 					local picker = segmented(lists, current, function(chosen: string)
 						session.bind { from = chosen, key = if bind then bind.key else "id" }
 					end)
-					ui.set(picker, "Size", ui.values.udim2(1, 0, 1, 0))
-					ui.set(picker, "Parent", slot)
+					Theme.place(picker, slot, ui.values.udim2(1, 0, 1, 0))
 				else
 					local empty = Theme.label("No list inputs", color.tertiary, size.small)
-					ui.set(empty, "Size", ui.values.udim2(1, 0, 1, 0))
-					ui.set(empty, "Parent", slot)
+					Theme.place(empty, slot, ui.values.udim2(1, 0, 1, 0))
 				end
 				if bind then
 					local keyRow = row("Key", "Key")
@@ -459,8 +451,7 @@ return function(ui: UI.UI)
 					local keyBox = field(bind.key, function(text: string)
 						session.bind { from = bind.from, key = text }
 					end, true)
-					ui.set(keyBox, "Size", ui.values.udim2(1, 0, 1, 0))
-					ui.set(keyBox, "Parent", keySlot)
+					Theme.place(keyBox, keySlot, ui.values.udim2(1, 0, 1, 0))
 				end
 			end
 			local grouped: { [string]: { string } } = {}
@@ -562,8 +553,7 @@ return function(ui: UI.UI)
 									session.change(key, { literal = chosen })
 								end
 							)
-							ui.set(picker, "Size", ui.values.udim2(1, 0, 1, 0))
-							ui.set(picker, "Parent", slot)
+							Theme.place(picker, slot, ui.values.udim2(1, 0, 1, 0))
 						elseif entry.type == "number" then
 							local box = field(
 								if type(literal) == "number" then tostring(literal) else "",
@@ -660,17 +650,14 @@ return function(ui: UI.UI)
 								ui.set(cell, "Size", ui.values.udim2(0, 0, 1, 0))
 								Theme.pad(cell, 16, 4)
 								local tag = Theme.label(axis, color.tertiary, size.small, Theme.font.bold)
-								ui.set(tag, "Position", ui.values.udim2(0, -12, 0, 0))
-								ui.set(tag, "Size", ui.values.udim2(0, 10, 1, 0))
-								ui.set(tag, "Parent", cell)
+								Theme.place(tag, cell, ui.values.udim2(0, 10, 1, 0), ui.values.udim2(0, -12, 0, 0))
 								ui.set(cell, "Parent", slot)
 							end
 						elseif entry.type == "string" then
 							local box = field(if type(literal) == "string" then literal else "", function(text: string)
 								session.change(key, if text == "" then nil else { literal = text })
 							end)
-							ui.set(box, "Size", ui.values.udim2(1, 0, 1, 0))
-							ui.set(box, "Parent", slot)
+							Theme.place(box, slot, ui.values.udim2(1, 0, 1, 0))
 						elseif
 							entry.type == "datatype"
 							and entry.datatype ~= nil
@@ -695,8 +682,7 @@ return function(ui: UI.UI)
 								ui.set(cell, "LayoutOrder", index)
 								ui.set(cell, "Size", ui.values.udim2(1, 0, 0, 28))
 								local indexLabel = Theme.label(tostring(index), color.tertiary, size.small)
-								ui.set(indexLabel, "Size", ui.values.udim2(0, 14, 1, 0))
-								ui.set(indexLabel, "Parent", cell)
+								Theme.place(indexLabel, cell, ui.values.udim2(0, 14, 1, 0))
 								local function change(next: Design.Literal)
 									local changed = table.clone(components)
 									changed[index] = next
@@ -750,8 +736,7 @@ return function(ui: UI.UI)
 								end,
 								true
 							)
-							ui.set(box, "Size", ui.values.udim2(1, 0, 1, 0))
-							ui.set(box, "Parent", slot)
+							Theme.place(box, slot, ui.values.udim2(1, 0, 1, 0))
 						elseif
 							entry.type == "content"
 							and type(literal) == "table"
@@ -776,8 +761,7 @@ return function(ui: UI.UI)
 							ui.set(add, "Parent", slot)
 						else
 							local hint = Theme.label("Not bound", color.tertiary, size.small)
-							ui.set(hint, "Size", ui.values.udim2(1, 0, 1, 0))
-							ui.set(hint, "Parent", slot)
+							Theme.place(hint, slot, ui.values.udim2(1, 0, 1, 0))
 						end
 						local available = choices(value, entry, tokens)
 						if mixed[key] then

@@ -117,6 +117,27 @@ Command/Ctrl+G wraps selected siblings in the library's default list container. 
 
 Each layer has Hide and Lock buttons. Hidden subtrees leave the stage preview but remain in emitted components. Locked subtrees cannot be picked or moved on the stage; they remain selectable and editable in layers. Both flags persist in the design header through source edits and undo/redo.
 
+## Device frames
+
+The Device control selects one named frame. All devices opens a grid; Single device returns to the active frame. Clicking a frame activates it. Selection and edits apply to the same source document across frames. A kit defaults to the eight profiles in `DesignEditor.devices.all`:
+
+| ID | Viewport | Input | Text scale |
+| --- | --- | --- | --- |
+| `phone-portrait` | 389 × 762 | touch | 1 |
+| `phone-landscape` | 749 × 389 | touch | 1 |
+| `tablet-portrait` | 820 × 1180 | touch | 1 |
+| `tablet-landscape` | 1180 × 820 | touch | 1 |
+| `monitor` | 1919 × 1080 | mouse | 1 |
+| `ultrawide` | 3439 × 1440 | mouse | 1 |
+| `tv` | 1919 × 1080 | gamepad | 1.3 |
+| `vr` | 2064 × 2208 per eye | VR | 1.15 |
+
+Profiles include aspect, native GUI insets, cutouts, safe area and camera field of view. Phone, monitor and TV retain Verify's captured viewport and GUI inset values. `devices.get("generic_handheld_720")` exposes its captured 1279 × 720 gamepad profile without adding it to the standard grid. Tablet, ultrawide and VR are design presets. TV adds an overscan safe area of 96 left/right, 112 top and 54 bottom pixels; its native GUI inset remains 58 pixels at the top.
+
+Supply `Workspace.frame(device, scale)` to build each frame's library using the same layout sources as the game. A shared viewport cell cannot represent simultaneous frames. Frame-local sources resolve at the profile's full logical resolution; zoom scales their display. Native measurements used for layout must normalize by `scale`.
+
+Screen roots project their authored ScreenInsets into the frame. Billboard roots project authored stud/offset sizes and world offsets against a centered, 12-stud camera fixture; pixel offsets keep their authored sizes. This is a layout fixture, with its camera declared independently from gameplay. 3D frames preserve each profile's aspect and use its field of view for fitting and picking. The VR frame uses a 90-degree field of view; it does not simulate head tracking or stereo presentation.
+
 ## Motion
 
 A library provides motion with `motion = { call, roles, animate }`.
@@ -156,6 +177,14 @@ The editor and game thus use the same version.
 Without a package kit, it uses the built-in Roblox library.
 See [DesignEditor.kit](api.md#designeditorkit).
 
+## Prompt and compare
+
+Provide `prompt` with the source path and a submission callback to enable the request box beneath the canvas. Select a node and describe the change. The callback receives a stable snapshot of its path, props, token references and active frame. Its provider owns native capture, authentication, agent invocation and scoped source writes. The source link imports the result.
+
+Ask for two or three variants, or set the variant count. Returned drafts render side by side in independent read-only sessions on the requested device. Choosing a draft calls the provider's pick callback. Discarding releases it without saving. Canonical selection, history and source stay in the original session.
+
+Provide `theme` to expose shared colour, type and spacing fields. Reactive field readers display current token values; the writer persists changes and updates the token inputs used by each frame. A prompt provider can also expose the Theme request scope. These interfaces are in the [API reference](api.md#designeditorcreate).
+
 ## Vendor the module tree
 
 Keep `core`, `design` and `design-editor` as siblings.
@@ -180,6 +209,7 @@ They also check disposal, failed construction and 3D raycasts.
 Selection tests also check modifier clicks, sibling ranges, marquee intersections at several zoom levels, union outlines, mixed inspector edits, group dragging, wrap menus and hide/lock history. Live Studio still needs checks for modifier chords, pointer capture outside the canvas, context-menu placement, outline and marquee appearance, and source-linked persistence after reopening the plugin.
 
 The fixture provides fixed Unicode text measurements.
+All-device geometry cases omit text measurement and text auto sizing, which Verify cannot resolve at thumbnail scales. They check logical frame bounds and reactive token propagation; native text still requires engine frames.
 Its layout reader ignores text truncation because the simulator does not model it.
 Tests still check design geometry and outline calculations.
 These measurements do not prove native text rendering.

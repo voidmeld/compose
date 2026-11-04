@@ -513,7 +513,7 @@ local checks: { Check } = {
 				end
 			end
 			settle()
-			local stage = assert(editor.stage, "a 2D library opens the 2D stage")
+			local stage = assert(editor.canvas.current().stage, "a 2D library opens the 2D stage")
 			local nodes = stage.nodes
 			local label = nodes[text]
 			assert(typeof(label) == "Instance" and label:IsA "GuiObject")
@@ -624,8 +624,8 @@ local checks: { Check } = {
 				end
 			end
 			settle()
-			assertThat(editor.stage == nil, "a 3D library does not open the 2D stage")
-			local scene = assert(editor.scene, "a 3D library opens the scene")
+			assertThat(editor.canvas.current().stage == nil, "a 3D library does not open the 2D stage")
+			local scene = assert(editor.canvas.current().scene, "a 3D library opens the scene")
 			local part = scene.nodes[block]
 			assert(typeof(part) == "Instance")
 			assertThat(part:IsA "BasePart", "the Part layer renders a BasePart")
