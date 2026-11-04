@@ -1397,6 +1397,9 @@ describe("Compose Design views as code", function()
 		expect(string.find(code, "Visible = state.expanded", 1, true) ~= nil):toBe(true)
 		local parsed = Design.parse(code, toy)
 		expect(parsed.root.nameInput):toBe "name"
+		local callback =
+			string.gsub(code, "Toy.show%(props.offered,", "Toy.show(function() return props.offered == true end,")
+		expect(Design.parse(callback, toy)):toEqual(parsed)
 		expect(assert(parsed.root.children[1].bind).from):toBe "games"
 		expect(parsed.root.children[2].when):toBe "offered"
 		expect(parsed.state and parsed.state[1].id):toBe "expanded"

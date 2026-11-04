@@ -329,16 +329,9 @@ function source.parse(code: string, library: Library): Types.Document
 		assert(token.kind == "name", `Expected a name but found {token.text}`)
 		return token.text
 	end
-	local function annotation()
+	local function annotation(stop: string)
 		if peek() == ":" then
-			while peek() ~= ")" do
-				take()
-			end
-		end
-	end
-	local function returnAnnotation()
-		if peek() == ":" then
-			while peek() ~= "return" do
+			while peek() ~= stop do
 				take()
 			end
 		end
@@ -385,10 +378,10 @@ function source.parse(code: string, library: Library): Types.Document
 			if peek() == "current" or peek() == ")" then
 				if peek() == "current" then
 					take "current"
-					annotation()
+					annotation ")"
 				end
 				take ")"
-				returnAnnotation()
+				annotation "return"
 				take "return"
 				local cell = node()
 				take "end"
@@ -614,10 +607,10 @@ function source.parse(code: string, library: Library): Types.Document
 			elseif peek() == "current" or peek() == ")" then
 				if peek() == "current" then
 					take "current"
-					annotation()
+					annotation ")"
 				end
 				take ")"
-				returnAnnotation()
+				annotation "return"
 				rowAlias()
 				take "return"
 				local next = tokens[at]
@@ -884,29 +877,26 @@ function source.parse(code: string, library: Library): Types.Document
 				if library.show ~= nil and lead == library.show then
 					take "("
 					local condition: string
-					if peek() == "function" and peek(2) == "use" then
+					if peek() == "function" then
 						take "function"
 						take "("
-						take "use"
+						local item = peek() == "use"
+						if item then
+							take "use"
+						end
 						take ")"
-						rowAlias()
+						if item then
+							rowAlias()
+						end
 						take "return"
-						take "use"
-						take "("
-						take "current"
-						take ")"
-						take "."
-						condition = name()
-						take "="
-						take "="
-						take "true"
-						take "end"
-					elseif peek() == "function" then
-						take "function"
-						take "("
-						take ")"
-						take "return"
-						take "props"
+						if item then
+							take "use"
+							take "("
+							take "current"
+							take ")"
+						else
+							take "props"
+						end
 						take "."
 						condition = name()
 						take "="
@@ -942,9 +932,9 @@ function source.parse(code: string, library: Library): Types.Document
 					take "function"
 					take "("
 					take "row"
-					annotation()
+					annotation ")"
 					take ")"
-					returnAnnotation()
+					annotation "return"
 					take "return"
 					take "row"
 					take "."
@@ -958,7 +948,7 @@ function source.parse(code: string, library: Library): Types.Document
 						take "function"
 						take "("
 						take "current"
-						annotation()
+						annotation ")"
 						take ")"
 						take "return"
 						row = node()
@@ -1033,7 +1023,7 @@ function source.parse(code: string, library: Library): Types.Document
 			take "rootContent"
 			take "("
 			take ")"
-			returnAnnotation()
+			annotation "return"
 			take "return"
 			sharedContent = node()
 			take "end"
@@ -1081,7 +1071,7 @@ function source.parse(code: string, library: Library): Types.Document
 			local rowName = name()
 			take "("
 			take "current"
-			annotation()
+			annotation ")"
 			take ")"
 			rowAlias()
 			take "return"
