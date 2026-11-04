@@ -14,6 +14,24 @@ local function expectNothingLeft(world: Support.World)
 end
 
 describe("unwinding a failed render", function()
+	it("propagates a nested content failure unchanged without an explicit error boundary", function()
+		local world = Support.world()
+		local failure = { message = "content failed" }
+		local ok, received = pcall(function()
+			world.runtime.mount(function()
+				return world.create "Frame" {
+					Compose.show(Compose.cell(true), function(): Compose.Node
+						world.create "Content" {}
+						error(failure, 0)
+					end),
+				}
+			end, world.root)
+		end)
+		expect(ok):toBe(false)
+		expect(received):toBe(failure)
+		expectNothingLeft(world)
+	end)
+
 	it("leaves nothing behind when createNode fails at the root", function()
 		local world = Support.world()
 		world.host.failNext "createNode"

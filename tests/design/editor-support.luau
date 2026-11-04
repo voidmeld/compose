@@ -163,16 +163,22 @@ local function world(space: string?, geometry: boolean?)
 	local objectsBefore = env.liveObjects()
 	local connectionsBefore = env.liveConnections()
 	type MountOptions = {
+		document: Design.Document?,
+		scene: Editor.SceneTarget?,
+		identity: { commit: string, path: string }?,
 		link: Design.LinkStore?,
 		onExport: ((string) -> ())?,
 		devices: { Editor.Device }?,
 		previews: { Editor.Preview }?,
+		backdrop: (() -> unknown)?,
 		frame: ((Editor.Device, Compose.ReadOnlyValue<number>) -> Editor.FrameContext)?,
 		prompt: Editor.PromptOptions?,
 		theme: Editor.ThemeStore?,
 	}
 	local function mount(options: MountOptions?): Editor.Editor
-		return Editor.create(library, document, screen, {
+		return Editor.create(library, if options and options.document then options.document else document, screen, {
+			scene = if options then options.scene else nil,
+			identity = if options then options.identity else nil,
 			runtime = runtime,
 			environment = environment,
 			stageSize = { X = 480, Y = 320 },
@@ -183,6 +189,7 @@ local function world(space: string?, geometry: boolean?)
 			prompt = if options then options.prompt else nil,
 			theme = if options then options.theme else nil,
 			previews = if options then options.previews else nil,
+			backdrop = if options then options.backdrop else nil,
 		})
 	end
 	local function settle()

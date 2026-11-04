@@ -10,6 +10,198 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("keeps actual size per device through switches, grid layout and command-driven fits", function()
+		local w = Support.world(nil, true)
+		local editor = w.mount { devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[5] } }
+		w.settle()
+		local first = editor.canvas.current()
+		expect(editor.execute({ action = "ActualSize", enabled = true }).ok):toBe(true)
+		w.settle()
+		expect(first.scale:peek()):toBe(1)
+		expect(w.find(editor.root, "ActualSize").Text):toBe "Fit size"
+		expect(editor.execute({ action = "Device", id = "monitor" }).ok):toBe(true)
+		w.settle()
+		expect(editor.execute({ action = "Read" }).actualSize):toBe(false)
+		expect(editor.execute({ action = "Device", id = "phone-portrait" }).ok):toBe(true)
+		w.settle()
+		expect(first.scale:peek()):toBe(1)
+		expect(editor.execute({ action = "Read" }).actualSize):toBe(true)
+		editor.execute { action = "AllDevices", enabled = true }
+		w.settle()
+		expect(first.scale:peek()):toBe(1)
+		expect(w.find(editor.root, "AllDevices").Text):toBe "Single device"
+		expect(editor.execute({ action = "Fit" }).actualSize):toBe(false)
+		w.settle()
+		expect(first.scale:peek() < 1):toBe(true)
+		expect(editor.execute({ action = "Zoom", scale = math.nan }).ok):toBe(false)
+		expect(first.scale:peek() == first.scale:peek()):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("applies initial sample states before rendering and preserves a rejected preview choice", function()
+		local w = Support.world()
+		local state = Compose.cell "ordinary"
+		local document = Design.document.setContract(w.document, w.library, {
+			inputs = { { id = "sample", kind = "readable", type = "string", preview = "ordinary" } },
+			outputs = {},
+		})
+		document = Design.document.change(document, w.library, w.first, "text", { input = "sample" })
+		local calls = 0
+		local invalid = pcall(function()
+			w.mount {
+				previews = {
+					{
+						name = "State",
+						choices = { "ordinary", "ordinary" },
+						select = function()
+							calls += 1
+						end,
+					},
+				},
+			}
+		end)
+		expect(invalid):toBe(false)
+		expect(calls):toBe(0)
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		local backdrop: Compose.Node? = nil
+		local editor = w.mount {
+			document = document,
+			previews = {
+				{
+					name = "State",
+					choices = { "ordinary", "empty", "busy", "error" },
+					initial = "empty",
+					select = function(choice: string)
+						if choice == "error" then
+							error "unavailable sample"
+						end
+						calls += 1
+						state:set(choice)
+					end,
+				},
+			},
+			frame = function(): DesignEditor.FrameContext
+				expect(state:peek()):toBe "empty"
+				return {
+					bindings = { sample = { readable = state } },
+					backdrop = function(): unknown
+						backdrop = w.runtime.constructors.Frame {
+							Name = "SceneBackdrop",
+							Size = w.values.UDim2.fromScale(1, 1),
+						}
+						return backdrop
+					end,
+				}
+			end,
+		}
+		w.settle()
+		expect(calls):toBe(1)
+		expect(w.read(assert(editor.canvas.current().stage).nodes[w.first], "Text")):toBe "empty"
+		expect(w.read(assert(backdrop), "Parent")):toBe(assert(editor.canvas.current().stage).surface)
+		local read = editor.execute { action = "Read" }
+		expect(read.previewChoices.State):toEqual { "ordinary", "empty", "busy", "error" }
+		read.previewChoices.State[1] = "changed"
+		expect(editor.execute({ action = "Read" }).previewChoices.State[1]):toBe "ordinary"
+		expect(editor.execute({ action = "Preview", name = "State", choice = "busy" }).ok):toBe(true)
+		w.settle()
+		expect(w.read(assert(editor.canvas.current().stage).nodes[w.first], "Text")):toBe "busy"
+		expect(editor.execute({ action = "Pan", x = 30, y = 10 }).ok):toBe(true)
+		local rejected = editor.execute { action = "Preview", name = "State", choice = "error" }
+		expect(rejected.ok):toBe(false)
+		expect(rejected.previews.State):toBe "busy"
+		expect(editor.session.problem:peek()):toBe(rejected.problem)
+		expect(w.find(editor.root, "State").Text):toBe "busy"
+		expect(editor.execute({ action = "Preview", name = "State", choice = "missing" }).ok):toBe(false)
+		editor.dispose()
+		expect(w.read(assert(backdrop), "Parent")):toBe(nil)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("reports rejected edits and exposes layer, inspector, navigation and export commands", function()
+		local w = Support.world()
+		local exported = ""
+		local editor = w.mount {
+			onExport = function(source: string)
+				exported = source
+			end,
+		}
+		expect(editor.execute({ action = "Select", ids = { w.first } }).ok):toBe(true)
+		local rejected = editor.execute { action = "Change", field = "missing", value = { literal = 3 } }
+		expect(rejected.ok):toBe(false)
+		expect(rejected.problem ~= nil):toBe(true)
+		expect(rejected.next):toBe 'execute({ action = "Read" })'
+		expect(editor.execute({ action = "Rename", name = "SampleTitle" }).ok):toBe(true)
+		expect(
+			editor.execute({ action = "ChangeMany", changes = { width = { literal = 200 }, height = { literal = 40 } } }).ok
+		):toBe(true)
+		expect(editor.execute({ action = "Hide", id = w.first, hidden = true }).ok):toBe(true)
+		expect(editor.execute({ action = "Lock", id = w.first, locked = true }).ok):toBe(true)
+		local node = assert((Design.document.find(editor.session.document:peek().root, w.first)))
+		expect({ node.name, node.hidden, node.locked }):toEqual { "SampleTitle", true, true }
+		expect(editor.execute({ action = "Shift", step = 1 }).ok):toBe(true)
+		expect(editor.session.document:peek().root.children[2].id):toBe(w.first)
+		expect(editor.execute({ action = "Move", id = w.first, destination = "n1", before = 1 }).ok):toBe(true)
+		expect(editor.execute({ action = "SelectRelative", direction = "next" }).selection):toEqual { w.second }
+		expect(editor.execute({ action = "TextSize", size = 17 }).textSize):toBe(17)
+		expect(w.find(editor.root, "TextSize").Text):toBe "Text 17"
+		expect(editor.execute({ action = "TextSize", size = 100 }).ok):toBe(false)
+		expect(editor.execute({ action = "Pan", x = math.huge, y = 0 }).ok):toBe(false)
+		local result = editor.execute { action = "Export" }
+		expect(result.ok):toBe(true)
+		expect(result.source):toBe(exported)
+		expect(exported):toBe(Design.emit(editor.session.document:peek(), w.library))
+		expect(result.files):toEqual {}
+		expect(editor.execute({ action = "Play", sequence = "missing" }).ok):toBe(false)
+		expect(editor.execute({ action = "Select", ids = { "missing" } }).ok):toBe(false)
+		expect(editor.execute({ action = "Replace", document = w.document }).ok):toBe(true)
+		expect(editor.execute({ action = "Contract", contract = w.document.contract }).ok):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("renders beams with forward attachment references and preserves attachment children", function()
+		local w = Support.world "3d"
+		local document, beam = Design.document.insert(w.document, w.library, w.first, "Beam")
+		local first, second, light
+		document, first = Design.document.insert(document, w.library, w.first, "Attachment")
+		document, second = Design.document.insert(document, w.library, w.first, "Attachment")
+		document = Design.document.rename(document, w.library, first, "BeamStart")
+		document = Design.document.rename(document, w.library, second, "BeamEnd")
+		document, light = Design.document.insert(document, w.library, second, "PointLight")
+		document = Design.document.change(document, w.library, beam, "attachment0", { node = first })
+		document = Design.document.change(document, w.library, beam, "attachment1", { node = second })
+		document = Design.document.change(document, w.library, beam, "width0", { literal = 0.7 })
+		document = Design.document.change(document, w.library, beam, "color", { literal = "#00FF00" })
+		document = Design.document.change(document, w.library, beam, "transparency", { literal = 0.2 })
+		local editor = DesignEditor.create(w.library, document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+		})
+		w.settle()
+		local part = Support.instance(assert(editor.canvas.current().scene).nodes[w.first])
+		local built = assert(part:FindFirstChildWhichIsA "Beam")
+		expect(built.Attachment0):toBe(part:FindFirstChild(assert((Design.document.find(document.root, first))).name))
+		expect(built.Attachment1):toBe(part:FindFirstChild(assert((Design.document.find(document.root, second))).name))
+		expect(built.Width0):toBeCloseTo(0.7, 0.0001)
+		expect(built.Color):toBe(w.values.ColorSequence.new(w.values.Color3.new(0, 1, 0)))
+		expect(built.Transparency):toBe(w.values.NumberSequence.new(0.2))
+		expect(w.find(part, assert((Design.document.find(document.root, light))).name).Parent):toBe(built.Attachment1)
+		local source = Design.emit(document, w.library)
+		expect(Design.emit(Design.parse(source, w.library), w.library)):toBe(source)
+		expect(editor.execute({ action = "Guides", enabled = false }).ok):toBe(true)
+		expect(editor.execute({ action = "Pan", x = 20, y = 10 }).ok):toBe(true)
+		expect(editor.execute({ action = "ActualSize", enabled = true }).ok):toBe(false)
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		local pending = w.mount { document = document }
+		pending.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it("renders three isolated drafts and commits only the chosen source through its pick callback", function()
 		local w = Support.world()
 		local source = Design.emit(w.document, w.library)
@@ -59,8 +251,9 @@ describe("host-neutral design editor", function()
 				end,
 			},
 		}
-		w.find(editor.root, "PromptRequest").Text = "Make three variants with different spacing"
-		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		local submitted = editor.execute { action = "Prompt", text = "Make variants with different spacing", count = 3 }
+		expect(submitted.ok):toBe(true)
+		expect(assert(submitted.prompt).busy):toBe(true)
 		w.settle()
 		local comparison = w.find(editor.root, "DesignDrafts")
 		for index = 1, 3 do
@@ -71,12 +264,21 @@ describe("host-neutral design editor", function()
 		expect(source):toBe(original)
 		expect(writes):toBe(0)
 		expect(editor.session.document:peek().root.props.width.literal):toBe(400)
-		w.fire(w.find(w.find(comparison, "Draft2"), "ChooseVariant"), "Activated")
+		expect(editor.execute({ action = "ChooseDraft", index = 4 }).ok):toBe(false)
+		expect(editor.execute({ action = "ChooseDraft", index = 2 }).ok):toBe(true)
 		w.settle()
 		expect(picks):toBe(1)
 		expect(source):toBe(variants[2].source)
 		expect(editor.session.document:peek().root.props.width.literal):toBe(420)
 		expect(writes):toBe(0)
+		expect(editor.execute({ action = "Prompt", text = "More spacing", count = 4 }).ok):toBe(false)
+		expect(editor.execute({ action = "Prompt", text = "More spacing", count = 3 }).ok):toBe(true)
+		w.settle()
+		expect(assert(editor.execute({ action = "Read" }).prompt).drafts):toBe(true)
+		expect(editor.execute({ action = "DiscardDrafts" }).ok):toBe(true)
+		w.settle()
+		expect(assert(editor.execute({ action = "Read" }).prompt).drafts):toBe(false)
+		expect(picks):toBe(1)
 		editor.dispose()
 		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
 		w.close()
@@ -142,6 +344,11 @@ describe("host-neutral design editor", function()
 		w.fire(input, "FocusLost", false)
 		w.settle()
 		expect(spacing:peek()):toBe(48)
+		expect(editor.execute({ action = "ThemeValue", id = "spacing.gutter", value = 64 }).ok):toBe(true)
+		expect(spacing:peek()):toBe(64)
+		expect(editor.execute({ action = "ThemeValue", id = "spacing.gutter", value = 200 }).ok):toBe(false)
+		expect(editor.execute({ action = "ThemeValue", id = "missing", value = 1 }).ok):toBe(false)
+		expect(spacing:peek()):toBe(64)
 		editor.dispose()
 		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
 		w.close()
@@ -393,19 +600,99 @@ describe("host-neutral design editor", function()
 		end)
 	end
 
-	it("preserves device aspect and camera picking across the 3D grid", function()
+	it("keeps one full-size 3D scene when all devices is requested", function()
 		local w = Support.world "3d"
 		local editor = w.mount { devices = DesignEditor.devices.all }
 		editor.canvas.showAll(true)
 		w.settle()
 		editor.canvas.fit()
-		for _, frame in editor.canvas.frames() do
-			local scene = assert(frame.scene)
-			local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
-			expect(size.X / size.Y):toBeCloseTo(frame.device.aspect, 0.001)
-			expect(w.number(scene.camera, "FieldOfView")):toBe(frame.device.fieldOfView)
-			expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
-		end
+		expect(#editor.canvas.frames()):toBe(1)
+		local scene = assert(editor.canvas.current().scene)
+		local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
+		expect(size):toEqual(w.point(editor.canvas.root, "AbsoluteSize"))
+		expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("renders into a borrowed world and restores its camera without destroying foreign content", function()
+		local w = Support.world "3d"
+		w.devices()
+		local world = w.service "Workspace"
+		local camera = Support.instance(assert(world.CurrentCamera))
+		local before = { camera.CFrame, camera.Focus, camera.FieldOfView, camera.CameraType }
+		local foreign = w.env.createInstance "Folder"
+		foreign.Parent = world
+		local editor = w.mount {
+			scene = { world = world, camera = camera },
+			identity = {
+				commit = "fixture",
+				path = "Scene.luau",
+			},
+		}
+		w.settle()
+		local scene = assert(editor.canvas.current().scene)
+		expect(w.read(scene.world, "Parent")):toBe(world)
+		local changed = editor.execute { action = "Camera", preset = "approach-20" }
+		expect(changed.ok):toBe(true)
+		expect(changed.commit):toBe "fixture"
+		expect(assert(changed.camera).preset):toBe "approach-20"
+		expect(w.find(editor.root, "Camera").Text):toBe "Camera · Approach at 20 studs"
+		local eye = assert(editor.execute({ action = "Camera", preset = "eye-height" }).camera)
+		local frame, extent = w.environment.invoke(scene.nodes.n1, "GetBoundingBox")
+		expect(eye.focus.Y):toBeCloseTo(
+			w.number(w.read(frame, "Position"), "Y") - w.number(extent, "Y") / 2 + 5.5,
+			0.001
+		)
+		expect(eye.pitch):toBe(0)
+		local close = assert(editor.execute({ action = "Camera", preset = "close-up" }).camera)
+		local top = assert(editor.execute({ action = "Camera", preset = "top-down" }).camera)
+		expect(top.pitch):toBeCloseTo(-90, 0.001)
+		expect(close.distance < top.distance):toBe(true)
+		local orbit = editor.execute { action = "Orbit", yaw = 60, pitch = -20 }
+		expect(assert(orbit.camera).yaw):toBeCloseTo(60, 0.001)
+		expect(editor.execute({ action = "Orbit", yaw = math.nan, pitch = 0 }).ok):toBe(false)
+		local size, position = w.point(scene.viewport, "AbsoluteSize"), w.point(scene.viewport, "AbsolutePosition")
+		editor.execute { action = "Fit" }
+		expect(scene.pick { X = position.X + size.X / 2, Y = position.Y + size.Y / 2 }):toBe(w.first)
+		editor.dispose()
+		expect({ camera.CFrame, camera.Focus, camera.FieldOfView, camera.CameraType }):toEqual(before)
+		expect(foreign.Parent):toBe(world)
+		expect(Support.instance(scene.world).Parent):toBe(nil)
+		w.close()
+	end)
+
+	it("shares named preview choices and undoable edits between commands and controls", function()
+		local w = Support.world()
+		local chosen = "ordinary"
+		local editor = w.mount {
+			previews = {
+				{
+					name = "State",
+					choices = { "ordinary", "empty", "busy", "error" },
+					select = function(choice)
+						chosen = choice
+					end,
+				},
+			},
+		}
+		editor.execute { action = "Preview", name = "State", choice = "busy" }
+		expect(chosen):toBe "busy"
+		w.fire(w.find(editor.root, "State"), "Activated")
+		expect(chosen):toBe "error"
+		expect(editor.execute({ action = "Read" }).previews.State):toBe "error"
+		editor.execute { action = "Select", ids = { w.first } }
+		editor.execute { action = "Change", field = "width", value = { literal = 180 } }
+		expect(assert((Design.document.find(editor.session.document:peek().root, w.first))).props.width.literal):toBe(
+			180
+		)
+		editor.execute { action = "Undo" }
+		expect(assert((Design.document.find(editor.session.document:peek().root, w.first))).props.width.literal):toBe(
+			120
+		)
+		local invalid = editor.execute { action = "Device", id = "missing" }
+		expect(invalid.ok):toBe(false)
+		expect(invalid.next):toBe 'execute({ action = "Read" })'
 		editor.dispose()
 		w.close()
 	end)
@@ -973,7 +1260,7 @@ describe("host-neutral design editor", function()
 		expect(w.find(editor.canvas.current().root, "ArtboardSize").Text):toBe "820 × 1180"
 		w.fire(w.find(editor.root, "Theme"), "Activated")
 		w.settle()
-		expect(chosen[1]):toBe "Dark"
+		expect(chosen):toEqual { "Light", "Dark" }
 		editor.dispose()
 		w.close()
 	end)

@@ -46,6 +46,8 @@ moveChild(parent, child, position) -> ()      -- optional; see "Hosts that canno
 removeChild(parent, child) -> ()
 destroyNode(node) -> ()
 ```
+`removeChild(parent, child)` detaches the child only if it still belongs to that parent. Releasing an old attachment after reparenting must preserve the newer parent. Removing an already detached or destroyed child is safe.
+
 ### `events`, optional
 
 ```luau

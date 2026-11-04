@@ -22,6 +22,107 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 local FRAME = 1 / 60
 
 describe("shared motion frames", function()
+	it("queries the same activity readable without changing animation return arity", function()
+		local world = Support.world()
+		local value, owner = Support.owned(function()
+			expect(select(
+				"#",
+				world.runtime.tween(function()
+					return 0
+				end)
+			)):toBe(1)
+			return world.runtime.spring(function()
+				return 0
+			end)
+		end)
+		local running = world.runtime.running(value)
+		expect(world.runtime.running(value)):toBe(running)
+		expect(running:peek()):toBe(false)
+		expect(function()
+			world.runtime.running(Compose.cell(0))
+		end):toThrow "animation/not-animated"
+		Compose.owner.dispose(owner)
+		expect(world.runtime.running(value)):toBe(running)
+		expect(running:peek()):toBe(false)
+	end)
+
+	for _, primitive in { "spring", "tween" } do
+		it("exposes " .. primitive .. " activity through retargeting completion and disposal", function()
+			local world = Support.world()
+			local target = Compose.cell(0)
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local value = Compose.withOwner(owner, function()
+				local function source(use: Compose.Use): number
+					return use(target)
+				end
+				if primitive == "spring" then
+					return world.runtime.spring(source)
+				end
+				return world.runtime.tween(source)
+			end)
+			local running = world.runtime.running(value)
+			local observer = Compose.createOwner(world.runtime.reactor)
+			local activity: { boolean } = {}
+			Compose.owner.watch(observer, function(use)
+				table.insert(activity, use(running))
+			end)
+			expect(running:peek()):toBe(false)
+			target:set(10)
+			world.settle()
+			expect(running:peek()):toBe(true)
+			world.host.step(0.1)
+			target:set(20)
+			world.settle()
+			expect(running:peek()):toBe(true)
+			for _ = 1, 300 do
+				world.host.step(FRAME)
+			end
+			world.settle()
+			expect(value:peek()):toBe(20)
+			expect(running:peek()):toBe(false)
+			expect(world.host.counts().frameListeners):toBe(0)
+			target:set(30)
+			world.settle()
+			expect(running:peek()):toBe(true)
+			Compose.owner.dispose(owner)
+			expect(running:peek()):toBe(false)
+			expect(world.host.counts().frameListeners):toBe(0)
+			expect(activity):toEqual { false, true, false, true, false }
+			Compose.owner.dispose(observer)
+		end)
+
+		it("clears typed " .. primitive .. " activity when reduced motion snaps to its target", function()
+			local world = Support.world()
+			local target = Compose.cell(0)
+			local reduced = Compose.cell(false)
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local motion = world.runtime.motion(Compose.numberCodec)
+			local value = Compose.withOwner(owner, function()
+				local function source(use: Compose.Use): number
+					return use(target)
+				end
+				if primitive == "spring" then
+					return motion.spring(source, { reducedMotion = reduced })
+				end
+				return motion.tween(source, { reducedMotion = reduced })
+			end)
+			local running = motion.running(value)
+			target:set(10)
+			world.settle()
+			expect(running:peek()):toBe(true)
+			reduced:set(true)
+			world.settle()
+			expect(running:peek()):toBe(false)
+			expect(value:peek()):toBe(10)
+			expect(world.host.counts().frameListeners):toBe(0)
+			target:set(20)
+			world.settle()
+			expect(running:peek()):toBe(false)
+			expect(value:peek()):toBe(20)
+			Compose.owner.dispose(owner)
+		end)
+	end
+
 	for _, primitive in { "spring", "tween" } do
 		it("returns nil after a guarded initial " .. primitive .. " source failure", function()
 			local world = Support.world()
@@ -207,6 +308,62 @@ local function curveValue(curve: unknown, progress: number): number
 end
 
 describe("easing", function()
+	it("evaluates cubic bezier timing by solving its x coordinate", function()
+		local ease = Compose.cubicBezier(0.42, 0, 1, 1)
+		expect(ease(0)):toBe(0)
+		expect(ease(1)):toBe(1)
+		expect(ease(0.5)):toBeCloseTo(0.3153568125725393, 1e-7)
+		local linear = Compose.cubicBezier(0, 0, 1, 1)
+		for step = 0, 100 do
+			local t = step / 100
+			expect(linear(t)):toBeCloseTo(t, 1e-7)
+		end
+	end)
+
+	it("keeps cubic bezier overshoot and solves flat x tangents", function()
+		local overshoot = Compose.cubicBezier(0, 1.5, 1, 1.5)
+		expect(overshoot(0.5) > 1):toBe(true)
+		for _, controls in { { 0, 0 }, { 1, 1 }, { 1, 0 } } do
+			local ease = Compose.cubicBezier(controls[1], 0.2, controls[2], 0.8)
+			for index = 1, 99 do
+				local t = index / 100
+				local remaining = 1 - t
+				local x = 3 * remaining * remaining * t * controls[1] + 3 * remaining * t * t * controls[2] + t * t * t
+				local y = 3 * remaining * remaining * t * 0.2 + 3 * remaining * t * t * 0.8 + t * t * t
+				expect(ease(x)):toBeCloseTo(y, 1e-7)
+			end
+		end
+	end)
+
+	it("rejects cubic bezier control points that cannot describe a timing function", function()
+		expect(function()
+			Compose.cubicBezier(-0.1, 0, 1, 1)
+		end):toThrow "x control points"
+		expect(function()
+			Compose.cubicBezier(0, 0, 1.1, 1)
+		end):toThrow "x control points"
+		expect(function()
+			Compose.cubicBezier(0, math.huge, 1, 1)
+		end):toThrow "finite control points"
+	end)
+
+	it("uses a cubic bezier in a tween without choosing a named curve", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local value, owner = Support.owned(function()
+			return world.runtime.tween(function(use)
+				return use(target)
+			end, { seconds = 1, ease = Compose.cubicBezier(0.42, 0, 1, 1) })
+		end)
+		target:set(1)
+		world.settle()
+		world.host.step(0.5)
+		world.settle()
+		expect(value:peek()):toBeCloseTo(0.3153568125725393, 1e-7)
+		Compose.owner.dispose(owner)
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
+
 	it("pins both ends of every curve", function()
 		local curves = Support.record(Compose.easing)
 		for name, curve in curves do

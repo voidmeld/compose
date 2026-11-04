@@ -31,6 +31,7 @@ local profileModule: typeof(require "@self/reactive/profile")? = nil
 local Active = require "@self/ownership/active"
 local AnimationCodec = require "@self/animation/codec"
 local AnimationEasing = require "@self/animation/easing"
+local cubicBezier = require "@self/animation/cubic-bezier"
 local ContextModule = require "@self/context"
 local Diagnostics = require "@self/diagnostics"
 local Dynamic = require "@self/dynamic"
@@ -662,6 +663,7 @@ return {
 	geometry = geometry,
 
 	easing = AnimationEasing,
+	cubicBezier = cubicBezier,
 	numberCodec = AnimationCodec.number,
 	createSpringState = createSpringState,
 	stepSpring = stepSpring,

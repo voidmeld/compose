@@ -143,6 +143,51 @@ describe("OrderedCollection recycle", function()
 		dispose()
 	end)
 
+	it("reuses surplus rows when fractional scrolling alternates the visible count", function()
+		local items = Compose.cell(rows(500))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
+		local viewport = Compose.cell(initialViewport)
+		local dispose, root, renders = mountRecycled(items, viewport)
+		for offset = 5, 205, 5 do
+			viewport:set { offset = offset, size = 30 }
+			world.settle()
+			expect(#world.host.childrenOf(root)):toBe(if offset % 10 == 0 then 3 else 4)
+			expect(renders()):toBe(4)
+			for _, node in world.host.childrenOf(root) do
+				expect(Compose.custodyOf(node)):toBe "owned"
+				expect(world.host.propertyOf(node, "Key")):toBe(world.host.propertyOf(node, "Id"))
+			end
+		end
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
+	it("bounds spare recycled rows by the retained count and releases them for an empty window", function()
+		local items = Compose.cell(rows(500))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 100 }
+		local viewport = Compose.cell(initialViewport)
+		local dispose, root, renders = mountRecycled(items, viewport)
+		expect(renders()):toBe(10)
+		viewport:set { offset = 0, size = 20 }
+		world.settle()
+		expect(#world.host.childrenOf(root)):toBe(2)
+		expect(world.host.liveNodes()):toBe(6)
+		viewport:set { offset = 0, size = 40 }
+		world.settle()
+		expect(#world.host.childrenOf(root)):toBe(4)
+		expect(renders()):toBe(10)
+		items:set {}
+		world.settle()
+		expect(world.host.childrenOf(root)):toEqual {}
+		expect(world.host.liveNodes()):toBe(2)
+		viewport:set { offset = 0, size = 20 }
+		items:set(rows(500))
+		world.settle()
+		expect(renders()):toBe(12)
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	it("keeps a row for a key that stays in the window", function()
 		local items = Compose.cell(rows(500))
 		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
@@ -165,6 +210,31 @@ describe("OrderedCollection recycle", function()
 		end
 		expect(renders()):toBe(3)
 		dispose()
+	end)
+
+	it("recycles the same bounded rows through repeated forward and backward scroll passes", function()
+		local items = Compose.cell(rows(500))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
+		local viewport = Compose.cell(initialViewport)
+		local dispose, root, renders = mountRecycled(items, viewport)
+		local before = table.clone(world.host.childrenOf(root))
+		world.host.resetCounts()
+		for _, direction in { 1, -1 } do
+			for step = 0, 40 do
+				local offset = if direction == 1 then step * 10 else (40 - step) * 10
+				viewport:set { offset = offset, size = 30 }
+				world.settle()
+				expect(renders()):toBe(3)
+				for _, node in world.host.childrenOf(root) do
+					expect(table.find(before, node) ~= nil):toBe(true)
+					expect(world.host.propertyOf(node, "Key")):toBe(world.host.propertyOf(node, "Id"))
+				end
+			end
+		end
+		expect(world.host.counts().createNode):toBe(0)
+		expect(world.host.counts().destroyNode):toBe(0)
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
 	end)
 
 	it("reuses every row when the order reverses", function()
@@ -204,6 +274,134 @@ end)
 describe("OrderedCollection", function()
 	beforeEach(function()
 		world = Support.world()
+	end)
+
+	it("composes arrival stagger and removal motion from sequences and presence", function()
+		local items = Compose.cell(rows(3))
+		local shown = { r1 = Compose.cell(true), r2 = Compose.cell(true), r3 = Compose.cell(true) }
+		local opacity: { [string]: Compose.Value<number> } = {}
+		local content: { [string]: Compose.Node } = {}
+		local dispose, root = world.runtime.mount(function()
+			return world.create "Frame" {
+				Compose.OrderedCollection {
+					from = items,
+					key = idOf,
+					render = function(_, placement, key)
+						local progress = Compose.cell(0)
+						opacity[key] = progress
+						return world.create "Row" {
+							Compose.presence(shown[key], function()
+								world.runtime.sequence {
+									steps = {
+										{ wait = (placement:peek().index - 1) * 0.1 },
+										{
+											tween = { seconds = 0.2 },
+											sample = function(value)
+												progress:set(value)
+											end,
+										},
+									},
+								}
+								local node = world.create "Content" {
+									Opacity = function(use)
+										return use(progress)
+									end,
+								}
+								content[key] = node
+								return node
+							end, {
+								exit = function()
+									return world.runtime.sequence {
+										steps = {
+											{
+												tween = { seconds = 0.2 },
+												sample = function(value)
+													progress:set(1 - value)
+												end,
+											},
+											{
+												run = function()
+													items:update(function(previous)
+														local nextRows: { Row } = {}
+														for _, row in previous do
+															if row.id ~= key then
+																table.insert(nextRows, row)
+															end
+														end
+														return nextRows
+													end)
+												end,
+											},
+										},
+									}
+								end,
+							}),
+						}
+					end,
+				},
+			}
+		end, world.root)
+		world.host.step(0.1)
+		world.settle()
+		expect(opacity.r1:peek()):toBeCloseTo(0.5, 1e-9)
+		expect(opacity.r2:peek()):toBe(0)
+		expect(opacity.r3:peek()):toBe(0)
+		world.host.step(0.3)
+		world.settle()
+		expect(opacity.r3:peek()):toBe(1)
+		shown.r2:set(false)
+		world.settle()
+		world.host.step(0.1)
+		world.settle()
+		expect(opacity.r2:peek()):toBeCloseTo(0.5, 1e-9)
+		expect(world.host.isAlive(content.r2)):toBe(true)
+		expect(world.host.childrenOf(root)):toHaveLength(3)
+		world.host.step(0.1)
+		world.settle()
+		expect(world.host.isAlive(content.r2)):toBe(false)
+		expect(world.host.childrenOf(root)):toHaveLength(2)
+		expect(world.host.isAlive(content.r1)):toBe(true)
+		expect(world.host.isAlive(content.r3)):toBe(true)
+		shown.r1:set(false)
+		world.settle()
+		dispose()
+		world.host.step(1)
+		world.settle()
+		expect(items:peek()):toHaveLength(2)
+		expect(world.host.counts().frameListeners):toBe(0)
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
+	it("builds each row's child on every mount of a reused collection directive", function()
+		local renders = 0
+		local collection = Compose.OrderedCollection {
+			from = Compose.cell(rows(2)),
+			key = idOf,
+			render = function()
+				renders += 1
+				return world.create "Row" { world.create "UIFlexItem" {} }
+			end,
+		}
+		local function build(): Compose.Node
+			return world.create "Frame" { collection }
+		end
+		local disposeFirst, first = world.runtime.mount(build, world.root)
+		local disposeSecond, second = world.runtime.mount(build, world.root)
+		expect(renders):toBe(4)
+		for _, parent in { first, second } do
+			for _, row in world.host.childrenOf(parent) do
+				expect(world.host.childrenOf(row)):toHaveLength(1)
+			end
+		end
+		disposeFirst()
+		disposeSecond()
+		local disposeThird, third = world.runtime.mount(build, world.root)
+		expect(renders):toBe(6)
+		for _, row in world.host.childrenOf(third) do
+			expect(world.host.childrenOf(row)):toHaveLength(1)
+		end
+		disposeThird()
+		expect(world.host.liveNodes()):toBe(1)
 	end)
 
 	describe("mode", function()

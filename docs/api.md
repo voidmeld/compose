@@ -603,6 +603,13 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
 | `sequence(options)` | Owns a choreography of waits, callbacks, tweens, timelines and parallel groups. |
 
+`running(value)` returns the boolean activity readable for a spring, tween or ramp value. It is false initially, true while frame work is scheduled, and false after completion, reduced-motion snapping or owner disposal. Retargeting an active animation keeps it true. Repeated queries return the same readable and need no active owner. A value that is not animated raises `animation/not-animated`. The typed methods from `motion(codec)` also expose `running(value)`.
+
+```luau
+local opacity = runtime.tween(opacityTarget, { seconds = 0.25 })
+local running = runtime.running(opacity)
+```
+
 A fragment can return a typed array of native nodes or a mixture of nodes and directives. Compose reads the array without changing it. Nil entries omit children.
 
 The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
@@ -1043,9 +1050,12 @@ Population changes do not switch the retention policy.
 Pass `recycle` instead of `render` to reuse mounted rows.
 `recycle` receives the value, the placement and the key as readables.
 When a key leaves the window, Compose can reuse its row for an arriving key. It updates the row's readables instead of destroying and rebuilding the row.
+A recycled collection also keeps at most one retained window's worth of detached spare rows. This avoids remounting when fractional scrolling changes the visible count. An empty window releases every spare. Spare rows retain their subscriptions until reused or released.
 A key that stays in the window keeps its row.
 Use `recycle` only when the row reads its key and value through these readables and keeps no state that belongs to one key.
 Pass exactly one of `render` and `recycle`.
+
+Collections reconcile source membership immediately. For arrival stagger, start a sequence in the row builder using its placement index as the delay. For removal motion, keep the row record in the source while `presence` runs its exit, then remove the record when that motion completes. The [collection motion specification](../tests/structure/ordered-collection.verify.luau) exercises this composition and cancellation during teardown.
 
 `layout` accepts a static options table, a cell or formula that holds that table, or a body that takes `use` and returns it.
 The options are `kind` (`"list"` or `"grid"`), `columns`, `itemSize`, `gap`, `crossSize` and `crossGap`. For example:
@@ -1493,6 +1503,17 @@ The `Back` and `Elastic` variants can return values outside that range to produc
 
 ```luau
 runtime.tween(opacity, { seconds = 0.25, ease = Compose.easing.outQuad })
+```
+
+### `Compose.cubicBezier`
+
+`cubicBezier(x1, y1, x2, y2) -> Easing`
+
+Creates an easing function with endpoints `(0, 0)` and `(1, 1)` and the supplied control points. All control points must be finite; x coordinates must be in `[0, 1]`. The y coordinates may produce overshoot. Progress outside `[0, 1]` returns the corresponding endpoint.
+The function solves the curve's x coordinate for each progress value, then returns its y coordinate. Pass it as `ease` to a tween, ramp or sequence.
+
+```luau
+runtime.tween(opacity, { seconds = 0.25, ease = Compose.cubicBezier(0.42, 0, 1, 1) })
 ```
 
 ### Reduced motion
@@ -2226,11 +2247,13 @@ Supplying `bindings`, including an empty table, enables live conditional childre
 
 `create(library: Design.Library, initial: Design.Document, parent: Compose.Node, options: Options) -> Editor`
 
-Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime` and `environment: Environment`. `devices` selects named profiles from `DesignEditor.devices.all`; `device` names the initial profile. Without `devices`, an explicit `stageSize: Point` creates a custom Canvas profile; otherwise all eight standard profiles are available. `previews`, `token`, `resolveToken`, `tokens`, `slots`, `onExport` and `link` retain the protocols of `Design.render` and `Design.link`. `tokens` lists inspector token paths. `onExport(source: string)` receives generated source. Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`.
+Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime` and `environment: Environment`. `devices` selects named profiles from `DesignEditor.devices.all`; `device` names the initial profile. Without `devices`, an explicit `stageSize: Point` creates a custom Canvas profile; otherwise all eight standard profiles are available. `previews`, `token`, `resolveToken`, `tokens`, `slots`, `onExport` and `link` retain the protocols of `Design.render` and `Design.link`. `tokens` lists inspector token paths. `onExport(source: string)` receives generated source. Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`. Names and choices are nonempty and unique. The initial choice (or first choice) is applied before frames build. A failed selection preserves the displayed choice. Optional `backdrop: () -> unknown` builds an owned view behind the UI artboard, including in a frame context.
 
-`Editor` returns `root`, `session`, `canvas` and an idempotent `dispose()`. `canvas.current()` returns the active `Frame`, with `device`, `root`, `scale` and either `stage` or `scene`. `canvas.select(id)` opens a profile, `showAll(enabled)` switches grid mode, `frames()` lists open frames, and `fit()` fits visible frames. `canvas.zoom` follows the active view; `zoomTo(scale, around?)` controls it. All frames share one session, selection, history and source link. Each frame owns its rendered tree and layout context. Disposing the editor releases every frame and context, watcher, subscription and source link. The supplied runtime, parent and services remain borrowed. Failed construction unwinds resources and raises the original failure.
+`Editor` returns `root`, `session`, `canvas`, `execute(request)` and an idempotent `dispose()`. Commands and structured results are documented in [editor commands](design-editor.md#editor-commands). Optional `identity = { commit, path }` binds results to source. `canvas.current()` returns the active `Frame`, with `device`, `root`, `scale` and either `stage` or `scene`. `canvas.select(id)` opens a profile, `showAll(enabled)` switches UI grid mode, `frames()` lists open frames, and `fit()` fits visible frames. A 3D Design always opens one full-size scene. Optional `scene = { world, camera, eyeHeight? }` borrows a host world and camera for a viewport overlay using normal world rendering and lighting. The scene adds `setCamera(preset)`, `orbit(yawDegrees, pitchDegrees)`, `preset`, `readCamera()` and `reframe()`; presets are `fit`, `eye-height`, `approach-20`, `close-up` and `top-down`. `canvas.zoom` follows the active view; `zoomTo(scale, around?)` controls it. All frames share one session, selection, history and source link. Each frame owns its rendered tree and layout context. Disposing the editor releases every frame and context, watcher, subscription and source link, and restores a borrowed scene camera. The supplied runtime, parent and services remain borrowed. Failed construction unwinds resources and raises the original failure.
 
 A 2D `stage` exposes `surface`, `overlay`, `nodes`, `zoom`, `zoomTo(scale, around?)`, `fit()` and `play(sequence)`. A 3D `scene` exposes `viewport`, `world`, `camera`, `nodes`, `zoom`, `zoomTo(scale, around?)`, `fit()` and `pick(point)`. Node handles are opaque `Compose.Node` values. `nodes` maps document ids to rendered nodes. Points are plain `{ X: number, Y: number }` records. A 2D zoom clamps to `[0.02, 8]`. Fit reserves space for editing controls and resets pan. A 3D fit uses the frame's aspect and field of view. `pick` returns a document id or nil and excludes scene guides and gizmos.
+
+Each frame exposes `actualSize: Compose.Value<boolean>`. `canvas.actualSize(enabled)` sets one UI frame to scale 1 or returns it to fit. Layout preserves this mode per device; Fit and zoom clear it for affected frames. Both stage types expose `pan(offset: Point)` and `play(sequence)`; an unknown sequence raises. A scene's `guides(enabled)` attaches or detaches its owned grid and selection helpers for captures. `Workspace` also accepts `backdrop` and forwards it to each UI frame.
 
 `frame(device, scale) -> FrameContext` supplies a library and optional bindings, token resolvers, slots and disposal for one frame. Missing bindings and resolvers inherit the editor defaults. Construct the library with the game's viewport, inset, input and typography seams driven by `device`. `scale` reports displayed pixels per device pixel; measurements taken from scaled native GUI bounds must divide by it. This preserves layout decisions when zooming. A library's `provide(content)` wraps its 2D render.
 
@@ -2260,7 +2283,7 @@ Returns the 2D kinds `Frame`, `Stack`, `Text`, `Button`, `Image` and `List`. Bui
 
 `roblox3DLibrary(runtime: Compose.Runtime, environment: Environment, sequences: DesignEditor.Sequences?) -> Design.Library`
 
-Returns the 3D kinds `Model`, `Folder`, `Part`, `MeshPart`, `Attachment`, `PointLight`, `SpotLight`, `SurfaceLight`, `Decal`, `Texture`, `ParticleEmitter`, `Fire`, `Smoke`, `Sparkles` and `Sound` with `space = "3d"`. `Part` and `MeshPart` carry `canCollide`, `canQuery`, `canTouch` and `castShadow`; `Model` and `Part` carry `attributes`. Sequence and range properties of `ParticleEmitter` apply only when `sequences` supplies `numberSequence`, `colorSequence` and `numberRange` constructors. Its ownership and runtime requirements match `robloxLibrary`.
+Returns the 3D kinds `Model`, `Folder`, `Part`, `MeshPart`, `Attachment`, `PointLight`, `SpotLight`, `SurfaceLight`, `Decal`, `Texture`, `ParticleEmitter`, `Beam`, `Fire`, `Smoke`, `Sparkles` and `Sound` with `space = "3d"`. `Part` and `MeshPart` carry `canCollide`, `canQuery`, `canTouch` and `castShadow`; `Model` and `Part` carry `attributes`. Attachments retain their children. Beam `attachment0` and `attachment1` are node references connected on the next host frame; its width, curve, texture, light and sequence fields use the native Beam properties. Sequence and range properties of `ParticleEmitter` and `Beam` apply only when `sequences` supplies `numberSequence`, `colorSequence` and `numberRange` constructors. Its ownership and runtime requirements match `robloxLibrary`.
 
 ### `DesignEditor.roblox3DSchema`
 

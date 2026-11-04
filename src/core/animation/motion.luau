@@ -13,6 +13,7 @@ local Spring = require "./spring"
 local Types = require "../reactive/types"
 local cellModule = require "../reactive/cell"
 local watchModule = require "../reactive/watch"
+local Weak = require "../weak"
 
 export type ReducedMotion = CoreTypes.ReducedMotion
 
@@ -28,6 +29,19 @@ local DEFAULT_PERIOD = 0.5
 local DEFAULT_DAMPING = 1
 local DEFAULT_TOLERANCE = 1e-4
 local DEFAULT_SECONDS = 0.25
+
+local activity: { [unknown]: Types.ReadOnlyValue<boolean> } = {}
+Weak.keys(activity)
+
+local function running<V>(value: Types.ReadOnlyValue<V>): Types.ReadOnlyValue<boolean>
+	local signal = activity[value]
+	if signal == nil then
+		return Diagnostics.raise("animation/not-animated", "running needs an animated value", {
+			expected = "a spring, tween or ramp value",
+		})
+	end
+	return signal
+end
 
 local function framesOf(host: Host.Host, primitive: string): Host.Frames
 	local frames = host.frames
@@ -80,6 +94,7 @@ type State<T> = Spring.State & {
 	target: { number },
 	reference: { number },
 	output: Types.Value<T>,
+	running: Types.Value<boolean>,
 	settings: Settings,
 }
 
@@ -164,6 +179,7 @@ local function createMotion<T>(
 			unsubscribe = nil
 			release()
 		end
+		state.running:set(false)
 	end
 
 	local function sweep(delta: number)
@@ -204,6 +220,7 @@ local function createMotion<T>(
 	): Types.ReadOnlyValue<T>
 		local frames = framesOf(host, primitive)
 		local owner = ownerOf(primitive)
+		local running = cellModule.cell(false)
 		settings[4] = 0
 		local state: State<T>? = nil
 		local typeName = ""
@@ -227,9 +244,11 @@ local function createMotion<T>(
 					velocity = if settings.ease then reference else table.create(codec.arity, 0),
 					arity = codec.arity,
 					output = cellModule.cell(wanted),
+					running = running,
 					settings = settings,
 				}
 				state = created
+				activity[created.output] = running
 				Owner.holdSubject(owner, stop, settings)
 				return
 			end
@@ -293,6 +312,7 @@ local function createMotion<T>(
 				if unsubscribe == nil then
 					unsubscribe = frames.onFrame(onFrame)
 				end
+				running:set(true)
 			end
 		end)
 		local output: Types.ReadOnlyValue<T>
@@ -365,7 +385,7 @@ local function createMotion<T>(
 		)
 	end
 
-	return { spring = spring, tween = tween, ramp = Ramp.createRamps(tween, ownerOf) }
+	return { spring = spring, tween = tween, running = running, ramp = Ramp.createRamps(tween, ownerOf) }
 end
 
 return {

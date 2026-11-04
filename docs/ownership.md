@@ -19,6 +19,8 @@ Use `runtime.borrow(node)` to return custody to the external owner.
 An unknown node is already borrowed. An explicit `borrow` call can make this decision clear.
 `adopt` rejects a node that Compose already owns. Each node has one owner.
 
+Placing an existing node in a constructor's children does not transfer ownership. The constructor releases that attachment before its owner destroys the parent. A borrowed child survives; an owned child remains the responsibility of its original owner. Releasing an old attachment preserves a newer parent.
+
 ### A mount target keeps the custody it has
 
 `runtime.mount` and `runtime.mountFragment` preserve target custody.
