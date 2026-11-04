@@ -10,6 +10,44 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("remembers readable chrome sizing across edits and reopening without changing the canvas", function()
+		local w = Support.world()
+		local editor = w.mount()
+		w.settle()
+		local surface = w.point(assert(editor.stage).surface, "AbsoluteSize")
+		local designText = w.number(assert(editor.stage).nodes[w.first], "TextSize")
+		local function chrome()
+			return {
+				w.find(w.find(editor.root, "DesignLibrary"), "Search"),
+				w.find(w.find(w.find(editor.root, "DesignLayers"), "n1"), "Title"),
+				w.find(w.find(editor.root, "InspectorPanel"), "Caption"),
+			}
+		end
+		for _, control in chrome() do
+			expect(w.number(control, "TextSize") >= 14):toBe(true)
+		end
+		w.fire(w.find(editor.root, "TextSize"), "Activated")
+		expect(w.screen:GetAttribute "ComposeDesignTextSize"):toBe(17)
+		expect(w.find(w.find(editor.root, "DesignLibrary"), "Search").TextSize):toBe(17)
+		editor.session.insert "Text"
+		w.settle()
+		expect(w.number(w.find(w.find(w.find(editor.root, "DesignLayers"), "n1"), "Title"), "TextSize")):toBe(17)
+		editor.dispose()
+		editor = w.mount()
+		w.settle()
+		expect(w.find(editor.root, "TextSize").Text):toBe "Text 17"
+		expect(w.find(w.find(editor.root, "DesignLibrary"), "Search").TextSize):toBe(17)
+		expect(w.point(assert(editor.stage).surface, "AbsoluteSize")):toEqual(surface)
+		expect(w.number(assert(editor.stage).nodes[w.first], "TextSize")):toBe(designText)
+		for _, chosen in { 19, 15 } do
+			w.fire(w.find(editor.root, "TextSize"), "Activated")
+			expect(w.screen:GetAttribute "ComposeDesignTextSize"):toBe(chosen)
+		end
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it("reads native vector components without treating the value as an Instance", function()
 		local w = Support.world()
 		local ui = EditorUI.create(w.runtime, w.environment)

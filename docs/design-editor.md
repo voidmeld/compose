@@ -30,6 +30,7 @@ runtime:dispose()
 ```
 Use a GUI container with a known size as the parent.
 Use `roblox3DLibrary` for a scene stage.
+Chrome uses 15 px body text, 14 px captions and 17 px titles. The **Text** control cycles body text through 15, 17 and 19 px without resizing the Design canvas or its content. The parent container's `ComposeDesignTextSize` attribute remembers the choice when a Design reopens. The Studio plugin persists that attribute with plugin settings across Studio sessions. Other hosts can restore the attribute before mounting and observe it to persist the preference.
 The session controls selection and edit history.
 Layer dragging calls `session.move`. Inspector controls call session edits.
 Resize and numeric drag controls show preview values during movement.
