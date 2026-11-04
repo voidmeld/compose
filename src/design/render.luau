@@ -278,6 +278,13 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			}
 		end
 		if current ~= nil then
+			if definition and definition.type == "value" and type(current) == "table" then
+				local template = current["$template"]
+				if type(template) == "string" then
+					local child = Document.find(owner, template)
+					return { value = build(assert(child), item) }
+				end
+			end
 			if definition ~= nil and definition.type == "datatype" and type(current) == "table" then
 				local components: { [number]: Resolved } = {}
 				local reactive = false

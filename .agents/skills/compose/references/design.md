@@ -87,6 +87,9 @@ not overwrite the module. Keep every edit inside the shapes below.
   is `{ ["$input"] = "title" }`; it names one input and contains no other keys.
 - A content property that holds a subtree: `glyph = function() return <node> end`.
   The node is a child of the control in the editor.
+- A value property that takes one node: `trailing = UI.Kind "Name" { ... }`.
+  `Design.document.content` on a value field stores the child with a top-level
+  `$template` marker. It builds the node directly before the receiving control.
 - A moving value: `<follow>(state.id, "role")`, where `<follow>` is the
   library's motion call (Facet: `UI.follow`) and `role` is one of its motion
   roles. The wrapped value is an input, a state value or an item field. The

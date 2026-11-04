@@ -31,6 +31,7 @@ local library: Design.Library = {
 		"\tBook: (string) -> ({ pages: { PageRecord } }) -> Target,",
 		"\ttag: (Target, Core.Input<string | Tags>) -> Target,",
 		"\tFlash: (string) -> ({ target: Core.Source<Target> }) -> Target,",
+		"\tTrailing: (string) -> ({ item: Target }) -> Target,",
 		"\tPanel: (string) -> ({ content: () -> Target }) -> Target,",
 		"\tPages: (",
 		"\t\tstring",
@@ -56,6 +57,12 @@ local library: Design.Library = {
 			build = build,
 		},
 		Flash = { fields = { target = { type = "node" } }, children = "none", call = "UI.Flash", build = build },
+		Trailing = {
+			fields = { item = { type = "value", luauType = "Target" } },
+			children = "none",
+			call = "UI.Trailing",
+			build = build,
+		},
 		Button = { fields = { label = { type = "string" } }, children = "none", call = "UI.Button", build = build },
 		Notice = { fields = { text = { type = "string" } }, children = "none", call = "UI.Notice", build = build },
 		Book = {
@@ -121,6 +128,22 @@ local function canonical(code: string)
 end
 
 describe("Design emitted source", function()
+	it("strictly types one authored node passed directly to a value field", function()
+		local value, child = Design.document.content(
+			Design.document.new("Navigation", library, "Trailing"),
+			library,
+			"n1",
+			"item",
+			"Button"
+		)
+		value = Design.document.change(value, library, child, "label", { literal = "Next" })
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'item = UI.Button "Button"', 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		canonical(code)
+		analyze(code)
+	end)
+
 	it("strictly types native constructors with prepared static and reactive input components", function()
 		local value = Design.document.setContract(Design.document.new("Components", library, "Box"), library, {
 			inputs = {
@@ -300,7 +323,7 @@ describe("Design emitted source", function()
 			for _, rowFunctions in { false, true } do
 				local options: Design.EmitOptions = { rowFunctions = rowFunctions }
 				local code = Design.emit(value, library, options)
-				expect(Design.parse(code, library).root.children[1].nameField):toBe("id")
+				expect(Design.parse(code, library).root.children[1].nameField):toBe "id"
 				expect(Design.emit(Design.parse(code, library), library, options)):toBe(code)
 				canonical(code)
 				analyze(code)

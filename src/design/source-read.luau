@@ -950,9 +950,21 @@ function source.parse(code: string, library: Library): Types.Document
 			if tokens[at] and tokens[at].kind == "name" and peek(1) == "=" then
 				local prop = name()
 				take "="
-				local property, template = value()
 				local contentField = kind.fields[prop]
-				if template and contentField and contentField.type == "content" and prop ~= kind.slot then
+				local start = at
+				local lead = if tokens[at] and tokens[at].kind == "name" then dotted() else ""
+				at = start
+				local direct = contentField
+					and contentField.type == "value"
+					and (calls[lead] ~= nil or lead == "capture" or (library.tags and lead == library.tags.call))
+				local property: Value? = nil
+				local template: Node? = nil
+				if direct then
+					template = node()
+				else
+					property, template = value()
+				end
+				if template and contentField and (direct or contentField.type == "content") and prop ~= kind.slot then
 					local marker: Record = { ["$template"] = template.id }
 					result.props[prop] = { literal = marker }
 					table.insert(pendingCells, template)

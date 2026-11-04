@@ -990,7 +990,7 @@ function document.content(
 	local node = assert(document.find(nextValue.root, id), "Choose a node")
 	local kind = assert(library.kinds[node.kind])
 	local field = assert(kind.fields[key], `{node.kind} has no property {key}`)
-	assert(field.type == "content", `{key} does not hold content`)
+	assert(field.type == "content" or (field.type == "value" and not field.perRow), `{key} does not hold content`)
 	local child = assert(library.kinds[kindName], `Unknown {library.name} kind {kindName}`)
 	local childId = `n{nextValue.nextId}`
 	nextValue.nextId += 1

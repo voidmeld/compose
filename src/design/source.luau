@@ -909,7 +909,15 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			local luauType: string? = if field then field.luauType else nil
 			local bound = node.bind
 			local itemName = property.item
-			if current ~= nil and field ~= nil and field.perRow and bound ~= nil then
+			if
+				type(current) == "table"
+				and field
+				and field.type == "value"
+				and type(current["$template"]) == "string"
+			then
+				local child = Document.find(node, current["$template"])
+				written = emit(assert(child), depth + 1)
+			elseif current ~= nil and field ~= nil and field.perRow and bound ~= nil then
 				local typed = itemType(node, bound.from)
 				local parameter = if typed
 					then `current: {library.rowReadable or library.readable}<{typed}>`

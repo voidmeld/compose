@@ -1074,6 +1074,42 @@ describe("Compose Design documents", function()
 		library.kinds = kinds
 	end)
 
+	it("builds a value field's authored node once before its receiver and remaps copied children", function()
+		local extended = Design.extend(library, {
+			kinds = {
+				Trailing = {
+					fields = { item = { type = "value" } },
+					children = "none",
+					call = "UI.Trailing",
+					build = builder "Trailing",
+				},
+			},
+		})
+		local value, receiver =
+			Design.document.insert(Design.document.new("Navigation", extended, "Stack"), extended, "n1", "Trailing")
+		local child
+		value, child = Design.document.content(value, extended, receiver, "item", "Label")
+		table.clear(built)
+		local root = builtNode(Design.render(value, extended))
+		expect(#built):toBe(3)
+		expect(built[1].kind):toBe "Label"
+		expect(#root.children[1].children):toBe(0)
+		expect(root.children[1].props.item.value):toBe(built[1])
+		local code = Design.emit(value, extended)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+		local session = Design.session(extended, value)
+		session.select(receiver)
+		session.copy()
+		session.select "n1"
+		session.paste()
+		local pasted = session.document:peek().root.children[2]
+		expect(pasted.props.item.literal):toEqual { ["$template"] = pasted.children[1].id }
+		expect(pasted.children[1].id == child):toBe(false)
+		value = Design.document.change(value, extended, receiver, "item", nil)
+		local remaining = Design.document.find(value.root, receiver)
+		expect(#assert(remaining).children):toBe(0)
+	end)
+
 	it("holds a content field's subtree as a child and writes it as a builder", function()
 		local kinds = library.kinds
 		local iconField: Design.Field = { type = "content" }
