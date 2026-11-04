@@ -38,6 +38,7 @@ Use explicit keys when that distinction matters:
 [Compose.property("Changed")] = binding         -- always a property
 ```
 An invalid event name raises `host/not-an-event` with the class name and key.
+Placing a destroyed node raises `host/node-destroyed` with the node and parent names. A node made once and placed in two branches is destroyed with the first branch, so build each branch's node inside that branch.
 
 ## Sibling order
 
