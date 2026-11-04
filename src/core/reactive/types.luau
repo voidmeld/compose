@@ -132,7 +132,7 @@ export type NodeData<T> = {
 	value: unknown,
 	cache: { read value: T }?,
 	first: Node?,
-	refresh: ((Node, thread?) -> ())?,
+	refresh: ((Node) -> ())?,
 	body: Body<unknown>?,
 	initial: (() -> unknown)?,
 	equals: unknown,

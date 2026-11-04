@@ -7,6 +7,47 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("direct property bindings", function()
+	it("continues formula bindings after a refresh fails and recovers on the next write", function(own)
+		local world = Support.world()
+		local source = Compose.cell(0)
+		local first = Compose.formula(function(use)
+			local value = use(source)
+			if value == 1 then
+				error("bound formula failed", 0)
+			end
+			return value * 2
+		end)
+		local second = Compose.formula(function(use)
+			return use(source) + 10
+		end)
+		own(function()
+			first:dispose()
+			second:dispose()
+		end)
+		own((world.runtime.mount(function()
+			return world.create "Frame" {
+				world.create "Label" { Value = first },
+				world.create "Label" { Value = second },
+			}
+		end, world.root)))
+		local frame = world.host.childrenOf(world.root)[1]
+		local labels = world.host.childrenOf(frame)
+		expect(function()
+			world.batch(function()
+				source:set(1)
+			end)
+		end):toThrow "bound formula failed"
+		expect(world.host.propertyOf(labels[1], "Value")):toBe(0)
+		expect(world.host.propertyOf(labels[2], "Value")):toBe(11)
+		expect(world.pending()):toBe(0)
+		world.batch(function()
+			source:set(2)
+		end)
+		expect(world.host.propertyOf(labels[1], "Value")):toBe(4)
+		expect(world.host.propertyOf(labels[2], "Value")):toBe(12)
+		expect(world.pending()):toBe(0)
+	end)
+
 	it("reports both an immediate listener failure and a queued listener failure", function(own)
 		local owner = Compose.createOwner(Compose.reactor.create())
 		own(function()
