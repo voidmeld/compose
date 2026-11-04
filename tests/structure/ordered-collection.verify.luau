@@ -231,6 +231,38 @@ describe("OrderedCollection", function()
 		world = Support.world()
 	end)
 
+	it("builds each row's child on every mount of a reused collection directive", function()
+		local renders = 0
+		local collection = Compose.OrderedCollection {
+			from = Compose.cell(rows(2)),
+			key = idOf,
+			render = function()
+				renders += 1
+				return world.create "Row" { world.create "UIFlexItem" {} }
+			end,
+		}
+		local function build(): Compose.Node
+			return world.create "Frame" { collection }
+		end
+		local disposeFirst, first = world.runtime.mount(build, world.root)
+		local disposeSecond, second = world.runtime.mount(build, world.root)
+		expect(renders):toBe(4)
+		for _, parent in { first, second } do
+			for _, row in world.host.childrenOf(parent) do
+				expect(world.host.childrenOf(row)):toHaveLength(1)
+			end
+		end
+		disposeFirst()
+		disposeSecond()
+		local disposeThird, third = world.runtime.mount(build, world.root)
+		expect(renders):toBe(6)
+		for _, row in world.host.childrenOf(third) do
+			expect(world.host.childrenOf(row)):toHaveLength(1)
+		end
+		disposeThird()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	describe("mode", function()
 		it("mounts every item in all mode", function()
 			local dispose, root = mount { count = 6, mode = "all" }
