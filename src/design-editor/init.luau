@@ -23,6 +23,7 @@ export type Result = Editor.Result
 export type Device = Editor.Device
 export type Frame = Canvas.Frame
 export type FrameContext = Canvas.Context
+export type SlotSample = Canvas.SlotSample
 export type PromptRequest = Prompt.Request
 export type PromptOptions = Prompt.Options
 export type PromptResult = Prompt.Result
@@ -54,6 +55,8 @@ export type Workspace = {
 	resolveToken: ((name: string) -> Design.Resolved)?,
 	tokens: { string }?,
 	slots: { [string]: () -> unknown }?,
+	slotSamples: { [string]: Canvas.SlotSample }?,
+	capture: ((name: string, frame: Canvas.Frame) -> { string })?,
 	dispose: (() -> ())?,
 }
 export type Kit = DesignTypes.Kit
@@ -65,6 +68,14 @@ local function create(
 	options: Options
 ): Editor.Editor
 	local ui = UI.create(options.runtime, options.environment)
+	local dispose: () -> () = function() end
+	local configured = table.clone(options)
+	configured.onClose = function()
+		dispose()
+		if options.onClose then
+			options.onClose()
+		end
+	end
 	local ok, result = pcall(function(): Editor.Editor
 		return Compose.withOwner(ui.owner, function(): Editor.Editor
 			return Editor(
@@ -85,7 +96,7 @@ local function create(
 						stageSize = nestedOptions.stageSize,
 					})
 				end
-			)(library, initial, parent, options)
+			)(library, initial, parent, configured)
 		end)
 	end)
 	if not ok then
@@ -96,25 +107,26 @@ local function create(
 		error(result, 0)
 	end
 	local disposed = false
+	dispose = function()
+		if disposed then
+			return
+		end
+		disposed = true
+		local released, failure: unknown = pcall(result.dispose)
+		local cleaned, cleanupFailure: unknown = pcall(ui.dispose)
+		if not released then
+			error(if cleaned then failure else `{tostring(failure)}\n{tostring(cleanupFailure)}`, 0)
+		elseif not cleaned then
+			error(cleanupFailure, 0)
+		end
+	end
 	return {
 		root = result.root,
 		session = result.session,
 		canvas = result.canvas,
 		execute = result.execute,
 		nested = result.nested,
-		dispose = function()
-			if disposed then
-				return
-			end
-			disposed = true
-			local released, failure: unknown = pcall(result.dispose)
-			local cleaned, cleanupFailure: unknown = pcall(ui.dispose)
-			if not released then
-				error(if cleaned then failure else `{tostring(failure)}\n{tostring(cleanupFailure)}`, 0)
-			elseif not cleaned then
-				error(cleanupFailure, 0)
-			end
-		end,
+		dispose = dispose,
 	}
 end
 
@@ -133,6 +145,15 @@ local function kit(name: string, open: () -> Workspace): Kit
 				end
 			end
 			local devices = workspace.devices or Devices.all
+			local released = false
+			local function release()
+				if not released then
+					released = true
+					if workspace.dispose then
+						workspace.dispose()
+					end
+				end
+			end
 			local options: Options = {
 				runtime = workspace.runtime,
 				environment = workspace.environment,
@@ -150,23 +171,21 @@ local function kit(name: string, open: () -> Workspace): Kit
 				resolveToken = workspace.resolveToken,
 				tokens = workspace.tokens,
 				slots = workspace.slots,
+				slotSamples = workspace.slotSamples,
+				capture = workspace.capture,
+				onClose = release,
 				link = link,
 			}
 			local ok, result = pcall(create, library, initial, parent, options)
-			local release = workspace.dispose
 			if not ok then
-				if release ~= nil then
-					release()
-				end
+				release()
 				error(result, 0)
 			end
 			local editor = result
 			return {
 				dispose = function()
 					editor.dispose()
-					if release ~= nil then
-						release()
-					end
+					release()
 				end,
 			}
 		end,

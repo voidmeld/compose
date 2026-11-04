@@ -59,11 +59,15 @@ export type Command =
 	| { action: "DiscardDrafts" }
 	| { action: "OpenDesign" }
 	| { action: "CloseDesign" }
+	| { action: "Capture", name: string }
+	| { action: "Close" }
 
 export type Result = {
 	ok: boolean,
 	action: string,
 	design: string,
+	target: string,
+	closed: boolean,
 	commit: string?,
 	path: string?,
 	files: { string },
@@ -110,6 +114,9 @@ export type Options = {
 	resolveToken: ((name: string) -> Design.Resolved)?,
 	tokens: { string }?,
 	slots: { [string]: () -> unknown }?,
+	slotSamples: { [string]: Canvas.SlotSample }?,
+	capture: ((name: string, frame: Canvas.Frame) -> { string })?,
+	onClose: (() -> ())?,
 	onExport: ((source: string) -> ())?,
 	link: Design.LinkStore?,
 	prompt: Prompt.Options?,
@@ -156,9 +163,30 @@ return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node,
 	end
 
 	return function(library: Design.Library, initial: Design.Document, parent: Compose.Node, options: Options): Editor
+		for name in options.slotSamples or {} do
+			local input = Design.document.input(initial, name)
+			assert(input and input.type == "slot", "Unknown slot sample: " .. name .. "; declare a slot input")
+		end
 		local previewNames: { [string]: boolean } = {}
+		local controls: { [string]: boolean } = {
+			OpenDesign = true,
+			Device = true,
+			AllDevices = true,
+			ActualSize = true,
+			Camera = true,
+			Undo = true,
+			Redo = true,
+			Duplicate = true,
+			Delete = true,
+			TextSize = true,
+			Theme = options.theme ~= nil,
+			Export = options.onExport ~= nil,
+			Capture = options.capture ~= nil,
+			Close = true,
+		}
 		for _, preview in options.previews or {} do
 			assert(preview.name ~= "" and not previewNames[preview.name], "Preview names must be nonempty and unique")
+			assert(not controls[preview.name], "Preview name conflicts with an editor control: " .. preview.name)
 			previewNames[preview.name] = true
 			assert(#preview.choices > 0, "Preview requires choices")
 			local choices: { [string]: boolean } = {}
@@ -277,6 +305,7 @@ return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node,
 			token = options.token,
 			resolveToken = options.resolveToken,
 			slots = options.slots,
+			slotSamples = options.slotSamples,
 		}
 		local view = Canvas(ui, session, center, canvasOptions)
 		local previewCommands: { [string]: (string) -> () } = {}
@@ -367,14 +396,34 @@ return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node,
 			nested = result
 			ui.set(context, "Enabled", false)
 		end
+		local closed: Result? = nil
 		local function execute(request: Command): Result
+			if closed then
+				local result = table.clone(closed)
+				result.action = request.action
+				result.ok = request.action == "Read" or request.action == "Close"
+				result.problem = if result.ok then nil else "Editor is closed; open the Design again"
+				result.next = if result.ok then nil else "Open the Design again"
+				return result
+			end
 			local source: string? = nil
+			local files: { string } = {}
 			if request.action ~= "Read" then
 				session.problem:set(nil)
 			end
 			local ok, failure = pcall(function()
 				local run = ordinary[request.action]
-				if run then
+				if request.action == "Close" then
+					assert(options.onClose, "Close requires a host close handler")
+				elseif request.action == "Capture" then
+					assert(string.match(request.name, "%S"), "Capture requires a nonempty name")
+					files = table.clone(
+						assert(options.capture, "Capture requires a host capture callback")(
+							request.name,
+							view.current()
+						)
+					)
+				elseif run then
 					run()
 				elseif request.action == "Camera" then
 					assert(view.current().scene, "Open a 3D Design before Camera").setCamera(request.preset)
@@ -458,13 +507,15 @@ return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node,
 			end
 			local scene = view.current().scene
 			local identity = options.identity
-			return {
+			local result: Result = {
 				ok = ok,
 				action = request.action,
 				design = session.document:peek().name,
+				target = if identity then identity.path else session.document:peek().name,
+				closed = false,
 				commit = if identity then identity.commit else nil,
 				path = if identity then identity.path else nil,
-				files = {},
+				files = files,
 				selection = table.clone(session.selection:peek()),
 				device = view.device:peek().id,
 				previews = table.clone(previewValues),
@@ -480,6 +531,17 @@ return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node,
 				problem = problem,
 				next = if ok then nil else 'execute({ action = "Read" })',
 			}
+			if ok and request.action == "Close" then
+				result.closed = true
+				closed = result
+				local released, closeFailure = pcall(assert(options.onClose))
+				if not released then
+					result.ok = false
+					result.problem = tostring(closeFailure)
+					result.next = "Check the host close handler"
+				end
+			end
+			return result
 		end
 		local layers = Layers(ui)(session, left)
 		local prompt = if options.prompt
@@ -638,6 +700,14 @@ return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node,
 		end
 		local undo = action("Undo", "Undo", 1, rightTools, false, session.undo)
 		local redo = action("Redo", "Redo", 2, rightTools, false, session.redo)
+		if options.capture then
+			local _ = action("Capture", "Capture", 10, rightTools, false, function()
+				execute { action = "Capture", name = session.document:peek().name }
+			end)
+		end
+		local _ = action("Close", "Close", 11, rightTools, false, function()
+			execute { action = "Close" }
+		end)
 		ui.set(divider(3), "Parent", rightTools)
 		local _ = action("Duplicate", "Duplicate", 4, rightTools, false, session.duplicate)
 		local _ = action("Delete", "Delete", 5, rightTools, false, session.remove)

@@ -10,6 +10,177 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it(
+		"populates parent slot samples with live child Designs on every device and shares capture and close controls",
+		function()
+			local w = Support.world(nil, true)
+			local child = Design.document.setContract(Design.document.new("Child", w.library, "Stack"), w.library, {
+				inputs = {
+					{ id = "name", kind = "value", type = "string", required = true },
+					{ id = "text", kind = "readable", type = "string", preview = "ordinary" },
+				},
+				outputs = {},
+			})
+			child.root.nameInput = "name"
+			child = Design.document.insert(child, w.library, "n1", "Text")
+			child = Design.document.rename(child, w.library, "n2", "SampleText")
+			child = Design.document.change(child, w.library, "n2", "text", { input = "text" })
+			child = Design.document.change(child, w.library, "n2", "textSize", { literal = 100 })
+			local canonical = Compose.cell(Design.emit(child, w.library))
+			local library = Design.imports(w.library, {
+				Child = {
+					source = canonical,
+					call = "Child",
+					save = function(expected: string, generated: string): boolean
+						if canonical:peek() ~= expected then
+							return false
+						end
+						canonical:set(generated)
+						return true
+					end,
+				},
+			})
+			local parent = Design.document.setContract(Design.document.new("Parent", library, "Stack"), library, {
+				inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+				outputs = {},
+			})
+			parent = Design.document.insertSlot(parent, library, "n1", "body")
+			local instance = Design.document.setContract(Design.document.new("Instance", library, "Child"), library, {
+				inputs = { { id = "text", kind = "readable", type = "string", preview = "ordinary" } },
+				outputs = {},
+			})
+			instance = Design.document.change(instance, library, "n1", "text", { input = "text" })
+			local state = Compose.cell<<Design.Literal?>> "ordinary"
+			local backdrop = Compose.cell(false)
+			local captures: { string } = {}
+			local closed = 0
+			local editor = DesignEditor.create(library, parent, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				identity = { commit = "revision", path = "Parent.luau" },
+				devices = DesignEditor.devices.all,
+				slotSamples = {
+					body = function(frameLibrary: Design.Library, device: DesignEditor.Device): unknown
+						local value = Design.document.rename(instance, frameLibrary, "n1", device.id)
+						return Design.render(value, frameLibrary, { bindings = { text = { readable = state } } })
+					end,
+				},
+				backdrop = function(): unknown
+					return w.runtime.constructors.Frame {
+						Name = "SampleBackdrop",
+						Visible = backdrop,
+					}
+				end,
+				previews = {
+					{
+						name = "State",
+						choices = { "ordinary", "empty", "busy", "error" },
+						select = function(choice: string)
+							state:set(choice)
+						end,
+					},
+					{
+						name = "Backdrop",
+						choices = { "none", "scene" },
+						select = function(choice: string)
+							backdrop:set(choice == "scene")
+						end,
+					},
+				},
+				capture = function(name: string, frame: DesignEditor.Frame): { string }
+					table.insert(captures, name .. "/" .. frame.device.id)
+					return { name .. ".png" }
+				end,
+				onClose = function()
+					closed += 1
+				end,
+			})
+			editor.execute { action = "Select", ids = {} }
+			expect(editor.execute({ action = "AllDevices", enabled = true }).ok):toBe(true)
+			for _, choice in { "ordinary", "empty", "busy", "error" } do
+				local result = editor.execute { action = "Preview", name = "State", choice = choice }
+				w.settle()
+				expect(result.previews.State):toBe(choice)
+				expect(w.find(editor.root, "State").Text):toBe(choice)
+				expect(#editor.canvas.frames()):toBe(#DesignEditor.devices.all)
+				local seen: { [unknown]: boolean } = {}
+				for _, frame in editor.canvas.frames() do
+					local text = w.find(frame.root, "SampleText")
+					expect(text.Text):toBe(choice)
+					expect(seen[text]):toBe(nil)
+					seen[text] = true
+				end
+			end
+			editor.execute { action = "Preview", name = "Backdrop", choice = "scene" }
+			w.settle()
+			expect(w.find(editor.root, "Backdrop").Text):toBe "scene"
+			for _, frame in editor.canvas.frames() do
+				expect(w.find(frame.root, "SampleBackdrop").Visible):toBe(true)
+			end
+			local device = DesignEditor.devices.all[2]
+			editor.execute { action = "Device", id = device.id }
+			w.settle()
+			expect(w.find(editor.root, "Device").Text):toBe(device.name)
+			local result = editor.execute { action = "Capture", name = "busy" }
+			expect({ result.ok, result.target, result.commit, result.files[1] }):toEqual {
+				true,
+				"Parent.luau",
+				"revision",
+				"busy.png",
+			}
+			w.fire(w.find(editor.root, "Capture"), "Activated")
+			expect(captures):toEqual { "busy/" .. device.id, "Parent/" .. device.id }
+			w.fire(w.find(editor.root, "Close"), "Activated")
+			expect(editor.execute({ action = "Read" }).closed):toBe(true)
+			expect(editor.execute({ action = "Close" }).ok):toBe(true)
+			expect(editor.execute({ action = "Undo" }).ok):toBe(false)
+			expect(closed):toBe(1)
+			editor.dispose()
+			w.settle()
+			expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+			expect(w.env.liveObjects()):toBe(w.objectsBefore)
+			w.close()
+		end
+	)
+
+	it("rejects unknown slot samples and unwinds a child sample that fails during construction", function()
+		local w = Support.world()
+		local function mount(name: string): DesignEditor.Editor
+			local value = Design.document.setContract(w.document, w.library, {
+				inputs = { { id = "body", kind = "value", type = "slot" } },
+				outputs = {},
+			})
+			value = Design.document.insertSlot(value, w.library, "n1", "body")
+			return DesignEditor.create(w.library, value, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				slotSamples = {
+					[name] = function(): unknown
+						w.runtime.constructors.Frame { Name = "FailedSample" }
+						error("sample failed", 0)
+					end,
+				},
+			})
+		end
+		expect(function()
+			mount "missing"
+		end):toThrow "Unknown slot sample: missing"
+		expect(function()
+			mount "body"
+		end):toThrow "sample failed"
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		local editor = w.mount()
+		expect(function()
+			w.mount { previews = { { name = "Device", choices = { "test" }, select = function() end } } }
+		end):toThrow "Preview name conflicts with an editor control: Device"
+		local result = editor.execute { action = "Capture", name = "sample" }
+		expect(result.ok):toBe(false)
+		expect(string.find(assert(result.problem), "host capture callback", 1, true) ~= nil):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("projects imported layer collectors with the active frame library", function()
 		local w = Support.world(nil, true)
 		local base = Design.extend(w.library, {
@@ -203,6 +374,14 @@ describe("host-neutral design editor", function()
 			)
 			w.settle()
 			expect(w.find(scene.nodes[ids[1]], "Geometry").Size):toBe(w.values.Vector3.new(8, 4, 6))
+			local changedSource = sources:peek().Wall
+			expect(nested.execute({ action = "Undo" }).ok):toBe(true)
+			w.settle()
+			expect(sources:peek().Wall):toBe(texts.Wall)
+			expect(nested.execute({ action = "Redo" }).ok):toBe(true)
+			w.settle()
+			expect(sources:peek().Wall):toBe(changedSource)
+			expect(Design.emit(Design.parse(changedSource, w.library), w.library)):toBe(changedSource)
 			expect(editor.session.selection:peek()):toEqual { ids[1] }
 			expect(nested.session.selection:peek()):toEqual { "n2" }
 			local external = Design.parse(sources:peek().Wall, w.library)

@@ -221,6 +221,8 @@ Screen roots project their authored ScreenInsets into the frame. Billboard roots
 | Play | `sequence`: sequence ID |
 | Prompt | `text`, optional `count`: 1, 2 or 3, optional `theme`: boolean |
 | ChooseDraft | `index`: one-based draft index |
+| Capture | `name`: nonempty capture name; requires `capture(name, frame) -> { string }` |
+| Close | none; disposes once, then calls optional `onClose()` |
 
 The commands use the same session, camera and preview callbacks as the visible controls.
 Supply `identity = { commit = commit, path = sourcePath }` to bind results to a source revision.
@@ -230,8 +232,14 @@ available `devices`, `allDevices`, `actualSize`, `zoom`, chrome `textSize`, curr
 `busy`, `drafts` and `status` on subsequent Read calls. A rejected session edit returns `ok = false`, as
 does a raised callback; failures include `problem` and the next Read command. Read can return an existing
 session problem while succeeding. Theme writes validate the same token ranges as the inspector.
-The library writes no files itself (`files` is empty); the host reports its actual
-source writes and named native captures. The host also owns open, capture and close commands.
+`target` is the identity path or Design name. Capture returns the host's actual paths in `files`;
+other commands leave `files` empty. The host owns native capture and source persistence.
+Close releases the editor; subsequent Read reports `closed = true` and edits fail with a reopening instruction.
+
+For child Designs in slots, pass `slotSamples = { body = function(library, device) return Design.render(child, library, context) end }`
+in editor options or a frame context. Each factory runs under the frame owner with the projected library.
+Build fresh content and supply the same live bindings driven by named previews. Explicit slots take precedence.
+Editor-level sample names must name contract slot inputs. Factories stay outside the Design source.
 
 ```luau
 editor.execute({ action = "Camera", preset = "approach-20" })
