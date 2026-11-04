@@ -206,9 +206,14 @@ local function createRuntime(host: Host.Host): Runtime
 			applying.key = nil
 			local list: Children.ChildList? = nil
 			local staticSlot = 0
+			local function detachStatic(subject: unknown)
+				assert(type(subject) == "table" or type(subject) == "userdata")
+				supplied.render.removeChild(node, subject)
+			end
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
+					Owner.holdSubject(owner, detachStatic, child)
 					if list == nil then
 						supplied.render.insertChild(node, child, index)
 					else

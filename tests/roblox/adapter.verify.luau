@@ -27,6 +27,60 @@ end
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
+describe("nodes parented across owners", function()
+	it("ends the containing owner before a child's destruction can rerun its original watches", function()
+		Compose.__resetForTests()
+		local emulator = Support.emulator { handlerErrors = "raise" }
+		local before = emulator.environment.liveObjects()
+		local runtime = Compose.createRuntime(emulator.adapter)
+		local Frame = runtime.create "Frame"
+		local original = Compose.createOwner(runtime.reactor)
+		local shown = Compose.cell(true)
+		local foreign = Compose.withOwner(original, function()
+			return Frame {
+				Compose.show(shown, function()
+					return Frame {
+						[Compose.event "Destroying"] = function()
+							shown:set(false)
+						end,
+					}
+				end),
+			}
+		end)
+		local dispose = runtime.mount(function()
+			return Frame { foreign }
+		end, emulator.root)
+		dispose()
+		expect(emulator.environment.isAlive(Support.instance(foreign))):toBe(true)
+		expect(emulator.environment.parentOf(Support.instance(foreign))):toBe(nil)
+		Compose.owner.dispose(original)
+		expect(emulator.environment.isAlive(Support.instance(foreign))):toBe(false)
+		expect(emulator.environment.liveObjects()):toBe(before)
+	end)
+
+	it("preserves a newer native parent when an older attachment ends", function()
+		Compose.__resetForTests()
+		local emulator = Support.emulator { handlerErrors = "raise" }
+		local runtime = Compose.createRuntime(emulator.adapter)
+		local Frame = runtime.create "Frame"
+		local original = Compose.createOwner(runtime.reactor)
+		local child = Compose.withOwner(original, function()
+			return Frame {}
+		end)
+		local disposeFirst = runtime.mount(function()
+			return Frame { child }
+		end, emulator.root)
+		local disposeSecond, second = runtime.mount(function()
+			return Frame { child }
+		end, emulator.root)
+		disposeFirst()
+		expect(emulator.environment.parentOf(Support.instance(child))):toBe(second)
+		Compose.owner.dispose(original)
+		disposeSecond()
+		expect(emulator.environment.liveObjects()):toBe(0)
+	end)
+end)
+
 type World = {
 	emulator: Emulator.Emulator,
 	runtime: Compose.Runtime,

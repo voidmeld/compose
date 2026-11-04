@@ -265,7 +265,7 @@ local function create(options: Options?): TestScene
 		counts.removeChild += 1
 		local parentRecord = records[parent]
 		local childRecord = records[child]
-		if parentRecord == nil or childRecord == nil then
+		if parentRecord == nil or childRecord == nil or childRecord.parent ~= parent then
 			return
 		end
 		detach(parentRecord, child)

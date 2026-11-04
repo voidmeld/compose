@@ -324,6 +324,49 @@ describe("ownership", function()
 			expect(Compose.custodyOf(stranger)):toBe "borrowed"
 		end)
 
+		it("preserves borrowed static children when their containing owner ends", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { external }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.parentOf(external)):toBe(nil)
+			expect(Compose.custodyOf(external)):toBe "borrowed"
+		end)
+
+		it("preserves a newer parent when an old static attachment ends", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			local disposeFirst = world.runtime.mount(function()
+				return world.create "Frame" { external }
+			end, world.root)
+			local disposeSecond, second = world.runtime.mount(function()
+				return world.create "Frame" { external }
+			end, world.root)
+			disposeFirst()
+			expect(world.host.parentOf(external)):toBe(second)
+			expect(world.host.childrenOf(second)):toEqual { external }
+			disposeSecond()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.parentOf(external)):toBe(nil)
+		end)
+
+		it("preserves borrowed children when a later property or child insertion fails", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			world.host.failNext("insertChild", 1)
+			expect(function()
+				world.runtime.mount(function()
+					return world.create "Frame" { external, world.create "Row" {} }
+				end, world.root)
+			end):toThrow()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.parentOf(external)):toBe(nil)
+			expect(world.host.liveNodes()):toBe(2)
+		end)
+
 		it("destroys an adopted node exactly once", function()
 			local world = Support.world()
 			local external = world.host.makeNode "External"
