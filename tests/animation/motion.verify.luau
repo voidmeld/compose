@@ -207,6 +207,62 @@ local function curveValue(curve: unknown, progress: number): number
 end
 
 describe("easing", function()
+	it("evaluates cubic bezier timing by solving its x coordinate", function()
+		local ease = Compose.cubicBezier(0.42, 0, 1, 1)
+		expect(ease(0)):toBe(0)
+		expect(ease(1)):toBe(1)
+		expect(ease(0.5)):toBeCloseTo(0.3153568125725393, 1e-7)
+		local linear = Compose.cubicBezier(0, 0, 1, 1)
+		for step = 0, 100 do
+			local t = step / 100
+			expect(linear(t)):toBeCloseTo(t, 1e-7)
+		end
+	end)
+
+	it("keeps cubic bezier overshoot and solves flat x tangents", function()
+		local overshoot = Compose.cubicBezier(0, 1.5, 1, 1.5)
+		expect(overshoot(0.5) > 1):toBe(true)
+		for _, controls in { { 0, 0 }, { 1, 1 }, { 1, 0 } } do
+			local ease = Compose.cubicBezier(controls[1], 0.2, controls[2], 0.8)
+			for index = 1, 99 do
+				local t = index / 100
+				local remaining = 1 - t
+				local x = 3 * remaining * remaining * t * controls[1] + 3 * remaining * t * t * controls[2] + t * t * t
+				local y = 3 * remaining * remaining * t * 0.2 + 3 * remaining * t * t * 0.8 + t * t * t
+				expect(ease(x)):toBeCloseTo(y, 1e-7)
+			end
+		end
+	end)
+
+	it("rejects cubic bezier control points that cannot describe a timing function", function()
+		expect(function()
+			Compose.cubicBezier(-0.1, 0, 1, 1)
+		end):toThrow "x control points"
+		expect(function()
+			Compose.cubicBezier(0, 0, 1.1, 1)
+		end):toThrow "x control points"
+		expect(function()
+			Compose.cubicBezier(0, math.huge, 1, 1)
+		end):toThrow "finite control points"
+	end)
+
+	it("uses a cubic bezier in a tween without choosing a named curve", function()
+		local world = Support.world()
+		local target = Compose.cell(0)
+		local value, owner = Support.owned(function()
+			return world.runtime.tween(function(use)
+				return use(target)
+			end, { seconds = 1, ease = Compose.cubicBezier(0.42, 0, 1, 1) })
+		end)
+		target:set(1)
+		world.settle()
+		world.host.step(0.5)
+		world.settle()
+		expect(value:peek()):toBeCloseTo(0.3153568125725393, 1e-7)
+		Compose.owner.dispose(owner)
+		expect(world.host.counts().frameListeners):toBe(0)
+	end)
+
 	it("pins both ends of every curve", function()
 		local curves = Support.record(Compose.easing)
 		for name, curve in curves do

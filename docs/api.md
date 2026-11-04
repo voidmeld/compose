@@ -1495,6 +1495,17 @@ The `Back` and `Elastic` variants can return values outside that range to produc
 runtime.tween(opacity, { seconds = 0.25, ease = Compose.easing.outQuad })
 ```
 
+### `Compose.cubicBezier`
+
+`cubicBezier(x1, y1, x2, y2) -> Easing`
+
+Creates an easing function with endpoints `(0, 0)` and `(1, 1)` and the supplied control points. All control points must be finite; x coordinates must be in `[0, 1]`. The y coordinates may produce overshoot. Progress outside `[0, 1]` returns the corresponding endpoint.
+The function solves the curve's x coordinate for each progress value, then returns its y coordinate. Pass it as `ease` to a tween, ramp or sequence.
+
+```luau
+runtime.tween(opacity, { seconds = 0.25, ease = Compose.cubicBezier(0.42, 0, 1, 1) })
+```
+
 ### Reduced motion
 
 `spring` and `tween` both accept `reducedMotion`.
