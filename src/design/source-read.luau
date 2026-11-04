@@ -415,7 +415,7 @@ function source.parse(code: string, library: Library): Types.Document
 		if item then
 			for _, alternative in alternatives do
 				assert(
-					(root.nameInput ~= nil or alternative.name == root.name)
+					(root.nameInput ~= nil or root.nameField ~= nil or alternative.name == root.name)
 						and alternative.nameInput == root.nameInput
 						and alternative.nameField == root.nameField,
 					"Row variants keep one direct root name"

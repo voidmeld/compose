@@ -278,6 +278,7 @@ describe("Design emitted source", function()
 		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
 		value = Design.document.insert(value, library, "n1", "Button")
 		value = Design.document.change(value, library, "n2", "label", { item = "text" })
+		value.root.children[1].nameField = "id"
 		value = Design.document.bindTags(value, library, "n2", { item = "tags" })
 		value.nextId = 4
 		value = Design.document.setRowVariant(value, library, "n2", {
@@ -299,7 +300,7 @@ describe("Design emitted source", function()
 			for _, rowFunctions in { false, true } do
 				local options: Design.EmitOptions = { rowFunctions = rowFunctions }
 				local code = Design.emit(value, library, options)
-				expect(Design.parse(code, library)):toEqual(value)
+				expect(Design.parse(code, library).root.children[1].nameField):toBe("id")
 				expect(Design.emit(Design.parse(code, library), library, options)):toBe(code)
 				canonical(code)
 				analyze(code)

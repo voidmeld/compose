@@ -73,7 +73,8 @@ not overwrite the module. Keep every edit inside the shapes below.
   `Design.document.setRowVariant` stores `{ item, cases }` on the row root.
   Each case has `value`, `kind`, `props` and `children`. The row factory chooses
   a case once from `current:peek().kind`, then returns the selected root with
-  the same name. Other enum options use the ordinary row. Include the kind in
+  the same name, including a shared row-bound `nameField` across different kinds.
+  Other enum options use the ordinary row. Include the kind in
   the caller's key if changing it must replace a retained row. Arbitrary
   conditions and variants outside row roots are custom code.
 - A caller slot inside a layout: `props.body()` at an ordinary child position
