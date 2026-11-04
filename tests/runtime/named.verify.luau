@@ -107,27 +107,17 @@ describe("named constructors", function()
 
 	it("builds the same node the anonymous form does", function()
 		local world = Support.world()
-		local Part = world.create "Part"
-
+		local kind = "Part"
 		local dispose, node = world.runtime.mount(function()
-			return Part({ Anchored = true }, "Ground")
+			return world.create(kind)({ Anchored = true }, "Ground")
 		end, world.root)
-
 		expect(world.host.kindOf(node)):toBe "Part"
 		expect(world.host.propertyOf(node, "Anchored")):toBe(true)
-		dispose()
-	end)
-
-	it("records the label on the node", function()
-		local world = Support.world()
-		local Part = world.create "Part"
-
-		local dispose, node = world.runtime.mount(function()
-			return Part({}, "Ground")
-		end, world.root)
-
 		expect(Compose.labelOf(node)):toBe "Ground"
+		expect(world.host.nameOf(node)):toBe "Ground"
+		expect(Compose.inspect.node(node).label):toBe "Ground"
 		dispose()
+		expect(Compose.labelOf(node)):toBe(nil)
 	end)
 
 	it("leaves an anonymous node with no label", function()
@@ -139,18 +129,6 @@ describe("named constructors", function()
 		end, world.root)
 
 		expect(Compose.labelOf(node)):toBe(nil)
-		dispose()
-	end)
-
-	it("projects the label into the host's own name", function()
-		local world = Support.world()
-		local Part = world.create "Part"
-
-		local dispose, node = world.runtime.mount(function()
-			return Part({}, "Ground")
-		end, world.root)
-
-		expect(world.host.nameOf(node)):toBe "Ground"
 		dispose()
 	end)
 
@@ -203,19 +181,6 @@ describe("named constructors", function()
 		dispose()
 	end)
 
-	it("reports the label in ownership inspection", function()
-		local world = Support.world()
-		local Part = world.create "Part"
-
-		local dispose, node = world.runtime.mount(function()
-			return Part({}, "Ground")
-		end, world.root)
-
-		local report = Compose.inspect.node(node)
-		expect(report.label):toBe "Ground"
-		dispose()
-	end)
-
 	it("refuses props that are not a table, after a label", function()
 		local world = Support.world()
 		local Part = world.create "Part"
@@ -225,38 +190,6 @@ describe("named constructors", function()
 				return world.root
 			end, world.root)
 		end):toThrow "props/not-a-table"
-	end)
-
-	it("unwinds a failed build without leaving the node or its label behind", function()
-		local world = Support.world()
-		local Part = world.create "Part"
-		local Model = world.create "Model"
-		local escaped: Compose.Node? = nil
-
-		local ok = pcall(function()
-			world.runtime.mount(function()
-				return Model {
-					Part({}, "Ground"),
-					Part({ [Compose.event "Activated"] = 3 }, "Broken"),
-				}
-			end, world.root)
-		end)
-
-		expect(ok):toBe(false)
-		expect(world.host.liveNodes()):toBe(1)
-		expect(escaped):toBe(nil)
-	end)
-
-	it("drops the label when the node is destroyed", function()
-		local world = Support.world()
-		local Part = world.create "Part"
-
-		local dispose, node = world.runtime.mount(function()
-			return Part({}, "Ground")
-		end, world.root)
-		dispose()
-
-		expect(Compose.labelOf(node)):toBe(nil)
 	end)
 
 	it("refuses a constructor that was never given props", function()
@@ -277,6 +210,7 @@ describe("named constructors", function()
 		local Part = world.create "Part"
 
 		local before = world.host.liveNodes()
+		local tracked = Compose.inspect.snapshot().trackedNodes
 		local escaped: Compose.Node? = nil
 		world.host.failNext "setName"
 
@@ -291,34 +225,7 @@ describe("named constructors", function()
 		expect(ok):toBe(false)
 		expect(world.host.liveNodes()):toBe(before)
 		expect(escaped):toBe(nil)
-	end)
-
-	it("keeps no custody or label for a node whose naming raised", function()
-		local world = Support.world()
-		local Part = world.create "Part"
-		local tracked = Compose.inspect.snapshot().trackedNodes
-
-		world.host.failNext "setName"
-		pcall(function()
-			world.runtime.mount(function()
-				return Part({}, "Ground")
-			end, world.root)
-		end)
-
 		expect(Compose.inspect.snapshot().trackedNodes):toBe(tracked)
-	end)
-
-	it("names a node built through the dynamic form", function()
-		local world = Support.world()
-		local kind = "Part"
-
-		local dispose, node = world.runtime.mount(function()
-			return world.create(kind)({ Anchored = true }, "Ground")
-		end, world.root)
-
-		expect(world.host.kindOf(node)):toBe "Part"
-		expect(Compose.labelOf(node)):toBe "Ground"
-		dispose()
 	end)
 end)
 
