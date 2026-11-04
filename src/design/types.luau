@@ -72,6 +72,7 @@ export type Children = "none" | "list" | "template" | "slot"
 export type Seed = { kind: string, props: { [string]: Literal }?, children: { Seed }? }
 
 export type Kind = {
+	design: ImportedDesign?,
 	fields: { [string]: Field },
 	defaults: { [string]: Literal }?,
 	seeds: { Seed }?,
@@ -92,6 +93,14 @@ export type Motion = {
 	call: string,
 	roles: { string },
 	animate: ((source: ReadOnlyValue<Literal?>, role: string) -> ReadOnlyValue<Literal?>)?,
+}
+
+export type ImportedDesign = {
+	source: ReadOnlyValue<string>,
+	library: Library,
+	nameInput: string,
+	contract: Contract,
+	save: ((expected: string, generated: string) -> boolean)?,
 }
 
 export type SequenceStep = {
@@ -214,6 +223,7 @@ export type EmitOptions = {
 }
 
 export type RenderContext = {
+	use: Core.Use?,
 	inputs: { [string]: Literal }?,
 	bindings: { [string]: Resolved }?,
 	outputs: { [string]: (args: { Literal }) -> () }?,

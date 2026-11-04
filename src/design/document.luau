@@ -272,6 +272,19 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 	end
 	assert(field.type ~= "node", `{key} references another node`)
 	local holdsContent = field.type == "content"
+	if
+		current ~= nil
+		and type(current) == "table"
+		and type(current["$template"]) == "string"
+		and field.type == "value"
+		and not field.perRow
+	then
+		assert(
+			next(current) == "$template" and next(current, "$template") == nil,
+			"An authored value node marker holds only $template"
+		)
+		return
+	end
 	if current ~= nil and holdsContent then
 		assert(
 			type(current) == "table" and type(current["$template"]) == "string",
@@ -493,6 +506,27 @@ function document.validate(value: Document, library: Library): Document
 			return
 		end
 		local kind = assert(library.kinds[node.kind], `Unknown {library.name} kind {node.kind}`)
+		if kind.design then
+			for _, input in kind.design.contract.inputs do
+				local property = node.props[input.id]
+				if property and property.input and property.path == nil then
+					local supplied = assert(inputOf(value, property.input), "Imported Design input is undeclared")
+					assert(
+						supplied.type == input.type and supplied.luauType == input.luauType,
+						`Imported Design input {input.id} needs its declared type`
+					)
+					assert(
+						supplied.kind == input.kind or (input.kind == "readable" and supplied.kind == "cell"),
+						`Imported Design input {input.id} needs its declared input kind`
+					)
+				elseif property and input.kind ~= "value" then
+					assert(
+						property.input ~= nil or property.state ~= nil,
+						`Imported Design input {input.id} needs a readable or cell input`
+					)
+				end
+			end
+		end
 		assert(#node.name > 0 and #node.name <= 120, "A node needs a name")
 		assert(node.hidden == nil or type(node.hidden) == "boolean", "Hidden is a boolean")
 		assert(node.locked == nil or type(node.locked) == "boolean", "Locked is a boolean")

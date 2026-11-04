@@ -141,6 +141,12 @@ Pass a `Design.LinkStore` as `options.link` to link source.
 The Roblox adapter `studio/design/script-store.luau` wraps `ScriptEditorService`.
 The editor uses only the store protocol.
 
+`Design.imports` registers reusable source-backed kinds with typed inputs and named slots.
+Select an instance and choose **Edit Design** to open its canonical layers inside the editor.
+**Back to assembly** returns to the assembly's selection. The import's source writer saves
+those edits, and its readable refreshes every consuming instance. The assembly source
+keeps component calls and slot children rather than copies of the imported geometry.
+
 Shift-click or Command/Ctrl-click on the stage toggles a node. Command/Ctrl-click in layers also toggles; Shift-click selects a sibling range. Drag on empty canvas to select intersecting bounds. Selection has a union outline and an outline per node. Escape clears it. Delete, Duplicate, Copy, Paste, Alt+Up/Down and dragging act on the selection. Each edit is one undo step. The inspector shows shared fields, marks differing values as Mixed, and applies an edit to every selected node.
 
 Command/Ctrl+G wraps selected siblings in the library's default list container. Their order stays the same. Command/Ctrl+Shift+G replaces a selected container with its children. Right-click a layer for Wrap and Unwrap. Both commands support undo and redo.

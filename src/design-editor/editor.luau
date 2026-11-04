@@ -57,6 +57,8 @@ export type Command =
 	| { action: "Prompt", text: string, count: number?, theme: boolean? }
 	| { action: "ChooseDraft", index: number }
 	| { action: "DiscardDrafts" }
+	| { action: "OpenDesign" }
+	| { action: "CloseDesign" }
 
 export type Result = {
 	ok: boolean,
@@ -86,6 +88,7 @@ export type Editor = {
 	session: Design.Session,
 	canvas: Canvas.Canvas,
 	execute: (Command) -> Result,
+	nested: () -> Editor?,
 	dispose: () -> (),
 }
 
@@ -114,7 +117,7 @@ export type Options = {
 	runtime: Compose.Runtime,
 }
 
-return function(ui: UI.UI)
+return function(ui: UI.UI, open: (Design.Library, Design.Document, Compose.Node, Options) -> Editor)
 	local Theme = require "./theme"(ui)
 	local color = Theme.color
 	local size = Theme.size
@@ -293,6 +296,77 @@ return function(ui: UI.UI)
 			Wrap = session.wrap,
 			Unwrap = session.unwrap,
 		}
+		local nested: Editor? = nil
+		local context = ui.new "InputContext"
+		local nestedFrame: Compose.Node? = nil
+		local back: UI.Connection? = nil
+		local function closeDesign()
+			ui.set(context, "Enabled", true)
+			if nested then
+				nested.dispose()
+				nested = nil
+			end
+			if back then
+				back:Disconnect()
+				back = nil
+			end
+			if nestedFrame then
+				ui.destroy(nestedFrame)
+				nestedFrame = nil
+			end
+		end
+		ordinary.CloseDesign = closeDesign
+		ordinary.OpenDesign = function()
+			local node = Design.document.find(session.document:peek().root, session.selected:peek())
+			local imported = assert(assert(library.kinds[assert(node).kind]).design, "Select an imported Design")
+			local save = assert(imported.save, "This imported Design is read-only")
+			local document = Design.parse(imported.source:peek(), imported.library)
+			closeDesign()
+			local frame = Theme.frame("NestedDesign", color.canvas)
+			nestedFrame = frame
+			Theme.place(frame, root, ui.values.udim2(1, 0, 1, 0))
+			ui.set(frame, "Active", true)
+			ui.set(frame, "ZIndex", 40)
+			local button = Theme.button("BackToAssembly", "Back to " .. session.document:peek().name)
+			Theme.place(button, frame, ui.values.udim2(1, 0, 0, 32))
+			back = ui.connect(button, "Activated", closeDesign)
+			local body = Theme.frame("NestedEditor", color.canvas)
+			Theme.place(body, frame, ui.values.udim2(1, 0, 1, -32), ui.values.udim2(0, 0, 0, 32))
+			local store: Design.LinkStore = {
+				read = function(): string
+					return imported.source:peek()
+				end,
+				write = save,
+				watch = function(changed: () -> ()): () -> ()
+					local last = imported.source:peek()
+					local owner = Compose.createRootOwner(function()
+						Compose.watch(function(use: Compose.Use)
+							local code = use(imported.source)
+							if code ~= last then
+								last = code
+								changed()
+							end
+						end)
+					end, ui.runtime.reactor)
+					return owner.dispose
+				end,
+			}
+			local nestedOptions: Options = {
+				runtime = ui.runtime,
+				link = store,
+				token = options.token,
+				resolveToken = options.resolveToken,
+				tokens = options.tokens,
+				stageSize = options.stageSize or { X = 1280, Y = 720 },
+			}
+			local ok, result = pcall(open, imported.library, document, body, nestedOptions)
+			if not ok then
+				closeDesign()
+				error(result, 0)
+			end
+			nested = result
+			ui.set(context, "Enabled", false)
+		end
 		local function execute(request: Command): Result
 			local source: string? = nil
 			if request.action ~= "Read" then
@@ -496,6 +570,9 @@ return function(ui: UI.UI)
 			return button
 		end
 		local previewOrder = 10
+		local editDesign = action("OpenDesign", "Edit Design", 9, leftTools, false, function()
+			execute { action = "OpenDesign" }
+		end)
 		local function cycling(name: string, choices: { string }, initial: string?, select: (choice: string) -> ())
 			if #choices == 0 then
 				return
@@ -595,7 +672,6 @@ return function(ui: UI.UI)
 				execute { action = "Export" }
 			end)
 		end
-		local context = ui.new "InputContext"
 		ui.set(context, "Name", "ComposeDesignShortcuts")
 		ui.set(context, "Sink", true)
 		local function bind(name: string, run: () -> ...unknown, keys: { { unknown } })
@@ -617,7 +693,7 @@ return function(ui: UI.UI)
 				ui.connect(inputAction, "Pressed", function()
 					local UserInputService = ui.service "UserInputService"
 					local focused = ui.optionalNode(ui.call(UserInputService, "GetFocusedTextBox"))
-					if not focused then
+					if nested == nil and not focused then
 						run()
 					end
 				end)
@@ -707,6 +783,11 @@ return function(ui: UI.UI)
 			)
 		end
 		local owner = Compose.createRootOwner(function()
+			Compose.watch(function(use: Compose.Use)
+				local node = Design.document.find(use(session.document).root, use(session.selected))
+				local kind = if node then library.kinds[node.kind] else nil
+				ui.set(editDesign, "Visible", kind ~= nil and kind.design ~= nil and kind.design.save ~= nil)
+			end)
 			if gridButton then
 				local button = gridButton
 				Compose.watch(function(use: Compose.Use)
@@ -788,7 +869,11 @@ return function(ui: UI.UI)
 			session = session,
 			canvas = view,
 			execute = execute,
+			nested = function(): Editor?
+				return nested
+			end,
 			dispose = function()
+				closeDesign()
 				release()
 				if unlink then
 					unlink()

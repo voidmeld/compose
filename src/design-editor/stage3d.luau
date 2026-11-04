@@ -364,6 +364,7 @@ return function(ui: UI.UI)
 				table.clear(nodes)
 				stopDesign = runtime.mount(function(): Compose.Node
 					return ui.node(Design.render(value, library, {
+						use = use,
 						exclude = function(node: Design.Node): boolean
 							return node.hidden == true
 						end,

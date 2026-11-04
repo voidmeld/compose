@@ -90,6 +90,12 @@ not overwrite the module. Keep every edit inside the shapes below.
 - A value property that takes one node: `trailing = UI.Kind "Name" { ... }`.
   `Design.document.content` on a value field stores the child with a top-level
   `$template` marker. It builds the node directly before the receiving control.
+- An imported Design registered by the library's `Design.imports`:
+  `Wall(UI, { name = "WestWall", offset = props.offset, detail = function() return <node> end })`.
+  The first field is the imported root's required name input. Other fields
+  follow its typed contract, including readable inputs and named slots.
+  Keep geometry in the canonical sub-Design. The assembly stores only the call
+  and its authored slot children. Each source round-trips independently.
 - A moving value: `<follow>(state.id, "role")`, where `<follow>` is the
   library's motion call (Facet: `UI.follow`) and `role` is one of its motion
   roles. The wrapped value is an input, a state value or an item field. The
@@ -131,3 +137,10 @@ edit. A library can provide a command for this check. Facet provides
 Multiple typed node references emit width-aware cell tables. Their declarations
 and the supported tree forms keep their bytes after formatting and parse/emit.
 Keep library preludes and supplied source snippets formatted as well.
+
+Imported sources come from library-owned readables. Saving a canonical source
+updates every instance; saving the assembly updates its bindings and hierarchy.
+Keep the imported contract stable while linked. Select an instance and choose
+**Edit Design** to edit its canonical layers, then **Back to assembly** to return.
+The library supplies the source writer and publishes saved bytes to its readable.
+Keep layer names stable so linked edits preserve selection.

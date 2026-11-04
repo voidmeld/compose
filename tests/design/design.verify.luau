@@ -141,6 +141,71 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("validates imported interfaces and forwards outputs without owning their readable sources", function()
+		local value = Design.document.setContract(Design.document.new("Action", library, "Button"), library, {
+			inputs = {
+				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "text", kind = "readable", type = "string", required = true },
+			},
+			outputs = { { id = "onAction", args = { "number" } } },
+		})
+		value.root.nameInput = "name"
+		value = Design.document.change(value, library, "n1", "label", { input = "text" })
+		value = Design.document.change(value, library, "n1", "onActivate", { output = "onAction", args = { 7 } })
+		local source = Core.cell(Design.emit(value, library))
+		local imported = Design.imports(library, { Action = { source = source, call = "Action" } })
+		local assembly = Design.document.setContract(Design.document.new("Assembly", imported, "Action"), imported, {
+			inputs = {
+				{ id = "title", kind = "readable", type = "string" },
+				{ id = "staticTitle", kind = "value", type = "string" },
+			},
+			outputs = { { id = "onChoose", args = { "number" } } },
+		})
+		expect(function()
+			Design.document.change(assembly, imported, "n1", "text", { input = "staticTitle" })
+		end):toThrow "needs its declared input kind"
+		expect(function()
+			Design.document.change(assembly, imported, "n1", "text", { literal = "Text" })
+		end):toThrow "needs a readable or cell input"
+		assembly = Design.document.change(assembly, imported, "n1", "text", { input = "title" })
+		assembly = Design.document.change(assembly, imported, "n1", "onAction", { output = "onChoose" })
+		local title = Core.cell<<Design.Literal?>> "Hello"
+		local received: { Design.Literal } = {}
+		local button = builtNode(Design.render(assembly, imported, {
+			bindings = { title = { readable = title } },
+			outputs = {
+				onChoose = function(args: { Design.Literal })
+					received = args
+				end,
+			},
+		}))
+		expect(button.name):toBe "Action"
+		expect(button.props.label.readable):toBe(title)
+		assert(button.props.onActivate.callback)()
+		expect(received):toEqual { 7 }
+		expect(Design.emit(Design.parse(Design.emit(assembly, imported), imported), imported)):toBe(
+			Design.emit(assembly, imported)
+		)
+		local changed = Design.document.copy(value)
+		changed.contract.inputs[2].required = nil
+		source:set(Design.emit(changed, library))
+		expect(function()
+			Design.render(assembly, imported)
+		end):toThrow "Imported Design contract changed"
+		expect(function()
+			local missing = Design.emit(Design.document.new("Missing", library, "Stack"), library)
+			Design.imports(library, { Missing = { source = Core.cell(missing), call = "Missing" } })
+		end):toThrow "need a root name input"
+		expect(function()
+			Design.imports(
+				library,
+				{ First = { source = source, call = "Same" }, Second = { source = source, call = "Same" } }
+			)
+		end):toThrow "calls must be distinct"
+		title:set "Still borrowed"
+		expect(title:peek()):toBe "Still borrowed"
+	end)
+
 	it("retains enum selected row roots and disposes removed alternatives", function()
 		local world = Support.world()
 		local toy = table.clone(library)
@@ -1089,6 +1154,15 @@ describe("Compose Design documents", function()
 			Design.document.insert(Design.document.new("Navigation", extended, "Stack"), extended, "n1", "Trailing")
 		local child
 		value, child = Design.document.content(value, extended, receiver, "item", "Label")
+		expect(function()
+			Design.document.change(
+				value,
+				extended,
+				receiver,
+				"item",
+				{ literal = { ["$template"] = child, extra = true } }
+			)
+		end):toThrow "marker holds only $template"
 		table.clear(built)
 		local root = builtNode(Design.render(value, extended))
 		expect(#built):toBe(3)

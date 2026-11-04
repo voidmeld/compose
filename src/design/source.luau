@@ -493,6 +493,12 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 	local rowNames: { [string]: boolean } =
 		{ props = true, state = true, refs = true, capture = true, rootContent = true }
 	rowNames[library.parameter] = true
+	for _, kind in library.kinds do
+		local prefix = string.match(kind.call, "^([%w_]+)")
+		if prefix then
+			rowNames[prefix] = true
+		end
+	end
 	local emitNode: (node: Node, depth: number) -> string
 	local emit: (node: Node, depth: number) -> string
 	local function tabs(depth: number): string
@@ -878,6 +884,16 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			opening = `{kind.call} {literal(node.name)} `
 		end
 		local body: { string } = {}
+		local imported = kind.design
+		if imported then
+			local input = if nameInput then Document.input(value, nameInput) else nil
+			local named = if nameField
+				then `tostring(current:peek().{nameField})`
+				elseif input then `props.{nameInput}` .. (if input.required then "" else ` or {literal(node.name)}`)
+				else literal(node.name)
+			opening = `{kind.call}({library.parameter}, `
+			table.insert(body, `{inner}{imported.nameInput} = {named},`)
+		end
 		local keys: { string } = {}
 		local boundTemplate = kind.children == "template" and node.bind ~= nil
 		local slot = if kind.children == "slot" then kind.slot else nil
@@ -913,6 +929,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				type(current) == "table"
 				and field
 				and field.type == "value"
+				and not field.perRow
 				and type(current["$template"]) == "string"
 			then
 				local child = Document.find(node, current["$template"])
@@ -1033,7 +1050,13 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		if #body == 0 then
 			return opening .. "{}"
 		end
-		return opening .. "{\n" .. table.concat(body, "\n") .. "\n" .. tabs(depth) .. "}"
+		return opening
+			.. "{\n"
+			.. table.concat(body, "\n")
+			.. "\n"
+			.. tabs(depth)
+			.. "}"
+			.. (if imported then ")" else "")
 	end
 	local propsName = propsType or "Props"
 	local signature = if controls ~= nil

@@ -2221,6 +2221,25 @@ Supplying `bindings`, including an empty table, enables live conditional childre
 
 `extend(library, { kinds, prelude? }) -> Library` adds kinds and deduplicates prelude lines; duplicate kinds refuse.
 
+### `Design.imports`
+
+`imports(base, { [kindName]: Import }) -> Library` adds reusable Design kinds. An `Import` supplies `source: Compose.ReadOnlyValue<string>`, `call`, optional `library` (defaults to `base`), `prelude` and `save(expected, generated) -> boolean`. `call` names a component with the standard `(controls, Props)` signature; its require belongs in `prelude`. Each source must parse independently and bind its root name to a required string value input. Other inputs become fields, slot inputs become named content fields, and outputs become event fields. Value/readable/cell input bindings retain their declared types and input kinds; a cell can supply a readable. Prepare reactive values in the caller.
+
+```luau
+local assemblyLibrary = Design.imports(library, {
+    Wall = {
+        source = wallSource,
+        call = "Wall",
+        prelude = { 'local Wall = require(script.Parent.Wall)' },
+        save = saveWall,
+    },
+})
+```
+
+An authored `Wall` node emits `Wall(UI, { name = "WestWall", ... })`, using the library's controls parameter and the imported root's name input. Geometry remains in the imported source; the call adds no wrapper. Named slots use `document.content` or slot input bindings. Rendering forwards resolved inputs, outputs and token resolvers under the active owner. Source contracts and the root name input stay stable while linked; rebuild the library after changing that interface.
+
+`RenderContext.use` subscribes the rendering watch to imported source readables, including transitive imports. Editor stages supply it automatically. Sources stay borrowed. An editor's **Edit Design** action (`OpenDesign`) opens the selected import's canonical layers in a nested editor; `CloseDesign` or **Back to assembly** returns to the assembly. `Editor.nested()` exposes the open editor. Editing requires `save`, which must compare the expected bytes, persist the generated source and publish it through `source`. The existing source-link conflict checks apply. Source changes refresh all consuming instances while the assembly and nested selections retain their layer identities.
+
 ### `Design.session`
 
 `session(library, initial) -> Session` owns document, selection and edit history. Edit methods return success and put refusals in `problem` without replacing the current document.

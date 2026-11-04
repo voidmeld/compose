@@ -3,6 +3,7 @@
 local fs = require "@std/fs"
 local process = require "@lute/process"
 local Design = require "../../src/design"
+local Core = require "../../src/core"
 local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
@@ -128,6 +129,85 @@ local function canonical(code: string)
 end
 
 describe("Design emitted source", function()
+	it("round trips typed imported components with named slots without expanding their trees", function()
+		local nested = Design.document.setContract(Design.document.new("Reusable", library, "Box"), library, {
+			inputs = {
+				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "text", kind = "readable", type = "string", required = true },
+				{ id = "body", kind = "value", type = "slot" },
+			},
+			outputs = {},
+		})
+		nested.root.nameInput = "name"
+		nested = Design.document.insert(nested, library, "n1", "Button")
+		nested = Design.document.change(nested, library, "n2", "label", { input = "text" })
+		nested = Design.document.insertSlot(nested, library, "n1", "body")
+		local nestedCode = Design.emit(nested, library)
+		canonical(nestedCode)
+		analyze(nestedCode)
+		local imported = Design.imports(library, {
+			Reusable = {
+				source = Core.cell(nestedCode),
+				call = "ReusableRow",
+				prelude = {
+					"local function ReusableRow(",
+					"\t_ui: Controls,",
+					"\tprops: { name: string, text: Core.ReadOnlyValue<string>, body: (() -> Target)? }",
+					"): Target",
+					"\treturn { name = props.name }",
+					"end",
+				},
+			},
+		})
+		local assembly = Design.document.setContract(Design.document.new("Assembly", imported, "Box"), imported, {
+			inputs = { { id = "text", kind = "readable", type = "string", required = true } },
+			outputs = {},
+		})
+		for _, name in { "Left", "Right" } do
+			local id
+			assembly, id = Design.document.insert(assembly, imported, "n1", "Reusable")
+			assembly = Design.document.rename(assembly, imported, id, name)
+			assembly = Design.document.change(assembly, imported, id, "text", { input = "text" })
+			assembly = Design.document.content(assembly, imported, id, "body", "Box")
+		end
+		local code = Design.emit(assembly, imported)
+		expect(string.find(code, "ReusableRow(UI, {", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "label =", 1, true)):toBeNil()
+		expect(Design.emit(Design.parse(code, imported), imported)):toBe(code)
+		expect(Design.emit(Design.parse(nestedCode, library), library)):toBe(nestedCode)
+		canonical(code)
+		analyze(code)
+		local rows = Design.document.setContract(Design.document.new("Rows", imported, "Choices"), imported, {
+			inputs = {
+				{ id = "text", kind = "readable", type = "string", required = true },
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					required = true,
+					fields = {
+						{ id = "id", type = "string" },
+						{ id = "kind", type = "string", options = { "button", "notice", "stack" } },
+						{ id = "text", type = "string" },
+						{ id = "tags", type = "list", luauType = "Tags" },
+					},
+				},
+			},
+			outputs = {},
+		})
+		rows = Design.document.bind(rows, imported, "n1", { from = "rows", key = "id" })
+		rows = Design.document.insert(rows, imported, "n1", "Reusable")
+		rows = Design.document.change(rows, imported, "n2", "text", { input = "text" })
+		rows.root.children[1].nameField = "id"
+		for _, named in { false, true } do
+			local options: Design.EmitOptions = { rowFunctions = named }
+			local rowCode = Design.emit(rows, imported, options)
+			expect(Design.emit(Design.parse(rowCode, imported), imported, options)):toBe(rowCode)
+			canonical(rowCode)
+			analyze(rowCode)
+		end
+	end)
+
 	it("strictly types one authored node passed directly to a value field", function()
 		local value, child = Design.document.content(
 			Design.document.new("Navigation", library, "Trailing"),
@@ -323,7 +403,7 @@ describe("Design emitted source", function()
 			for _, rowFunctions in { false, true } do
 				local options: Design.EmitOptions = { rowFunctions = rowFunctions }
 				local code = Design.emit(value, library, options)
-				expect(Design.parse(code, library).root.children[1].nameField):toBe "id"
+				expect(Design.parse(code, library)):toEqual(value)
 				expect(Design.emit(Design.parse(code, library), library, options)):toBe(code)
 				canonical(code)
 				analyze(code)

@@ -602,6 +602,7 @@ return function(ui: UI.UI)
 				stopDesign = runtime.mountFragment(function(): { Compose.Child }
 					local rendered, content = pcall(function(): unknown
 						return Design.render(value, library, {
+							use = use,
 							exclude = function(node: Design.Node): boolean
 								return node.hidden == true
 							end,

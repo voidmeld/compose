@@ -898,12 +898,22 @@ function source.parse(code: string, library: Library): Types.Document
 		local kindName = assert(calls[call], `{call} is not a {library.name} kind`)
 		local kind = library.kinds[kindName]
 		local templated = kind.children == "template"
+		if kind.design then
+			take "("
+			take(library.parameter)
+			take ","
+			take "{"
+			take(kind.design.nameInput)
+			take "="
+		end
 		local nodeName = take()
 		local nameField: string? = nil
 		local nodeTitle: string
 		local nameInput: string? = nil
-		if nodeName.kind == "symbol" and nodeName.text == "(" and peek() == "props" then
-			take "props"
+		if (nodeName.text == "(" and peek() == "props") or (kind.design and nodeName.text == "props") then
+			if nodeName.text == "(" then
+				take "props"
+			end
 			take "."
 			nameInput = name()
 			nodeTitle = kindName
@@ -913,9 +923,13 @@ function source.parse(code: string, library: Library): Types.Document
 				assert(fallback.kind == "string", "A named node falls back to text")
 				nodeTitle = unquote(fallback.text)
 			end
-			take ")"
-		elseif nodeName.kind == "symbol" and nodeName.text == "(" then
-			take "tostring"
+			if nodeName.text == "(" then
+				take ")"
+			end
+		elseif nodeName.text == "(" or (kind.design and nodeName.text == "tostring") then
+			if nodeName.text == "(" then
+				take "tostring"
+			end
 			take "("
 			take "current"
 			take ":"
@@ -925,7 +939,9 @@ function source.parse(code: string, library: Library): Types.Document
 			take "."
 			nameField = name()
 			take ")"
-			take ")"
+			if nodeName.text == "(" then
+				take ")"
+			end
 			nodeTitle = kindName
 		else
 			assert(nodeName.kind == "string", "Every node needs a name")
@@ -943,7 +959,7 @@ function source.parse(code: string, library: Library): Types.Document
 		nextId += 1
 		local outerCells = pendingCells
 		pendingCells = {}
-		take "{"
+		take(if kind.design then "," else "{")
 		local from: string?, key: string? = nil, nil
 		local rowId: string? = nil
 		while peek() ~= "}" do
@@ -956,6 +972,7 @@ function source.parse(code: string, library: Library): Types.Document
 				at = start
 				local direct = contentField
 					and contentField.type == "value"
+					and not contentField.perRow
 					and (calls[lead] ~= nil or lead == "capture" or (library.tags and lead == library.tags.call))
 				local property: Value? = nil
 				local template: Node? = nil
@@ -1087,6 +1104,9 @@ function source.parse(code: string, library: Library): Types.Document
 			end
 		end
 		take "}"
+		if kind.design then
+			take ")"
+		end
 		local listed = #result.children
 		for _, cell in pendingCells do
 			table.insert(result.children, cell)

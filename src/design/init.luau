@@ -9,6 +9,7 @@ local Session = require "@self/session"
 local Source = require "@self/source"
 local Types = require "@self/types"
 local Datatype = require "@self/datatype"
+local Imports = require "@self/imports"
 
 export type Literal = Types.Literal
 export type DatatypeComponent = Types.DatatypeComponent
@@ -38,6 +39,7 @@ export type RowVariant = Types.RowVariant
 export type VariantCase = Types.VariantCase
 export type History = History.History
 export type Extension = Library.Extension
+export type Import = Imports.Import
 export type EmitOptions = Source.EmitOptions
 export type RenderContext = Render.Context
 export type Session = Session.Session
@@ -53,6 +55,7 @@ return {
 	session = Session,
 	link = Link,
 	extend = Library.extend,
+	imports = Imports.extend,
 	emit = Source.emit,
 	parse = Source.parse,
 	literal = Source.literal,

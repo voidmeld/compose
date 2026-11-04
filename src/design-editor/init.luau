@@ -67,7 +67,25 @@ local function create(
 	local ui = UI.create(options.runtime, options.environment)
 	local ok, result = pcall(function(): Editor.Editor
 		return Compose.withOwner(ui.owner, function(): Editor.Editor
-			return Editor(ui)(library, initial, parent, options)
+			return Editor(
+				ui,
+				function(
+					library: Design.Library,
+					initial: Design.Document,
+					parent: Compose.Node,
+					nestedOptions: Editor.Options
+				): Editor.Editor
+					return create(library, initial, parent, {
+						runtime = nestedOptions.runtime,
+						environment = options.environment,
+						link = nestedOptions.link,
+						token = nestedOptions.token,
+						resolveToken = nestedOptions.resolveToken,
+						tokens = nestedOptions.tokens,
+						stageSize = nestedOptions.stageSize,
+					})
+				end
+			)(library, initial, parent, options)
 		end)
 	end)
 	if not ok then
@@ -83,6 +101,7 @@ local function create(
 		session = result.session,
 		canvas = result.canvas,
 		execute = result.execute,
+		nested = result.nested,
 		dispose = function()
 			if disposed then
 				return
