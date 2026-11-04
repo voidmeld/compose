@@ -95,6 +95,8 @@ Conditional children and keyed rows then update through the runtime.
 Generated components receive typed props directly.
 Node references emit cells of the library's optional return type, including forward references.
 The capture function and selected-reference table preserve that type under strict analysis.
+Node fields receive formulas returning the captured non-nil node. Read them after construction;
+uncaptured targets and unknown selected names raise `Node reference is not captured`.
 
 A document can set `rootVariant = { input, value, kind, props }` through `Design.document.setRootVariant`.
 The required static string input declares its enum `options`.

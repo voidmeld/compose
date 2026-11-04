@@ -213,7 +213,13 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 			property.literal, property.input, property.item, property.output, property.token
 		local target = property.node
 		if target ~= nil then
-			return { node = references[target] }
+			return {
+				node = Core.formula(function(use: Use): unknown
+					local captured = use(references[target])
+					assert(captured ~= nil, "Node reference is not captured")
+					return captured
+				end),
+			}
 		end
 		local source = property.nodeFrom
 		if source ~= nil then
@@ -229,7 +235,9 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 				node = Core.formula(function(use: Use): unknown
 					local chosen = if held ~= nil then use(held) else inputValue(source, use)
 					local cell = if type(chosen) == "string" then byName[chosen] else nil
-					return if cell then use(cell) else nil
+					local captured = if cell then use(cell) else nil
+					assert(captured ~= nil, "Node reference is not captured")
+					return captured
 				end),
 			}
 		end

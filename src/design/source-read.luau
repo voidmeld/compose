@@ -351,6 +351,15 @@ function source.parse(code: string, library: Library): Types.Document
 			take "current"
 		end
 	end
+	local function referenceMessage()
+		take ","
+		local message = take()
+		assert(
+			message.kind == "string" and unquote(message.text) == "Node reference is not captured",
+			"Node references assert their capture"
+		)
+		take ")"
+	end
 	local calls: { [string]: string } = {}
 	for kindName, kind in library.kinds do
 		calls[kind.call] = kindName
@@ -534,6 +543,11 @@ function source.parse(code: string, library: Library): Types.Document
 				assert(holder == "props" or holder == "state", "A chosen node follows an input or state")
 				take "]"
 				take "return"
+				local captured = peek() == "assert"
+				if captured then
+					take "assert"
+					take "("
+				end
 				take "if"
 				take "chosen"
 				take "then"
@@ -543,6 +557,9 @@ function source.parse(code: string, library: Library): Types.Document
 				take ")"
 				take "else"
 				take "nil"
+				if captured then
+					referenceMessage()
+				end
 				take "end"
 				local candidates: { string } = {}
 				for _, id in namedRefs do
@@ -554,6 +571,19 @@ function source.parse(code: string, library: Library): Types.Document
 				take "use"
 				take ")"
 				take "return"
+				if peek() == "assert" then
+					take "assert"
+					take "("
+					take "use"
+					take "("
+					take "refs"
+					take "."
+					local target = name()
+					take ")"
+					referenceMessage()
+					take "end"
+					return { node = target }, nil
+				end
 				if peek() ~= "use" and peek() ~= "tostring" then
 					local datatype = assert(value(), "A datatype formula returns a constructor")
 					assert(type(datatype.literal) == "table", "A datatype formula returns components")

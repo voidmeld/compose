@@ -725,7 +725,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		local target = property.node
 		if target ~= nil then
-			return `refs.{target}`
+			return returning("use", `assert(use(refs.{target}), "Node reference is not captured")`, depth)
 		end
 		local stateId = property.state
 		if stateId ~= nil then
@@ -746,7 +746,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				read = `use(props.{source})`
 			end
 			return `function(use)\n{tabs(depth + 1)}local chosen = named[{read}]\n`
-				.. `{tabs(depth + 1)}return if chosen then use(chosen) else nil\n{tabs(depth)}end`
+				.. `{tabs(depth + 1)}return assert(if chosen then use(chosen) else nil, "Node reference is not captured")\n{tabs(
+					depth
+				)}end`
 		end
 		local current, input, item, output, token =
 			property.literal, property.input, property.item, property.output, property.token

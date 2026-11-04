@@ -1019,8 +1019,38 @@ describe("Compose Design documents", function()
 			true
 		)
 		expect(string.find(code, `capture(\n\t\t\t"{label}",\n\t\t\tUI.Label "Label"`, 1, true) ~= nil):toBe(true)
-		expect(string.find(code, `target = refs.{label},`, 1, true) ~= nil):toBe(true)
+		expect(string.find(code, `assert(use(refs.{label}), "Node reference is not captured")`, 1, true) ~= nil):toBe(
+			true
+		)
 		expect(Design.parse(code, library)):toEqual(value)
+	end)
+
+	it("reads forward captures after construction and rejects uncaptured node references", function()
+		local value = Design.document.new("Forward", library, "Stack")
+		local flash, label
+		value, flash = Design.document.insert(value, library, "n1", "Flash")
+		value, label = Design.document.insert(value, library, "n1", "Label")
+		value = Design.document.change(value, library, flash, "target", { node = label })
+		local root = builtNode(Design.render(value, library))
+		expect(assert(root.children[1].props.target.node):peek()):toBe(root.children[2])
+		local missing = builtNode(Design.render(value, library, {
+			exclude = function(node: Design.Node): boolean
+				return node.id == label
+			end,
+		}))
+		expect(function()
+			assert(missing.children[1].props.target.node):peek()
+		end):toThrow "Node reference is not captured"
+		value = Design.document.setContract(
+			value,
+			library,
+			{ inputs = { { id = "selected", kind = "value", type = "string", required = true } }, outputs = {} }
+		)
+		value = Design.document.change(value, library, flash, "target", { nodeFrom = "selected", nodes = { label } })
+		local unknown = builtNode(Design.render(value, library, { inputs = { selected = "Missing" } }))
+		expect(function()
+			assert(unknown.children[1].props.target.node):peek()
+		end):toThrow "Node reference is not captured"
 	end)
 
 	it("names built nodes and names template rows from an item field", function()

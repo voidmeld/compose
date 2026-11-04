@@ -23,7 +23,7 @@ local library: Design.Library = {
 		"type Dimension = { x: number, y: number }",
 		"type Controls = {",
 		"\tBox: (string) -> ({ [number]: Target, Size: Core.Input<Dimension>? }) -> Target,",
-		"\tFlash: (string) -> ({ target: Core.ReadOnlyValue<Target?> | ((Core.Use) -> Target?) }) -> Target,",
+		"\tFlash: (string) -> ({ target: Core.Source<Target> }) -> Target,",
 		"\tPanel: (string) -> ({ content: () -> Target }) -> Target,",
 		"\tPages: (string) -> ({ from: Core.Source<{ Page }>, key: string, render: (Core.ReadOnlyValue<Page>) -> Target }) -> Target,",
 		"\tRows: (string) -> ({ from: Core.Source<{ Row }>, key: string, render: (Core.ReadOnlyValue<Row>) -> Target }) -> Target,",
