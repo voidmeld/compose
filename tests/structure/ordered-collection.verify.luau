@@ -143,6 +143,51 @@ describe("OrderedCollection recycle", function()
 		dispose()
 	end)
 
+	it("reuses surplus rows when fractional scrolling alternates the visible count", function()
+		local items = Compose.cell(rows(500))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
+		local viewport = Compose.cell(initialViewport)
+		local dispose, root, renders = mountRecycled(items, viewport)
+		for offset = 5, 205, 5 do
+			viewport:set { offset = offset, size = 30 }
+			world.settle()
+			expect(#world.host.childrenOf(root)):toBe(if offset % 10 == 0 then 3 else 4)
+			expect(renders()):toBe(4)
+			for _, node in world.host.childrenOf(root) do
+				expect(Compose.custodyOf(node)):toBe "owned"
+				expect(world.host.propertyOf(node, "Key")):toBe(world.host.propertyOf(node, "Id"))
+			end
+		end
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
+	it("bounds spare recycled rows by the retained count and releases them for an empty window", function()
+		local items = Compose.cell(rows(500))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 100 }
+		local viewport = Compose.cell(initialViewport)
+		local dispose, root, renders = mountRecycled(items, viewport)
+		expect(renders()):toBe(10)
+		viewport:set { offset = 0, size = 20 }
+		world.settle()
+		expect(#world.host.childrenOf(root)):toBe(2)
+		expect(world.host.liveNodes()):toBe(6)
+		viewport:set { offset = 0, size = 40 }
+		world.settle()
+		expect(#world.host.childrenOf(root)):toBe(4)
+		expect(renders()):toBe(10)
+		items:set {}
+		world.settle()
+		expect(world.host.childrenOf(root)):toEqual {}
+		expect(world.host.liveNodes()):toBe(2)
+		viewport:set { offset = 0, size = 20 }
+		items:set(rows(500))
+		world.settle()
+		expect(renders()):toBe(12)
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	it("keeps a row for a key that stays in the window", function()
 		local items = Compose.cell(rows(500))
 		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }

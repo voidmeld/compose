@@ -1049,6 +1049,7 @@ Population changes do not switch the retention policy.
 Pass `recycle` instead of `render` to reuse mounted rows.
 `recycle` receives the value, the placement and the key as readables.
 When a key leaves the window, Compose can reuse its row for an arriving key. It updates the row's readables instead of destroying and rebuilding the row.
+A recycled collection also keeps at most one retained window's worth of detached spare rows. This avoids remounting when fractional scrolling changes the visible count. An empty window releases every spare. Spare rows retain their subscriptions until reused or released.
 A key that stays in the window keeps its row.
 Use `recycle` only when the row reads its key and value through these readables and keeps no state that belongs to one key.
 Pass exactly one of `render` and `recycle`.
