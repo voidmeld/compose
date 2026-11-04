@@ -177,6 +177,14 @@ The editor and game thus use the same version.
 Without a package kit, it uses the built-in Roblox library.
 See [DesignEditor.kit](api.md#designeditorkit).
 
+## Prompt and compare
+
+Provide `prompt` with the source path and a submission callback to enable the request box beneath the canvas. Select a node and describe the change. The callback receives a stable snapshot of its path, props, token references and active frame. Its provider owns native capture, authentication, agent invocation and scoped source writes. The source link imports the result.
+
+Ask for two or three variants, or set the variant count. Returned drafts render side by side in independent read-only sessions on the requested device. Choosing a draft calls the provider's pick callback. Discarding releases it without saving. Canonical selection, history and source stay in the original session.
+
+Provide `theme` to expose shared colour, type and spacing fields. Reactive field readers display current token values; the writer persists changes and updates the token inputs used by each frame. A prompt provider can also expose the Theme request scope. These interfaces are in the [API reference](api.md#designeditorcreate).
+
 ## Vendor the module tree
 
 Keep `core`, `design` and `design-editor` as siblings.
