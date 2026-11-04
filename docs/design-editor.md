@@ -127,6 +127,12 @@ Owned geometry, emitters, lights and beams then use the normal world renderer an
 Closing releases the preview geometry and restores the borrowed camera's frame, focus, field of view and type.
 Without a scene target, the embedded ViewportFrame remains suitable for geometry inspection;
 its rendering limits do not establish an in-world appearance match.
+Use a named `Preview` for the host's Lighting/Atmosphere presets. Its `select` callback applies the same
+settings used in the running scene, through the host. The editor applies the initial choice before
+building frames. Keep materials, textures and effects in the shared Design and library; `Beam` accepts
+`attachment0` and `attachment1` node references, including forward references. Attachment children
+remain attached. Beam references connect on the next host frame, after the complete tree exists.
+`Guides` with `enabled = false` removes grid and selection helpers from captures without hiding the Design.
 The 3D `Pattern` control plans its rows with [geometric patterns](../src/design/patterns.md).
 Fit runs once on the next host frame.
 The stage and scene APIs can request another fit.
@@ -160,16 +166,65 @@ Profiles include aspect, native GUI insets, cutouts, safe area and camera field 
 
 Supply `Workspace.frame(device, scale)` to build each frame's library using the same layout sources as the game. A shared viewport cell cannot represent simultaneous frames. Frame-local sources resolve at the profile's full logical resolution; zoom scales their display. Native measurements used for layout must normalize by `scale`.
 
+The **Actual size** control sets the current UI frame to one logical pixel per host GUI pixel. Each device
+remembers this mode across device switches, grid changes and editor resizing. **Fit size** returns that
+frame to fitting the available room. Fit clears the mode on visible frames; a zoom clears it on the
+affected frame. This mode does not assert a physical display size or change the device's logical inputs.
+
+Supply `backdrop = function() return sceneView end` in the editor options or a frame context to mount
+an owned host view behind that frame's UI. It uses the same logical size and zoom as the screen. Build
+it with the runtime under the supplied owner; it is released with the frame, including on failed builds.
+Use a reactive backdrop builder and a named preview to switch it on and off. A host world camera or
+scene view remains responsible for native scene rendering.
+
+Use `previews = { { name = "State", choices = { "ordinary", "empty", "busy", "error" },
+initial = "ordinary", select = selectSample } }` to expose sample states. `selectSample` updates the
+same borrowed bindings used by the running screen. The initial callback runs once before rendering;
+later commands and toolbar clicks use the same callback. Names and choices must be nonempty and unique.
+A failed callback preserves the displayed choice. The callback owns rolling back any external mutation
+it made before raising. Host teardown restores borrowed environment settings.
+
 Screen roots project their authored ScreenInsets into the frame. Billboard roots project authored stud/offset sizes and world offsets against a centered, 12-stud camera fixture; pixel offsets keep their authored sizes. This is a layout fixture, with its camera declared independently from gameplay. Device grids apply to UI Designs. A 3D Design has one scene and ignores grid requests.
 
 ### Editor commands
 
-`editor.execute(request)` returns plain structured state for Read, Camera, Orbit, Zoom, Fit, Select,
-Change, Insert, Device, AllDevices, Preview, Undo, Redo, Duplicate, Delete, Copy, Paste, Wrap and Unwrap.
+`editor.execute(request)` returns plain structured state. Actions use these stable arguments:
+
+| Actions | Arguments after `action` |
+| --- | --- |
+| Read, Fit, Undo, Redo, Duplicate, Delete, Copy, Paste, Wrap, Unwrap, Export, Import, DiscardDrafts | none |
+| Camera | `preset`: `fit`, `eye-height`, `approach-20`, `close-up`, `top-down` |
+| Orbit | finite `yaw`, `pitch` in degrees |
+| Zoom | finite positive `scale`, optional cursor `around = { X, Y }` |
+| Pan | finite `x`, `y` in host GUI pixels, relative to the current view |
+| ActualSize, AllDevices, Guides | `enabled`: boolean; ActualSize is UI-only, Guides is 3D-only |
+| Select | `ids`: node IDs; an empty list clears selection |
+| SelectRelative | `direction`: `parent`, `child`, `next`, `previous` |
+| Change | `field`, optional `value`: a Design.Value; omit to clear |
+| ChangeMany | `changes`: map of fields to Design.Value |
+| Insert, Content | `kind`; Content also takes `field` |
+| Rename, Tag, Bind | `name`, optional `tags`, optional `binding`, respectively |
+| Move | `id`, `destination`, optional `before` sibling index |
+| Shift | `step`: sibling offset |
+| Hide, Lock | `id` and `hidden` or `locked`: boolean |
+| Contract, Replace | `contract`: Design.Contract or `document`: Design.Document, respectively |
+| Device | `id`: profile ID |
+| Preview | `name`, `choice` |
+| TextSize | `size`: 15, 17 or 19 |
+| Theme, ThemeValue | `opened`: boolean, or token `id` and `value`, respectively |
+| Play | `sequence`: sequence ID |
+| Prompt | `text`, optional `count`: 1, 2 or 3, optional `theme`: boolean |
+| ChooseDraft | `index`: one-based draft index |
+
 The commands use the same session, camera and preview callbacks as the visible controls.
 Supply `identity = { commit = commit, path = sourcePath }` to bind results to a source revision.
-Results include the selected nodes, current camera, device and named preview choices; failures include
-the problem and the next Read command. The library writes no files itself; the host reports its actual
+Results include `ok`, `action`, `design`, optional source identity, `selection`, `camera`, active `device`,
+available `devices`, `allDevices`, `actualSize`, `zoom`, chrome `textSize`, current `previews` and available
+`previewChoices`. Export also returns `source`. Prompt operations are scheduled; `prompt` reports
+`busy`, `drafts` and `status` on subsequent Read calls. A rejected session edit returns `ok = false`, as
+does a raised callback; failures include `problem` and the next Read command. Read can return an existing
+session problem while succeeding. Theme writes validate the same token ranges as the inspector.
+The library writes no files itself (`files` is empty); the host reports its actual
 source writes and named native captures. The host also owns open, capture and close commands.
 
 ```luau
@@ -262,3 +317,12 @@ The native cases are `design-editor-edits-and-outlines` and `design-scene-render
 They use the same public package.
 The CPU gate checks their types, but does not run native rendering or input.
 Run them with the [engine verification guide](../verification/roblox/README.md).
+
+The disposable [preview comparison fixture](../studio/design/preview.luau) has `editor-3d`, `game-3d`,
+`editor-ui` and `game-ui` cases. Run each separately with
+`lute run .lute/dependencies/verify/tools/run.luau --entry studio/design/preview.luau --host studio --context Client --case editor-3d --capture --deadline 120 --output .worker-tmp/native`.
+It leaves the fixture visible until its owned Studio closes so the final capture contains the tested frame.
+The game cases mount the same Design directly using the editor's recorded camera or UI bounds. Compare
+the artboard regions recorded in `region.txt`; chrome and selection outlines are editor-only. UI checks
+cycle every sample state, with the final capture showing busy. Particles remain time-dependent between
+captures. These generic fixtures do not certify an adopter's screens, assets or physical devices.

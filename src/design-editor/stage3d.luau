@@ -32,6 +32,9 @@ export type Scene = {
 	preset: Compose.ReadOnlyValue<string>,
 	setCamera: (preset: Preset) -> (),
 	orbit: (yaw: number, pitch: number) -> (),
+	pan: (offset: UI.Point) -> (),
+	play: (sequence: string) -> (),
+	guides: (enabled: boolean) -> (),
 	readCamera: () -> CameraState,
 	reframe: () -> (),
 	dispose: () -> (),
@@ -173,6 +176,7 @@ return function(ui: UI.UI)
 		end
 		local runtime = ui.runtime
 		local stopDesign: (() -> ())? = nil
+		local players: { [string]: Design.Player } = {}
 		local yaw, pitch, distance, focus = math.rad(35), math.rad(-28), 28, { X = 0, Y = 1, Z = 0 }
 		local zoom = Compose.cell(1)
 		local preset = Compose.cell "fit"
@@ -366,6 +370,9 @@ return function(ui: UI.UI)
 						inputs = options.inputs,
 						bindings = options.bindings,
 						slots = options.slots,
+						players = function(made: { [string]: Design.Player })
+							players = made
+						end,
 						token = options.token,
 						resolveToken = options.resolveToken,
 						decorate = function(node: Design.Node, subject: unknown)
@@ -506,6 +513,30 @@ return function(ui: UI.UI)
 			assert(scale > 0 and scale < math.huge, "Zoom requires a finite positive scale")
 			distance = math.clamp(28 / math.max(scale, 0.005), 2, MAX_DISTANCE)
 			preset:set "custom"
+			aim()
+		end
+		local function pan(offset: UI.Point)
+			assert(
+				offset.X == offset.X
+					and offset.Y == offset.Y
+					and math.abs(offset.X) < math.huge
+					and math.abs(offset.Y) < math.huge,
+				"Pan requires finite pixel offsets"
+			)
+			preset:set "custom"
+			local fullSize = dimensions()
+			local scale = distance
+				* 2
+				* math.tan(math.rad(ui.number(camera, "FieldOfView")) / 2)
+				/ math.max(fullSize.Y, 1)
+			local frame = ui.get(camera, "CFrame")
+			focus = Math.vadd(
+				focus,
+				Math.vadd(
+					Math.vscale(ui.xyz(frame, "RightVector"), -offset.X * scale),
+					Math.vscale(ui.xyz(frame, "UpVector"), offset.Y * scale)
+				)
+			)
 			aim()
 		end
 		local UserInputService = ui.service "UserInputService"
@@ -704,22 +735,8 @@ return function(ui: UI.UI)
 				ui.set(marquee, "Size", ui.values.udim2(0, math.abs(delta.X), 0, math.abs(delta.Y)))
 				ui.set(marquee, "Visible", true)
 			elseif active.kind == "pan" then
-				preset:set "custom"
-				local fullSize = dimensions()
-				local scale = distance
-					* 2
-					* math.tan(math.rad(ui.number(camera, "FieldOfView")) / 2)
-					/ math.max(fullSize.Y, 1)
-				local frame = ui.get(camera, "CFrame")
-				focus = Math.vadd(
-					focus,
-					Math.vadd(
-						Math.vscale(ui.xyz(frame, "RightVector"), -delta.X * scale),
-						Math.vscale(ui.xyz(frame, "UpVector"), delta.Y * scale)
-					)
-				)
+				pan(delta)
 				active.from = point
-				aim()
 			else
 				local axis, origin, start = active.axis, active.origin, active.start
 				local selected = nodes[session.selected:peek()]
@@ -815,6 +832,14 @@ return function(ui: UI.UI)
 			preset = preset,
 			setCamera = setCamera,
 			orbit = orbit,
+			pan = pan,
+			play = function(sequence: string)
+				assert(players[sequence], "Unknown Design sequence").play()
+			end,
+			guides = function(enabled: boolean)
+				ui.set(guides, "Parent", if enabled then world else nil)
+				ui.set(gizmo, "Parent", if enabled then world else nil)
+			end,
 			reframe = function()
 				local chosen = preset:peek()
 				if
@@ -849,6 +874,8 @@ return function(ui: UI.UI)
 				end
 				release()
 				restoreCamera()
+				ui.destroy(guides)
+				ui.destroy(gizmo)
 				ui.destroy(world)
 				ui.destroy(viewport)
 			end,

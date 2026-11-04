@@ -14,6 +14,7 @@ export type Context = {
 	resolveToken: ((string) -> Design.Resolved)?,
 	bindings: { [string]: Design.Resolved }?,
 	slots: { [string]: () -> unknown }?,
+	backdrop: (() -> unknown)?,
 	dispose: (() -> ())?,
 }
 export type Frame = {
@@ -22,6 +23,7 @@ export type Frame = {
 	stage: Stage.Stage?,
 	scene: Stage3D.Scene?,
 	scale: Compose.Value<number>,
+	actualSize: Compose.Value<boolean>,
 }
 export type Canvas = {
 	root: Compose.Node,
@@ -34,6 +36,7 @@ export type Canvas = {
 	showAll: (enabled: boolean) -> (),
 	fit: () -> (),
 	zoomTo: (scale: number, around: UI.Point?) -> (),
+	actualSize: (enabled: boolean) -> (),
 	dispose: () -> (),
 }
 export type Options = Context & {
@@ -73,6 +76,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		for _, entry in entries do
 			if all:peek() or entry == current() then
 				local view = entry.stage or entry.scene
+				entry.actualSize:set(false)
 				assert(view).fit()
 			end
 		end
@@ -100,7 +104,12 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 				if entry.scene then
 					entry.scene.reframe()
 				elseif all:peek() or entry == current() then
-					assert(entry.stage).fit()
+					local stage = assert(entry.stage)
+					if entry.actualSize:peek() then
+						stage.zoomTo(1)
+					else
+						stage.fit()
+					end
 				end
 			end
 		end)
@@ -139,7 +148,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		local body = Theme.frame "DeviceCanvas"
 		Theme.place(body, frame, ui.values.udim2(1, 0, 1, -header), ui.values.udim2(0, 0, 0, header))
 		local library = Projection(ui, context.library or session.library, device)
-		local entry: Frame = { device = device, root = frame, scale = scale }
+		local entry: Frame = { device = device, root = frame, scale = scale, actualSize = Compose.cell(false) }
 		if library.space == "3d" then
 			entry.scene = Stage3D(ui)(session, body, {
 				target = options.scene,
@@ -155,6 +164,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 				readOnly = options.readOnly,
 				library = library,
 				size = { X = device.size.X, Y = device.size.Y },
+				backdrop = context.backdrop or options.backdrop,
 				compact = #options.devices > 1,
 				bindings = context.bindings or options.bindings,
 				token = context.token or options.token,
@@ -190,6 +200,9 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 			for index, entry in entries do
 				local view = assert(entry.stage or entry.scene)
 				local value = use(view.zoom)
+				if value ~= 1 then
+					entry.actualSize:set(false)
+				end
 				if entry.stage then
 					entry.scale:set(value)
 				end
@@ -242,6 +255,17 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		fit = fit,
 		zoomTo = function(value: number, around: UI.Point?)
 			assert(current().stage or current().scene).zoomTo(value, around)
+			current().actualSize:set(false)
+		end,
+		actualSize = function(enabled: boolean)
+			local entry = current()
+			local stage = assert(entry.stage, "ActualSize requires a UI Design")
+			if enabled then
+				stage.zoomTo(1)
+			else
+				stage.fit()
+			end
+			entry.actualSize:set(enabled)
 		end,
 		dispose = function()
 			cancelFit()
