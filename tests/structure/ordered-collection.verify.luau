@@ -276,6 +276,102 @@ describe("OrderedCollection", function()
 		world = Support.world()
 	end)
 
+	it("composes arrival stagger and removal motion from sequences and presence", function()
+		local items = Compose.cell(rows(3))
+		local shown = { r1 = Compose.cell(true), r2 = Compose.cell(true), r3 = Compose.cell(true) }
+		local opacity: { [string]: Compose.Value<number> } = {}
+		local content: { [string]: Compose.Node } = {}
+		local dispose, root = world.runtime.mount(function()
+			return world.create "Frame" {
+				Compose.OrderedCollection {
+					from = items,
+					key = idOf,
+					render = function(_, placement, key)
+						local progress = Compose.cell(0)
+						opacity[key] = progress
+						return world.create "Row" {
+							Compose.presence(shown[key], function()
+								world.runtime.sequence {
+									steps = {
+										{ wait = (placement:peek().index - 1) * 0.1 },
+										{
+											tween = { seconds = 0.2 },
+											sample = function(value)
+												progress:set(value)
+											end,
+										},
+									},
+								}
+								local node = world.create "Content" {
+									Opacity = function(use)
+										return use(progress)
+									end,
+								}
+								content[key] = node
+								return node
+							end, {
+								exit = function()
+									return world.runtime.sequence {
+										steps = {
+											{
+												tween = { seconds = 0.2 },
+												sample = function(value)
+													progress:set(1 - value)
+												end,
+											},
+											{
+												run = function()
+													items:update(function(previous)
+														local nextRows: { Row } = {}
+														for _, row in previous do
+															if row.id ~= key then
+																table.insert(nextRows, row)
+															end
+														end
+														return nextRows
+													end)
+												end,
+											},
+										},
+									}
+								end,
+							}),
+						}
+					end,
+				},
+			}
+		end, world.root)
+		world.host.step(0.1)
+		world.settle()
+		expect(opacity.r1:peek()):toBeCloseTo(0.5, 1e-9)
+		expect(opacity.r2:peek()):toBe(0)
+		expect(opacity.r3:peek()):toBe(0)
+		world.host.step(0.3)
+		world.settle()
+		expect(opacity.r3:peek()):toBe(1)
+		shown.r2:set(false)
+		world.settle()
+		world.host.step(0.1)
+		world.settle()
+		expect(opacity.r2:peek()):toBeCloseTo(0.5, 1e-9)
+		expect(world.host.isAlive(content.r2)):toBe(true)
+		expect(world.host.childrenOf(root)):toHaveLength(3)
+		world.host.step(0.1)
+		world.settle()
+		expect(world.host.isAlive(content.r2)):toBe(false)
+		expect(world.host.childrenOf(root)):toHaveLength(2)
+		expect(world.host.isAlive(content.r1)):toBe(true)
+		expect(world.host.isAlive(content.r3)):toBe(true)
+		shown.r1:set(false)
+		world.settle()
+		dispose()
+		world.host.step(1)
+		world.settle()
+		expect(items:peek()):toHaveLength(2)
+		expect(world.host.counts().frameListeners):toBe(0)
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	it("builds each row's child on every mount of a reused collection directive", function()
 		local renders = 0
 		local collection = Compose.OrderedCollection {

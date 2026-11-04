@@ -1054,6 +1054,8 @@ A key that stays in the window keeps its row.
 Use `recycle` only when the row reads its key and value through these readables and keeps no state that belongs to one key.
 Pass exactly one of `render` and `recycle`.
 
+Collections reconcile source membership immediately. For arrival stagger, start a sequence in the row builder using its placement index as the delay. For removal motion, keep the row record in the source while `presence` runs its exit, then remove the record when that motion completes. The [collection motion specification](../tests/structure/ordered-collection.verify.luau) exercises this composition and cancellation during teardown.
+
 `layout` accepts a static options table, a cell or formula that holds that table, or a body that takes `use` and returns it.
 The options are `kind` (`"list"` or `"grid"`), `columns`, `itemSize`, `gap`, `crossSize` and `crossGap`. For example:
 
