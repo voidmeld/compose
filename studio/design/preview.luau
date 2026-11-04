@@ -70,7 +70,7 @@ local function run(context: Verify.Context, direct: boolean, uiDesign: boolean)
 					BackgroundColor3 = Color3.fromRGB(18, 20, 26),
 					Ambient = Color3.fromRGB(100, 110, 140),
 					LightColor = Color3.fromRGB(255, 220, 180),
-					CurrentCamera = sceneCamera,
+					CurrentCamera = Compose.static(sceneCamera),
 					sceneCamera,
 					runtime.constructors.Part {
 						Anchored = true,
