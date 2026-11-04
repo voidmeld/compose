@@ -208,6 +208,16 @@ local function markStale(producer: Node, state: number)
 			else
 				local current = consumer.state or CLEAN
 				local kind = consumer.kind
+				if kind == 1 and current == CLEAN then
+					consumer.state = state
+					if following == nil then
+						source = consumer
+					else
+						markStale(consumer, CHECK)
+					end
+					edge = following
+					continue
+				end
 				local retry = if kind == 1 or kind == 2 then current == RETRY else consumer.retry
 				if current < state or retry then
 					if retry and kind ~= 1 and kind ~= 2 then
@@ -303,9 +313,10 @@ end
 
 local function use<T>(value: Types.ReadOnlyValue<T>): T
 	local frame = evaluationCache.frame
+	local running = coroutine.running()
 	local consumer = if frame ~= nil
 			and frame.order > 0
-			and evaluationCache.thread == coroutine.running()
+			and evaluationCache.thread == running
 		then frame.consumer
 		else Evaluation.context()
 	if consumer == nil then
@@ -323,7 +334,7 @@ local function use<T>(value: Types.ReadOnlyValue<T>): T
 		end
 		local update = node.refresh
 		if update then
-			update(node)
+			update(node, running)
 		end
 		return Nodes.readCached(value)
 	end
@@ -332,8 +343,10 @@ local function use<T>(value: Types.ReadOnlyValue<T>): T
 	if edge ~= nil and rawequal(edge[1], value) then
 		consumer.reads = following
 	else
-		edge = consumer[at]
-		if edge == nil or not rawequal(edge[1], value) then
+		local previous = consumer[at]
+		if previous ~= nil and rawequal(previous[1], value) then
+			edge = previous
+		else
 			if type(value) ~= "table" or node.version == nil then
 				return notANode("use", value)
 			end
@@ -346,11 +359,9 @@ local function use<T>(value: Types.ReadOnlyValue<T>): T
 	end
 	local update = if node.state ~= CLEAN then node.refresh else nil
 	if update ~= nil then
-		update(node)
+		update(node, running)
 	end
-	if edge ~= nil then
-		edge.version = node.version
-	end
+	edge.version = node.version
 	local cached = value.cache
 	if cached == nil then
 		return Nodes.readCached(value)

@@ -44,7 +44,7 @@ FORMULA.kind = 1
 FORMULA.released = false
 FORMULA.retry = false
 
-function FORMULA.refresh(self: Node)
+function FORMULA.refresh(self: Node, thread: thread?)
 	local state = self.state
 	if state == RELEASED then
 		disposed()
@@ -52,6 +52,7 @@ function FORMULA.refresh(self: Node)
 	if state == CLEAN then
 		return
 	end
+	local running = thread or coroutine.running()
 	if state == CHECK then
 		self.state = RETRY
 		local moved = false
@@ -62,7 +63,7 @@ function FORMULA.refresh(self: Node)
 				if producer ~= nil then
 					local update = if producer.state ~= CLEAN then producer.refresh else nil
 					if update ~= nil then
-						update(producer)
+						update(producer, running)
 					end
 					if producer.version ~= edge.version then
 						moved = true
@@ -79,7 +80,6 @@ function FORMULA.refresh(self: Node)
 
 	self.state = if self.state == RELEASED then RELEASED else CLEAN
 	local body = self.body or none
-	local running = coroutine.running()
 	local cached = if running == evaluationCache.thread then evaluationCache.frame else nil
 	local current: Evaluation.Evaluation = if cached ~= nil then cached else Evaluation.frame()
 	local previousConsumer, previousOrder = current.consumer, current.order
@@ -190,7 +190,7 @@ local function cutoff(self: Node)
 		return
 	end
 	local before = self.version
-	local ok = pcall(FORMULA.refresh, node)
+	local ok = pcall(FORMULA.refresh, node, nil)
 	if not ok or self.version ~= before then
 		Graph.markStale(self, Graph.DIRTY)
 	end
