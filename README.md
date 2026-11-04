@@ -26,19 +26,15 @@ Use this page to find a task. Each linked page gives the details for that task.
 | Plan repeated 3D parts with Pattern | [Geometric patterns](src/design/patterns.md) |
 | Generate content, layouts and project trees | [Build-time authoring](authoring/README.md) |
 | Measure time and memory | [Benchmarks](docs/benchmarks.md) |
-| Read the library comparison | [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) |
 | Store local measurements | [Local output](bench/results/README.md) |
 | Run checks in Roblox Studio | [Engine verification](verification/roblox/README.md) |
 | Use the consumer skill | [Compose skill](.agents/skills/compose/SKILL.md) |
-| Find skill API links | [Skill API route](.agents/skills/compose/references/api.md) |
-| Find skill lifetime links | [Skill ownership route](.agents/skills/compose/references/ownership.md) |
-| Find skill host and build links | [Skill guide routes](.agents/skills/compose/references/consumer-guides.md) |
 | Edit a design source module | [Design source](.agents/skills/compose/references/design.md) |
 | Change this repository | [Maintainer guide](AGENTS.md) |
 
 ## Performance
 
-The [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository compares Compose with other Roblox scene composition libraries. It measures each library as the library ships and checks that all libraries produce the same result before it measures time. See its [results](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) and its [method](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/method.md).
+The [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository owns library comparisons: [results](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/headless-results.md) and [method](https://github.com/voidmeld/luau-library-benchmarks/blob/main/docs/scene-composition/method.md).
 
 This repository keeps the paired performance check. It compares each change with its base on the same runner. See [benchmarks](docs/benchmarks.md).
 

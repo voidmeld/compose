@@ -138,8 +138,7 @@ The run writes two files to the output directory.
 CPU proof of core does not establish native rendering, physics, networking, device input or played quality.
 
 `lute run bench/primitives.luau` measures the runtime primitives through Verify benchmarks, with 10 warmup samples and 40 measured samples of 200 operations. Setup and disposal are outside timing.
-One Windows Lute run recorded p50/p95 microseconds per notification or test-host frame. Observation with 100 holders of one property measured 0.203/0.337. A changing settled snapshot measured 0.480/0.687. A one-second clock with one subscriber measured 0.447/0.605. A sequence with one active tween track measured 1.763/2.401.
-These are absolute microbenchmarks, including fake-host dispatch, with no native rendering or speedup claim. Re-run for the current machine and revision.
+These microbenchmarks include fake-host dispatch. Re-run for the current machine and revision; they do not prove native rendering or speedup.
 The command stores raw Verify samples and source/environment context in `bench/results/primitives`; an optional first argument chooses another evidence directory.
 Separate Verify cases count subscriptions and publications. One hundred observation holders share one property connection. Mixed active frame work shares one native listener. Settled, completed, cancelled and unobserved work keeps no listener. The one-second clock test observes one publication across four quarter-second frames. It performs no reactive writes between intervals.
 Before you update the framework pin of a consumer, verify the affected consumers.

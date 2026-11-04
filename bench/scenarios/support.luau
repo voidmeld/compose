@@ -1,6 +1,6 @@
 --!strict
 
-local Environment = require "../cost-model"
+local Plain = require "../workloads/plain-support"
 
 export type Item = {
 	id: number,
@@ -71,36 +71,7 @@ local function entities(count: number, prefix: string): { Entity }
 	return made
 end
 
-local function instances(context: { env: Environment.Environment }): Environment.InstanceFactory
-	return context.env.globals.Instance
-end
-
-local function destroyAll(nodes: { Environment.Instance })
-	for index = #nodes, 1, -1 do
-		local node = nodes[index]
-		if node ~= nil then
-			node:Destroy()
-			nodes[index] = nil
-		end
-	end
-end
-
-local function fill(
-	context: { env: Environment.Environment },
-	parent: Environment.Instance,
-	count: number,
-	kind: string,
-	made: { Environment.Instance },
-	configure: (Environment.Instance, number) -> ()
-)
-	local Instance = instances(context)
-	for index = 1, count do
-		local node = Instance.new(kind)
-		configure(node, index)
-		node.Parent = parent
-		table.insert(made, node)
-	end
-end
+local instances = Plain.instances
 
 local function sortKey(item: Item, mode: string): string
 	if mode == "name" then
@@ -123,8 +94,7 @@ return {
 	items = items,
 	entities = entities,
 	instances = instances,
-	destroyAll = destroyAll,
-	fill = fill,
+	destroyAll = Plain.destroyAll,
 	sortKey = sortKey,
 	matches = matches,
 	KINDS = KINDS,

@@ -110,13 +110,8 @@ Compose does not choose that construction order.
 
 ## Testing a scene with no engine
 
-`RobloxEmulator.create(environment, Verify.environmentEngine(environment))` runs the real Roblox adapter against Verify's simulation.
-It provides class defaults, methods, signals, `IsA` relationships and virtual time.
-It can test Instance trees and 3D constructor scenes without Roblox.
-Follow the [emulator setup](api.md#robloxemulatorcreate) for the environment and runtime.
-
-The emulator adds operation logging and failure injection to the real adapter.
-The [emulator API](api.md#robloxemulatorcreate) gives its full surface.
+Use [the simulated engine](roblox.md#the-simulated-engine) to test Instance trees and 3D scenes without Roblox.
+The [emulator API](api.md#robloxemulatorcreate) defines setup, logging and failure injection.
 The [simulation limits](roblox.md#what-the-simulation-cannot-check) identify claims that need an engine.
 
 `environment.step(delta)` advances virtual time and fires `Heartbeat`.
