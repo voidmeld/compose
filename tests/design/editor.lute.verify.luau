@@ -1528,6 +1528,9 @@ describe("host-neutral design editor", function()
 
 	it("parses and emits a 3D design from the schema without a runtime", function()
 		local schema = DesignEditor.roblox3DSchema()
+		for name, kind in schema.kinds do
+			expect(kind.call):toBe("Design." .. name)
+		end
 		local document = Design.document.new("Fixture", schema, "Model")
 		local folder
 		document, folder = Design.document.insert(document, schema, "n1", "Folder")
