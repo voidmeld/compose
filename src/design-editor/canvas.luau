@@ -39,6 +39,7 @@ export type Options = Context & {
 	devices: { Devices.Profile },
 	device: string?,
 	frame: ((Devices.Profile, Compose.ReadOnlyValue<number>) -> Context)?,
+	readOnly: boolean?,
 }
 
 return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, options: Options): Canvas
@@ -144,6 +145,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 			table.insert(connections, ui.changed(body, "AbsoluteSize", resize))
 			resize()
 			entry.scene = Stage3D(ui)(session, resolution, {
+				readOnly = options.readOnly,
 				library = library,
 				fieldOfView = device.fieldOfView,
 				bindings = context.bindings or options.bindings,
@@ -153,6 +155,7 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 			})
 		else
 			entry.stage = Stage(ui)(session, body, {
+				readOnly = options.readOnly,
 				library = library,
 				size = device.size,
 				compact = #options.devices > 1,

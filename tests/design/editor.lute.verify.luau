@@ -10,6 +10,78 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("renders three isolated drafts and commits only the chosen source through its pick callback", function()
+		local w = Support.world()
+		local source = Design.emit(w.document, w.library)
+		local original = source
+		local notify: (() -> ())? = nil
+		local writes, picks = 0, 0
+		local variants: { { title: string, source: string } } = {}
+		for index = 1, 3 do
+			table.insert(variants, {
+				title = "Variant " .. index,
+				source = Design.emit(
+					Design.document.change(w.document, w.library, "n1", "width", { literal = 300 + index * 60 }),
+					w.library
+				),
+			})
+		end
+		local editor = w.mount {
+			link = {
+				read = function(): string
+					return source
+				end,
+				write = function(): boolean
+					writes += 1
+					return false
+				end,
+				watch = function(listener: () -> ()): () -> ()
+					notify = listener
+					return function()
+						notify = nil
+					end
+				end,
+			},
+			prompt = {
+				designPath = "designs/Sample.luau",
+				submit = function(request: DesignEditor.PromptRequest): DesignEditor.PromptResult
+					expect(request.count):toBe(3)
+					return {
+						message = "Choose a draft",
+						variants = variants,
+						pick = function(index: number): string
+							picks += 1
+							source = variants[index].source
+							assert(notify)()
+							return "Source updated"
+						end,
+					}
+				end,
+			},
+		}
+		w.find(editor.root, "PromptRequest").Text = "Make three variants with different spacing"
+		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		w.settle()
+		local comparison = w.find(editor.root, "DesignDrafts")
+		for index = 1, 3 do
+			local card = w.find(comparison, "Draft" .. index)
+			local rendered = w.find(card, w.document.root.name)
+			expect(w.number(w.read(w.read(rendered, "Size"), "X"), "Offset")):toBe(300 + index * 60)
+		end
+		expect(source):toBe(original)
+		expect(writes):toBe(0)
+		expect(editor.session.document:peek().root.props.width.literal):toBe(400)
+		w.fire(w.find(w.find(comparison, "Draft2"), "ChooseVariant"), "Activated")
+		w.settle()
+		expect(picks):toBe(1)
+		expect(source):toBe(variants[2].source)
+		expect(editor.session.document:peek().root.props.width.literal):toBe(420)
+		expect(writes):toBe(0)
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it("edits a shared theme value and updates every open device frame", function()
 		local w = Support.world()
 		w.library.kinds.Stack.fields.width.tokens = true

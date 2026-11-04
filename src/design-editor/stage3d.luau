@@ -23,6 +23,7 @@ export type Scene = {
 export type Options = {
 	library: Design.Library?,
 	fieldOfView: number?,
+	readOnly: boolean?,
 	accent: unknown?,
 	token: ((name: string) -> Design.Literal)?,
 	resolveToken: ((name: string) -> Design.Resolved)?,
@@ -461,6 +462,9 @@ return function(ui: UI.UI)
 			table.insert(connections, connection)
 		end
 		connect(ui.connect(viewport, "InputBegan", function(input: Compose.Node)
+			if options.readOnly then
+				return
+			end
 			local point = Theme.point(input)
 			if ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton2") then
 				drag = { kind = "orbit", from = point }

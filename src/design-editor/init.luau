@@ -22,6 +22,7 @@ export type Frame = Canvas.Frame
 export type FrameContext = Canvas.Context
 export type PromptRequest = Prompt.Request
 export type PromptOptions = Prompt.Options
+export type PromptResult = Prompt.Result
 export type ThemeValue = ThemePanel.Value
 export type ThemeField = ThemePanel.Field
 export type ThemeStore = ThemePanel.Store

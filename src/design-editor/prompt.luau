@@ -4,6 +4,7 @@ local Compose = require "../core"
 local Design = require "../design"
 local Devices = require "./devices"
 local Canvas = require "./canvas"
+local Drafts = require "./drafts"
 local UI = require "./ui"
 
 export type Segment = { id: string, name: string, kind: string }
@@ -15,8 +16,10 @@ export type Request = {
 	frame: Devices.Profile,
 	source: string,
 	request: string,
+	count: number,
 }
-export type Options = { designPath: string, submit: (Request) -> string, theme: ((Request) -> string)? }
+export type Result = string | Drafts.Draft
+export type Options = { designPath: string, submit: (Request) -> Result, theme: ((Request) -> string)? }
 
 local function snapshot(session: Design.Session, device: Devices.Profile, path: string, text: string): Request
 	local document = Design.document.copy(session.document:peek())
@@ -65,6 +68,8 @@ local function snapshot(session: Design.Session, device: Devices.Profile, path: 
 		end
 	end
 	table.sort(tokens)
+	local counted = string.gsub(string.gsub(string.lower(text), "%f[%a]two%f[%A]", "2"), "%f[%a]three%f[%A]", "3")
+	local count = tonumber(string.match(counted, "%f[%d]([23])%s+variants?%f[%A]")) or 1
 	return {
 		designPath = path,
 		nodePath = route,
@@ -73,10 +78,18 @@ local function snapshot(session: Design.Session, device: Devices.Profile, path: 
 		frame = device,
 		source = Design.emit(document, session.library),
 		request = text,
+		count = count,
 	}
 end
 
-local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas, parent: Compose.Node, options: Options)
+local function create(
+	ui: UI.UI,
+	session: Design.Session,
+	canvas: Canvas.Canvas,
+	parent: Compose.Node,
+	options: Options,
+	render: Drafts.Render
+)
 	local Theme = require "./theme"(ui)
 	local panel = Theme.frame("DesignPrompt", Theme.color.panel)
 	ui.set(panel, "AnchorPoint", ui.values.vector2(0, 1))
@@ -111,6 +124,26 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 	ui.set(status, "Size", ui.values.udim2(1, -176, 0, 32))
 	ui.set(status, "Parent", panel)
 	local disposed, busy = false, false
+	local draft: { dispose: () -> () }? = nil
+	local function clear()
+		if draft then
+			draft.dispose()
+			draft = nil
+		end
+		ui.set(canvas.root, "Visible", true)
+	end
+	local count = 1
+	local variants = Theme.button("PromptVariants", "1 variant")
+	ui.set(variants, "Position", ui.values.udim2(1, if options.theme then -360 else -256, 0, 100))
+	ui.set(variants, "Size", ui.values.udim2(0, 96, 0, 32))
+	ui.set(variants, "Parent", panel)
+	ui.set(status, "Size", ui.values.udim2(1, if options.theme then -384 else -280, 0, 32))
+	local countConnection = ui.connect(variants, "Activated", function()
+		if not busy then
+			count = count % 3 + 1
+			ui.set(variants, "Text", if count == 1 then "1 variant" else `{count} variants`)
+		end
+	end)
 	local theming = false
 	local scopeConnection: UI.Connection? = nil
 	if options.theme then
@@ -118,12 +151,13 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 		ui.set(scope, "Position", ui.values.udim2(1, -256, 0, 100))
 		ui.set(scope, "Size", ui.values.udim2(0, 96, 0, 32))
 		ui.set(scope, "Parent", panel)
-		ui.set(status, "Size", ui.values.udim2(1, -280, 0, 32))
 		scopeConnection = ui.connect(scope, "Activated", function()
 			if not busy then
 				theming = not theming
 				ui.set(scope, "Text", if theming then "Theme" else "Design")
 				ui.set(send, "Text", if theming then "Apply theme" else "Apply prompt")
+				ui.set(variants, "Visible", not theming)
+				ui.set(status, "Size", ui.values.udim2(1, if theming then -280 else -384, 0, 32))
 			end
 		end)
 	end
@@ -142,6 +176,8 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 			return
 		end
 		busy = true
+		clear()
+		request.count = if theming then 1 elseif request.count > 1 then request.count else count
 		local submit = if theming then assert(options.theme) else options.submit
 		ui.set(send, "Text", "Working...")
 		ui.set(status, "Text", "Capturing the selected frame")
@@ -155,7 +191,16 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 			end
 			busy = false
 			ui.set(send, "Text", if theming then "Apply theme" else "Apply prompt")
-			ui.set(status, "Text", if submitted then message else "Prompt failed; source preserved")
+			if submitted and type(message) == "table" then
+				local ok, result = pcall(Drafts, ui, parent, request.frame, message, render, clear)
+				if ok then
+					draft = result
+					ui.set(canvas.root, "Visible", false)
+				end
+				ui.set(status, "Text", if ok then message.message else "Draft preview failed; source unchanged")
+			else
+				ui.set(status, "Text", if submitted then message else "Prompt failed; source preserved")
+			end
 		end)
 	end)
 	local owner = Compose.createRootOwner(function()
@@ -173,7 +218,9 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 	return {
 		dispose = function()
 			disposed = true
+			clear()
 			connection:Disconnect()
+			countConnection:Disconnect()
 			if scopeConnection then
 				scopeConnection:Disconnect()
 			end

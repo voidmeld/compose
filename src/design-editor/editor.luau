@@ -179,7 +179,7 @@ return function(ui: UI.UI)
 		ui.set(root, "Parent", parent)
 		local devices = options.devices
 			or if options.stageSize then { Devices.custom("Canvas", options.stageSize) } else Devices.all
-		local view = Canvas(ui, session, center, {
+		local canvasOptions: Canvas.Options = {
 			devices = devices,
 			device = options.device,
 			frame = options.frame,
@@ -187,9 +187,27 @@ return function(ui: UI.UI)
 			token = options.token,
 			resolveToken = options.resolveToken,
 			slots = options.slots,
-		})
+		}
+		local view = Canvas(ui, session, center, canvasOptions)
 		local layers = Layers(ui)(session, left)
-		local prompt = if options.prompt then Prompt.create(ui, session, view, center, options.prompt) else nil
+		local prompt = if options.prompt
+			then Prompt.create(
+				ui,
+				session,
+				view,
+				center,
+				options.prompt,
+				function(source: string, device: Device, parent: Compose.Node): () -> ()
+					return Compose.withOwner(ui.owner, function(): () -> ()
+						local draft = Design.session(library, Design.parse(source, library))
+						draft.selectMany {}
+						local frame = table.clone(canvasOptions)
+						frame.devices, frame.device, frame.readOnly = { device }, device.id, true
+						return Canvas(ui, draft, parent, frame).dispose
+					end)
+				end
+			)
+			else nil
 		local libraryPanel = LibraryPanel(ui)(session, libraryBody)
 		local theme = if options.theme then ThemePanel.create(ui, libraryBody, options.theme) else nil
 		local inspector = Inspector(ui)(session, right, {
@@ -475,10 +493,10 @@ return function(ui: UI.UI)
 				for _, connection in connections do
 					connection:Disconnect()
 				end
-				view.dispose()
 				if prompt then
 					prompt.dispose()
 				end
+				view.dispose()
 				layers.dispose()
 				libraryPanel.dispose()
 				if theme then

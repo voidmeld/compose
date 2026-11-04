@@ -21,6 +21,7 @@ export type Options = {
 	size: UI.Point,
 	library: Design.Library?,
 	compact: boolean?,
+	readOnly: boolean?,
 	accent: unknown?,
 	token: ((name: string) -> Design.Literal)?,
 	resolveToken: ((name: string) -> Design.Resolved)?,
@@ -730,6 +731,9 @@ return function(ui: UI.UI)
 			table.insert(
 				surfaceInput,
 				ui.connect(parent, "InputBegan", function(input: Compose.Node)
+					if options.readOnly then
+						return
+					end
 					local middle = ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton3")
 					local spaced = ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1")
 						and ui.call(UserInputService, "IsKeyDown", ui.values.enum("KeyCode", "Space")) == true
@@ -786,6 +790,9 @@ return function(ui: UI.UI)
 			end
 		end
 		local began = ui.connect(overlay, "InputBegan", function(input: Compose.Node)
+			if options.readOnly then
+				return
+			end
 			if
 				ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "MouseButton1")
 				or ui.get(input, "UserInputType") == ui.values.enum("UserInputType", "Touch")
