@@ -247,7 +247,7 @@ return function(ui: UI.UI)
 			order: number,
 			container: Compose.Node,
 			primary: boolean,
-			run: () -> ()
+			run: () -> ...unknown
 		): Compose.Node
 			local button = chip(name, text, primary)
 			ui.set(button, "LayoutOrder", order)
@@ -257,7 +257,12 @@ return function(ui: UI.UI)
 			for _, connection in Theme.hover(button, rest, over, if primary then 0 else 1) do
 				table.insert(connections, connection)
 			end
-			table.insert(connections, ui.connect(button, "Activated", run))
+			table.insert(
+				connections,
+				ui.connect(button, "Activated", function()
+					run()
+				end)
+			)
 			ui.set(button, "Parent", container)
 			return button
 		end
@@ -332,7 +337,7 @@ return function(ui: UI.UI)
 		local context = ui.new "InputContext"
 		ui.set(context, "Name", "ComposeDesignShortcuts")
 		ui.set(context, "Sink", true)
-		local function bind(name: string, run: () -> (), keys: { { unknown } })
+		local function bind(name: string, run: () -> ...unknown, keys: { { unknown } })
 			local inputAction = ui.new "InputAction"
 			ui.set(inputAction, "Name", name)
 			for _, combo in keys do
