@@ -88,15 +88,10 @@ export type Runtime = {
 	borrow: (node: Node) -> Node,
 
 	motion: <T>(codec: Codec.Codec<T>) -> CoreTypes.Motion<T>,
-	spring: (
-		source: Types.Body<number>,
-		options: SpringOptions?
-	) -> (Types.ReadOnlyValue<number>, Types.ReadOnlyValue<boolean>),
+	spring: (source: Types.Body<number>, options: SpringOptions?) -> Types.ReadOnlyValue<number>,
 
-	tween: (
-		source: Types.Body<number>,
-		options: TweenOptions?
-	) -> (Types.ReadOnlyValue<number>, Types.ReadOnlyValue<boolean>),
+	tween: (source: Types.Body<number>, options: TweenOptions?) -> Types.ReadOnlyValue<number>,
+	running: <T>(value: Types.ReadOnlyValue<T>) -> Types.ReadOnlyValue<boolean>,
 	timeline: (options: TimelineOptions?) -> Timeline,
 	ramp: (initial: number, options: RampOptions?) -> Ramp<number>,
 	scheduler: (owner: Owner.Owner?) -> Scheduler,
@@ -559,18 +554,16 @@ local function createRuntime(host: Host.Host): Runtime
 		return created(options)
 	end
 
-	local function spring(
-		source: Types.Body<number>,
-		options: SpringOptions?
-	): (Types.ReadOnlyValue<number>, Types.ReadOnlyValue<boolean>)
+	local function spring(source: Types.Body<number>, options: SpringOptions?): Types.ReadOnlyValue<number>
 		return motionOf().spring(source, options)
 	end
 
-	local function tween(
-		source: Types.Body<number>,
-		options: TweenOptions?
-	): (Types.ReadOnlyValue<number>, Types.ReadOnlyValue<boolean>)
+	local function tween(source: Types.Body<number>, options: TweenOptions?): Types.ReadOnlyValue<number>
 		return motionOf().tween(source, options)
+	end
+
+	local function running<T>(value: Types.ReadOnlyValue<T>): Types.ReadOnlyValue<boolean>
+		return motionOf().running(value)
 	end
 
 	local function watch(_self: Runtime, body: (use: Types.Use) -> (), label: string?): Types.Dispose
@@ -605,6 +598,7 @@ local function createRuntime(host: Host.Host): Runtime
 		motion = typedMotion,
 		spring = spring,
 		tween = tween,
+		running = running,
 		timeline = timeline,
 		ramp = ramp,
 		scheduler = scheduler,

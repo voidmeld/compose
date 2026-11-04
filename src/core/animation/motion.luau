@@ -13,6 +13,7 @@ local Spring = require "./spring"
 local Types = require "../reactive/types"
 local cellModule = require "../reactive/cell"
 local watchModule = require "../reactive/watch"
+local Weak = require "../weak"
 
 export type ReducedMotion = CoreTypes.ReducedMotion
 
@@ -28,6 +29,19 @@ local DEFAULT_PERIOD = 0.5
 local DEFAULT_DAMPING = 1
 local DEFAULT_TOLERANCE = 1e-4
 local DEFAULT_SECONDS = 0.25
+
+local activity: { [unknown]: Types.ReadOnlyValue<boolean> } = {}
+Weak.keys(activity)
+
+local function running<V>(value: Types.ReadOnlyValue<V>): Types.ReadOnlyValue<boolean>
+	local signal = activity[value]
+	if signal == nil then
+		return Diagnostics.raise("animation/not-animated", "running needs an animated value", {
+			expected = "a spring, tween or ramp value",
+		})
+	end
+	return signal
+end
 
 local function framesOf(host: Host.Host, primitive: string): Host.Frames
 	local frames = host.frames
@@ -203,7 +217,7 @@ local function createMotion<T>(
 		source: Types.Body<T>,
 		settings: Settings,
 		reducedMotion: Types.Body<boolean>?
-	): (Types.ReadOnlyValue<T>, Types.ReadOnlyValue<boolean>)
+	): Types.ReadOnlyValue<T>
 		local frames = framesOf(host, primitive)
 		local owner = ownerOf(primitive)
 		local running = cellModule.cell(false)
@@ -234,6 +248,7 @@ local function createMotion<T>(
 					settings = settings,
 				}
 				state = created
+				activity[created.output] = running
 				Owner.holdSubject(owner, stop, settings)
 				return
 			end
@@ -304,13 +319,10 @@ local function createMotion<T>(
 		if state ~= nil then
 			output = state.output
 		end
-		return output, running
+		return output
 	end
 
-	local function spring(
-		source: Types.Body<T>,
-		options: SpringOptions?
-	): (Types.ReadOnlyValue<T>, Types.ReadOnlyValue<boolean>)
+	local function spring(source: Types.Body<T>, options: SpringOptions?): Types.ReadOnlyValue<T>
 		local period = if options ~= nil and options.period ~= nil then options.period else DEFAULT_PERIOD
 		local damping = if options ~= nil and options.damping ~= nil then options.damping else DEFAULT_DAMPING
 		if period <= 0 then
@@ -327,10 +339,7 @@ local function createMotion<T>(
 		}, policyOf(if options ~= nil then options.reducedMotion else nil, "spring"))
 	end
 
-	local function tween(
-		source: Types.Body<T>,
-		options: TweenOptions?
-	): (Types.ReadOnlyValue<T>, Types.ReadOnlyValue<boolean>)
+	local function tween(source: Types.Body<T>, options: TweenOptions?): Types.ReadOnlyValue<T>
 		local wanted: Duration = if options ~= nil and options.seconds ~= nil then options.seconds else DEFAULT_SECONDS
 		local settings: Settings = {
 			0,
@@ -376,7 +385,7 @@ local function createMotion<T>(
 		)
 	end
 
-	return { spring = spring, tween = tween, ramp = Ramp.createRamps(tween, ownerOf) }
+	return { spring = spring, tween = tween, running = running, ramp = Ramp.createRamps(tween, ownerOf) }
 end
 
 return {

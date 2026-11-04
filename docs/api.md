@@ -603,10 +603,11 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
 | `sequence(options)` | Owns a choreography of waits, callbacks, tweens, timelines and parallel groups. |
 
-`spring` and `tween` return the animated readable and a second boolean readable, `running`. The second readable is false initially, true while frame work is scheduled, and false after completion, reduced-motion snapping or owner disposal. Retargeting an active animation keeps it true. The typed methods from `motion(codec)` return the same pair.
+`running(value)` returns the boolean activity readable for a spring, tween or ramp value. It is false initially, true while frame work is scheduled, and false after completion, reduced-motion snapping or owner disposal. Retargeting an active animation keeps it true. Repeated queries return the same readable and need no active owner. A value that is not animated raises `animation/not-animated`. The typed methods from `motion(codec)` also expose `running(value)`.
 
 ```luau
-local opacity, running = runtime.tween(opacityTarget, { seconds = 0.25 })
+local opacity = runtime.tween(opacityTarget, { seconds = 0.25 })
+local running = runtime.running(opacity)
 ```
 
 A fragment can return a typed array of native nodes or a mixture of nodes and directives. Compose reads the array without changing it. Nil entries omit children.

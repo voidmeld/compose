@@ -22,17 +22,45 @@ local describe, it, expect = Test.describe, Test.it, Test.expect
 local FRAME = 1 / 60
 
 describe("shared motion frames", function()
+	it("queries the same activity readable without changing animation return arity", function()
+		local world = Support.world()
+		local value, owner = Support.owned(function()
+			expect(select(
+				"#",
+				world.runtime.tween(function()
+					return 0
+				end)
+			)):toBe(1)
+			return world.runtime.spring(function()
+				return 0
+			end)
+		end)
+		local running = world.runtime.running(value)
+		expect(world.runtime.running(value)):toBe(running)
+		expect(running:peek()):toBe(false)
+		expect(function()
+			world.runtime.running(Compose.cell(0))
+		end):toThrow "animation/not-animated"
+		Compose.owner.dispose(owner)
+		expect(world.runtime.running(value)):toBe(running)
+		expect(running:peek()):toBe(false)
+	end)
+
 	for _, primitive in { "spring", "tween" } do
 		it("exposes " .. primitive .. " activity through retargeting completion and disposal", function()
 			local world = Support.world()
 			local target = Compose.cell(0)
 			local owner = Compose.createOwner(world.runtime.reactor)
-			local value, running = Compose.withOwner(owner, function()
-				local animate = if primitive == "spring" then world.runtime.spring else world.runtime.tween
-				return animate(function(use)
+			local value = Compose.withOwner(owner, function()
+				local function source(use: Compose.Use): number
 					return use(target)
-				end)
+				end
+				if primitive == "spring" then
+					return world.runtime.spring(source)
+				end
+				return world.runtime.tween(source)
 			end)
+			local running = world.runtime.running(value)
 			local observer = Compose.createOwner(world.runtime.reactor)
 			local activity: { boolean } = {}
 			Compose.owner.watch(observer, function(use)
@@ -68,13 +96,17 @@ describe("shared motion frames", function()
 			local target = Compose.cell(0)
 			local reduced = Compose.cell(false)
 			local owner = Compose.createOwner(world.runtime.reactor)
-			local value, running = Compose.withOwner(owner, function()
-				local motion = world.runtime.motion(Compose.numberCodec)
-				local animate = if primitive == "spring" then motion.spring else motion.tween
-				return animate(function(use)
+			local motion = world.runtime.motion(Compose.numberCodec)
+			local value = Compose.withOwner(owner, function()
+				local function source(use: Compose.Use): number
 					return use(target)
-				end, { reducedMotion = reduced })
+				end
+				if primitive == "spring" then
+					return motion.spring(source, { reducedMotion = reduced })
+				end
+				return motion.tween(source, { reducedMotion = reduced })
 			end)
+			local running = motion.running(value)
 			target:set(10)
 			world.settle()
 			expect(running:peek()):toBe(true)
