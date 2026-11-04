@@ -75,7 +75,7 @@ return function(ui: UI.UI)
 	local Theme = require "./theme"(ui)
 	local color = Theme.color
 	local size = Theme.size
-	local LABEL = 112
+	local LABEL = 128
 	local GROUPS = { "Layout", "Auto layout", "Fill", "Text", "Image", "Interaction" }
 
 	local function describe(value: Design.Value?): string
@@ -370,7 +370,7 @@ return function(ui: UI.UI)
 					end
 				end
 			end
-			local header = block("Header", 56)
+			local header = block("Header", 72)
 			Theme.pad(header, size.gutter, size.gutter, 10, 10)
 			local badge = Theme.frame("Badge", color.accentSoft)
 			ui.set(badge, "Size", ui.values.udim2(0, 28, 0, 28))
@@ -390,24 +390,24 @@ return function(ui: UI.UI)
 			ui.set(name, "TextSize", size.title)
 			ui.set(name, "FontFace", Theme.font.bold)
 			ui.set(name, "Position", ui.values.udim2(0, 36, 0, 0))
-			ui.set(name, "Size", ui.values.udim2(1, -36, 0, 20))
+			ui.set(name, "Size", ui.values.udim2(1, -36, 0, 26))
 			ui.set(name, "Parent", header)
 			local kindLabel = Theme.label(node.kind, color.tertiary, size.small)
-			ui.set(kindLabel, "Position", ui.values.udim2(0, 44, 0, 20))
-			ui.set(kindLabel, "Size", ui.values.udim2(1, -44, 0, 16))
+			ui.set(kindLabel, "Position", ui.values.udim2(0, 44, 0, 26))
+			ui.set(kindLabel, "Size", ui.values.udim2(1, -44, 0, 24))
 			ui.set(kindLabel, "Parent", header)
 			local function section(title: string)
-				local frame = block(title, 36)
+				local frame = block(title, 40)
 				local rule = Theme.frame("Rule", color.divider)
 				ui.set(rule, "Size", ui.values.udim2(1, 0, 0, 1))
 				ui.set(rule, "Parent", frame)
 				local caption = Theme.label(title, color.text, size.small, Theme.font.bold)
 				ui.set(caption, "Position", ui.values.udim2(0, size.gutter, 0, 12))
-				ui.set(caption, "Size", ui.values.udim2(1, -2 * size.gutter, 0, 18))
+				ui.set(caption, "Size", ui.values.udim2(1, -2 * size.gutter, 0, 24))
 				ui.set(caption, "Parent", frame)
 			end
 			local function row(key: string, title: string): (Compose.Node, Compose.Node)
-				local frame = block(key, 32)
+				local frame = block(key, 40)
 				Theme.pad(frame, size.gutter)
 				local caption = Theme.label(title, color.secondary, size.small)
 				ui.set(caption, "Name", "Label")
