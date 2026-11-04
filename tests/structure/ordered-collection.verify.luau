@@ -167,6 +167,31 @@ describe("OrderedCollection recycle", function()
 		dispose()
 	end)
 
+	it("recycles the same bounded rows through repeated forward and backward scroll passes", function()
+		local items = Compose.cell(rows(500))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
+		local viewport = Compose.cell(initialViewport)
+		local dispose, root, renders = mountRecycled(items, viewport)
+		local before = table.clone(world.host.childrenOf(root))
+		world.host.resetCounts()
+		for _, direction in { 1, -1 } do
+			for step = 0, 40 do
+				local offset = if direction == 1 then step * 10 else (40 - step) * 10
+				viewport:set { offset = offset, size = 30 }
+				world.settle()
+				expect(renders()):toBe(3)
+				for _, node in world.host.childrenOf(root) do
+					expect(table.find(before, node) ~= nil):toBe(true)
+					expect(world.host.propertyOf(node, "Key")):toBe(world.host.propertyOf(node, "Id"))
+				end
+			end
+		end
+		expect(world.host.counts().createNode):toBe(0)
+		expect(world.host.counts().destroyNode):toBe(0)
+		dispose()
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	it("reuses every row when the order reverses", function()
 		local items = Compose.cell(rows(3))
 		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
