@@ -19,6 +19,7 @@ local extensionsModule: typeof(require "@self/extensions")? = nil
 local motionModule: typeof(require "./animation/motion")? = nil
 
 local WEAK_KEYS = table.freeze { __mode = "k" }
+local WEAK_ENTRIES = table.freeze { __mode = "kv" }
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
@@ -136,7 +137,9 @@ local function createRuntime(host: Host.Host): Runtime
 	local render = host.render
 	local nodeOwners: { [Node]: Owner.Owner } = {}
 	local protectedParents: { [Node]: boolean } = {}
-	setmetatable(nodeOwners, WEAK_KEYS)
+	local ownedCount = 0
+	local ownedPeak = 0
+	setmetatable(nodeOwners, WEAK_ENTRIES)
 	setmetatable(protectedParents, WEAK_KEYS)
 
 	local function requireOwner(operation: string): Owner.Owner
@@ -154,13 +157,31 @@ local function createRuntime(host: Host.Host): Runtime
 		return owner
 	end
 
-	local function destroyOwnedNode(subject: unknown)
+	local function destroyNode(subject: unknown, created: boolean)
 		if type(subject) ~= "table" and type(subject) ~= "userdata" then
 			return Diagnostics.raise("host/node-not-a-reference", "owned node is not a reference", {})
 		end
 		local node = subject
 		nodeOwners[node] = nil
 		protectedParents[node] = nil
+		if created then
+			ownedCount = math.max(0, ownedCount - 1)
+			if ownedCount * 4 <= ownedPeak then
+				local owners: { [Node]: Owner.Owner } = {}
+				local parents: { [Node]: boolean } = {}
+				ownedCount = 0
+				for target, owner in nodeOwners do
+					owners[target] = owner
+					parents[target] = protectedParents[target]
+					ownedCount += 1
+				end
+				setmetatable(owners, WEAK_ENTRIES)
+				setmetatable(parents, WEAK_KEYS)
+				nodeOwners = owners
+				protectedParents = parents
+				ownedPeak = ownedCount
+			end
+		end
 		Props.forget(node)
 		if tracked.dependents == 0 then
 			render.destroyNode(node)
@@ -173,6 +194,14 @@ local function createRuntime(host: Host.Host): Runtime
 		if not ok then
 			error(err, 0)
 		end
+	end
+
+	local function destroyOwnedNode(subject: unknown)
+		destroyNode(subject, true)
+	end
+
+	local function destroyAdoptedNode(subject: unknown)
+		destroyNode(subject, false)
 	end
 
 	local constructorKinds: { [unknown]: string } = {}
@@ -312,6 +341,8 @@ local function createRuntime(host: Host.Host): Runtime
 			local node = render.createNode(kind)
 			Nodes.markOwned(node)
 			nodeOwners[node] = owner
+			ownedCount += 1
+			ownedPeak = math.max(ownedPeak, ownedCount)
 			Owner.holdSubject(owner, destroyOwnedNode, node)
 			if inspecting.active then
 				inspector().node(owner, node, "owned")
@@ -491,7 +522,7 @@ local function createRuntime(host: Host.Host): Runtime
 	local function adopt(node: Node): Node
 		local loaded = extensionsModule or require "@self/extensions"
 		extensionsModule = loaded
-		return loaded.adopt(host, requireOwner, destroyOwnedNode, inspector, node)
+		return loaded.adopt(host, requireOwner, destroyAdoptedNode, inspector, node)
 	end
 
 	local function borrow(node: Node): Node

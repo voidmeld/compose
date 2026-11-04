@@ -33,6 +33,7 @@ return table.freeze {
 	"tests/lifecycle/ownership.verify.luau",
 	"tests/lifecycle/pool-contract.verify.luau",
 	"tests/lifecycle/pool.verify.luau",
+	"tests/lifecycle/retention.lute.verify.luau",
 	"tests/lifecycle/root-scope.verify.luau",
 	"tests/lifecycle/scheduler.verify.luau",
 	"tests/lifecycle/shared-frames.verify.luau",
