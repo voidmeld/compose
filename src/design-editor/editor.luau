@@ -9,6 +9,7 @@ local Devices = require "./devices"
 local Layers = require "./layers"
 local LibraryPanel = require "./library-panel"
 local Inspector = require "./inspector"
+local Prompt = require "./prompt"
 
 export type Editor = {
 	root: Compose.Node,
@@ -34,6 +35,7 @@ export type Options = {
 	slots: { [string]: () -> unknown }?,
 	onExport: ((source: string) -> ())?,
 	link: Design.LinkStore?,
+	prompt: Prompt.Options?,
 	runtime: Compose.Runtime,
 }
 
@@ -185,6 +187,7 @@ return function(ui: UI.UI)
 			slots = options.slots,
 		})
 		local layers = Layers(ui)(session, left)
+		local prompt = if options.prompt then Prompt.create(ui, session, view, center, options.prompt) else nil
 		local libraryPanel = LibraryPanel(ui)(session, libraryBody)
 		local inspector = Inspector(ui)(session, right, {
 			tokens = options.tokens,
@@ -462,6 +465,9 @@ return function(ui: UI.UI)
 					connection:Disconnect()
 				end
 				view.dispose()
+				if prompt then
+					prompt.dispose()
+				end
 				layers.dispose()
 				libraryPanel.dispose()
 				inspector.dispose()

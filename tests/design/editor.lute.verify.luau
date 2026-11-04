@@ -10,6 +10,67 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("snapshots the selected node and frame before a deferred prompt submission", function()
+		local w = Support.world()
+		w.library.kinds.Stack.fields.width.tokens = true
+		local requests: { DesignEditor.PromptRequest } = {}
+		local editor = w.mount {
+			devices = DesignEditor.devices.all,
+			prompt = {
+				designPath = "designs/Sample.luau",
+				submit = function(request: DesignEditor.PromptRequest): string
+					table.insert(requests, request)
+					return "Source updated"
+				end,
+			},
+		}
+		editor.session.select "n1"
+		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		editor.canvas.select "tv"
+		w.find(editor.root, "PromptRequest").Text = "Give this node more breathing room"
+		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		editor.session.change("width", { literal = 240 })
+		editor.canvas.select "phone-portrait"
+		w.settle()
+		expect(#requests):toBe(1)
+		local request = requests[1]
+		expect(request.designPath):toBe "designs/Sample.luau"
+		expect(request.nodePath[#request.nodePath].id):toBe "n1"
+		expect(request.props.width.token):toBe "frame.width"
+		expect(request.tokens):toEqual { "frame.width" }
+		expect(request.frame.id):toBe "tv"
+		expect(Design.parse(request.source, w.library).root.props.width.token):toBe "frame.width"
+		expect(w.find(editor.root, "PromptStatus").Text):toBe "Source updated"
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("keeps prompt failures generic and rejects an empty request without invoking the adapter", function()
+		local w = Support.world()
+		local calls = 0
+		local editor = w.mount {
+			prompt = {
+				designPath = "designs/Sample.luau",
+				submit = function(): string
+					calls += 1
+					error "private adapter diagnostic"
+				end,
+			},
+		}
+		local send = w.find(editor.root, "SendPrompt")
+		w.fire(send, "Activated")
+		w.settle()
+		expect(calls):toBe(0)
+		w.find(editor.root, "PromptRequest").Text = "Make it taller"
+		w.fire(send, "Activated")
+		w.settle()
+		expect(calls):toBe(1)
+		expect(w.find(editor.root, "PromptStatus").Text):toBe "Prompt failed; source preserved"
+		editor.dispose()
+		w.close()
+	end)
+
 	it("matches captured device facts through Verify's simulated Studio device service", function()
 		local w = Support.world()
 		local workspace = w.service "Workspace"
