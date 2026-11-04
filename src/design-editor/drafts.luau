@@ -5,7 +5,7 @@ local Devices = require "./devices"
 local UI = require "./ui"
 
 export type Variant = { title: string, source: string }
-export type Draft = { message: string, variants: { Variant }, pick: (number) -> string }
+export type Draft = { message: string, variants: { Variant }, pick: (number) -> string, discard: (() -> ())? }
 export type Render = (string, Devices.Profile, Compose.Node) -> () -> ()
 
 return function(ui: UI.UI, parent: Compose.Node, device: Devices.Profile, draft: Draft, render: Render, close: () -> ())
@@ -43,6 +43,12 @@ return function(ui: UI.UI, parent: Compose.Node, device: Devices.Profile, draft:
 			return
 		end
 		disposed = true
+		local discard = draft.discard
+		if discard then
+			ui.runtime.scheduler(ui.owner).after(0, function()
+				pcall(discard)
+			end)
+		end
 		for _, connection in connections do
 			connection:Disconnect()
 		end
