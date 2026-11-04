@@ -26,12 +26,6 @@ describe("Author.coverage", function()
 		expect(report.unknownKeys):toHaveLength(0)
 	end)
 
-	it("surfaces an authored id that fell through the key list", function()
-		local report = Author.coverage(props(), { "torch", "crate" })
-		expect(report.missingIds):toEqual { "lantern" }
-		expect(report.missingRoles):toEqual { "light" }
-	end)
-
 	it("surfaces a registry key that names no authored entry", function()
 		local report = Author.coverage(props(), { "torch", "lantern", "crate", "throne" })
 		expect(report.missingIds):toHaveLength(0)
@@ -55,6 +49,7 @@ describe("Author.coverage", function()
 
 	it("reports a role as soon as any one of its entries falls through", function()
 		local report = Author.coverage(props(), { "torch", "crate" })
+		expect(report.missingIds):toEqual { "lantern" }
 		expect(report.missingRoles):toEqual { "light" }
 		local covered = Author.coverage(props(), { "torch", "lantern" })
 		expect(covered.missingIds):toEqual { "crate" }

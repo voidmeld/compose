@@ -22,6 +22,7 @@ end
 describe("Author.projectTree", function()
 	it("builds one document per target with the declared branches", function()
 		local result = Author.projectTree(plan())
+		expect(result.manifest.targets[1].paths):toEqual { "source/server/boot.luau", "source/shared" }
 		expect(result.order):toEqual { "alpha" }
 		expect(result.documents.alpha):toEqual {
 			name = "alpha",
@@ -37,11 +38,6 @@ describe("Author.projectTree", function()
 				},
 			},
 		}
-	end)
-
-	it("lists every mounted path in the manifest, sorted", function()
-		local result = Author.projectTree(plan())
-		expect(result.manifest.targets[1].paths):toEqual { "source/server/boot.luau", "source/shared" }
 	end)
 
 	it("gives the same digest for the same plan and a different one for a changed plan", function()
@@ -470,53 +466,20 @@ describe("Author.projectTree", function()
 				},
 			},
 		}
-		subject.targets = { { name = "alpha", document = "build/alpha.project.json", variant = "release" } }
-		local result = Author.projectTree(subject)
-		expect((Support.record(result.documents.alpha.tree.Workspace)).Terrain):toEqual {
-			["$className"] = "Terrain",
-			["$properties"] = { WaterWaveSize = 0.4 },
-			["$attributes"] = { zone = "south" },
-		}
-	end)
-
-	it("leaves the base plan untouched when a variant replaces a mount", function()
-		local subject = plan()
-		subject.mounts = {
-			{
-				at = { "Workspace" },
-				name = "Terrain",
-				className = "Terrain",
-				properties = (function(value: { [string]: Author.RojoValue }): { [string]: Author.RojoValue }
-					return value
-				end) { WaterWaveSize = 0.15 },
-			},
-		}
-		subject.variants = {
-			{
-				name = "release",
-				mounts = {
-					{
-						at = { "Workspace" },
-						name = "Terrain",
-						className = "Terrain",
-						properties = (function(value: { [string]: Author.RojoValue }): { [string]: Author.RojoValue }
-							return value
-						end) { WaterWaveSize = 0.4 },
-						replace = true,
-					},
-				},
-			},
-		}
 		subject.targets = {
 			{ name = "alpha", document = "build/alpha.project.json" },
 			{ name = "beta", document = "build/beta.project.json", variant = "release" },
 		}
 		local result = Author.projectTree(subject)
-		expect((Support.record((Support.record(result.documents.alpha.tree.Workspace)).Terrain))["$properties"]):toEqual {
-			WaterWaveSize = 0.15,
+		expect((Support.record(result.documents.beta.tree.Workspace)).Terrain):toEqual {
+			["$className"] = "Terrain",
+			["$properties"] = { WaterWaveSize = 0.4 },
+			["$attributes"] = { zone = "south" },
 		}
-		expect((Support.record((Support.record(result.documents.beta.tree.Workspace)).Terrain))["$properties"]):toEqual {
-			WaterWaveSize = 0.4,
+		expect((Support.record(result.documents.alpha.tree.Workspace)).Terrain):toEqual {
+			["$className"] = "Terrain",
+			["$properties"] = { WaterWaveSize = 0.15 },
+			["$attributes"] = { zone = "north" },
 		}
 	end)
 
