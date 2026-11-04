@@ -79,6 +79,7 @@ describe("host-neutral design editor", function()
 		local w = Support.world()
 		w.library.kinds.Stack.fields.width.tokens = true
 		local requests: { DesignEditor.PromptRequest } = {}
+		local themes: { DesignEditor.PromptRequest } = {}
 		local editor = w.mount {
 			devices = DesignEditor.devices.all,
 			prompt = {
@@ -86,6 +87,10 @@ describe("host-neutral design editor", function()
 				submit = function(request: DesignEditor.PromptRequest): string
 					table.insert(requests, request)
 					return "Source updated"
+				end,
+				theme = function(request: DesignEditor.PromptRequest): string
+					table.insert(themes, request)
+					return "Theme saved"
 				end,
 			},
 		}
@@ -106,6 +111,14 @@ describe("host-neutral design editor", function()
 		expect(request.frame.id):toBe "tv"
 		expect(Design.parse(request.source, w.library).root.props.width.token):toBe "frame.width"
 		expect(w.find(editor.root, "PromptStatus").Text):toBe "Source updated"
+		w.fire(w.find(editor.root, "PromptScope"), "Activated")
+		w.find(editor.root, "PromptRequest").Text = "Warm the shared accent colour"
+		w.fire(w.find(editor.root, "SendPrompt"), "Activated")
+		w.settle()
+		expect(#requests):toBe(1)
+		expect(#themes):toBe(1)
+		expect(themes[1].frame.id):toBe "phone-portrait"
+		expect(w.find(editor.root, "PromptStatus").Text):toBe "Theme saved"
 		editor.dispose()
 		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
 		w.close()

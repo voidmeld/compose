@@ -16,7 +16,7 @@ export type Request = {
 	source: string,
 	request: string,
 }
-export type Options = { designPath: string, submit: (Request) -> string }
+export type Options = { designPath: string, submit: (Request) -> string, theme: ((Request) -> string)? }
 
 local function snapshot(session: Design.Session, device: Devices.Profile, path: string, text: string): Request
 	local document = Design.document.copy(session.document:peek())
@@ -111,6 +111,22 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 	ui.set(status, "Size", ui.values.udim2(1, -176, 0, 32))
 	ui.set(status, "Parent", panel)
 	local disposed, busy = false, false
+	local theming = false
+	local scopeConnection: UI.Connection? = nil
+	if options.theme then
+		local scope = Theme.button("PromptScope", "Design")
+		ui.set(scope, "Position", ui.values.udim2(1, -256, 0, 100))
+		ui.set(scope, "Size", ui.values.udim2(0, 96, 0, 32))
+		ui.set(scope, "Parent", panel)
+		ui.set(status, "Size", ui.values.udim2(1, -280, 0, 32))
+		scopeConnection = ui.connect(scope, "Activated", function()
+			if not busy then
+				theming = not theming
+				ui.set(scope, "Text", if theming then "Theme" else "Design")
+				ui.set(send, "Text", if theming then "Apply theme" else "Apply prompt")
+			end
+		end)
+	end
 	local connection = ui.connect(send, "Activated", function()
 		if busy then
 			return
@@ -126,18 +142,19 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 			return
 		end
 		busy = true
+		local submit = if theming then assert(options.theme) else options.submit
 		ui.set(send, "Text", "Working...")
 		ui.set(status, "Text", "Capturing the selected frame")
 		ui.runtime.scheduler(ui.owner).after(0, function()
 			if disposed then
 				return
 			end
-			local submitted, message = pcall(options.submit, request)
+			local submitted, message = pcall(submit, request)
 			if disposed then
 				return
 			end
 			busy = false
-			ui.set(send, "Text", "Apply prompt")
+			ui.set(send, "Text", if theming then "Apply theme" else "Apply prompt")
 			ui.set(status, "Text", if submitted then message else "Prompt failed; source preserved")
 		end)
 	end)
@@ -157,6 +174,9 @@ local function create(ui: UI.UI, session: Design.Session, canvas: Canvas.Canvas,
 		dispose = function()
 			disposed = true
 			connection:Disconnect()
+			if scopeConnection then
+				scopeConnection:Disconnect()
+			end
 			release()
 			ui.destroy(panel)
 		end,
