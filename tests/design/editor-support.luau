@@ -158,6 +158,7 @@ local function world(space: string?)
 		previews: { Editor.Preview }?,
 		frame: ((Editor.Device, Compose.ReadOnlyValue<number>) -> Editor.FrameContext)?,
 		prompt: Editor.PromptOptions?,
+		theme: Editor.ThemeStore?,
 	}
 	local function mount(options: MountOptions?): Editor.Editor
 		return Editor.create(library, document, screen, {
@@ -169,6 +170,7 @@ local function world(space: string?)
 			devices = if options then options.devices else nil,
 			frame = if options then options.frame else nil,
 			prompt = if options then options.prompt else nil,
+			theme = if options then options.theme else nil,
 			previews = if options then options.previews else nil,
 		})
 	end

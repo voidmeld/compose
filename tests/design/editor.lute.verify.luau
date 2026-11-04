@@ -10,6 +10,71 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("edits a shared theme value and updates every open device frame", function()
+		local w = Support.world()
+		w.library.kinds.Stack.fields.width.tokens = true
+		local spacing = Compose.cell(24)
+		local editor = w.mount {
+			devices = DesignEditor.devices.all,
+			frame = function(device: DesignEditor.Device): DesignEditor.FrameContext
+				return {
+					resolveToken = function(): Design.Resolved
+						return {
+							readable = Compose.formula(function(use: Compose.Use): Design.Literal
+								return device.size.X - use(spacing) * 2
+							end),
+						}
+					end,
+				}
+			end,
+			theme = {
+				fields = {
+					{
+						id = "spacing.gutter",
+						label = "Gutter",
+						kind = "spacing",
+						maximum = 128,
+						read = function(use: Compose.Use): number
+							return use(spacing)
+						end,
+					},
+				},
+				write = function(id: string, value: DesignEditor.ThemeValue): boolean
+					expect(id):toBe "spacing.gutter"
+					assert(type(value) == "number")
+					spacing:set(value)
+					return true
+				end,
+			},
+		}
+		editor.session.select "n1"
+		expect(editor.session.change("width", { token = "frame.width" })):toBe(true)
+		editor.canvas.showAll(true)
+		w.settle()
+		w.fire(w.find(editor.root, "Theme"), "Activated")
+		local panel = w.find(editor.root, "DesignTheme")
+		expect(panel.Visible):toBe(true)
+		local input = w.find(w.find(panel, "spacing.gutter"), "TokenValue")
+		input.Text = "48"
+		w.fire(input, "FocusLost", false)
+		w.settle()
+		expect(spacing:peek()):toBe(48)
+		for _, frame in editor.canvas.frames() do
+			local stage = assert(frame.stage)
+			expect(w.point(stage.nodes.n1, "AbsoluteSize").X / stage.zoom:peek()):toBeCloseTo(
+				frame.device.size.X - 96,
+				0.01
+			)
+		end
+		input.Text = "999"
+		w.fire(input, "FocusLost", false)
+		w.settle()
+		expect(spacing:peek()):toBe(48)
+		editor.dispose()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it("snapshots the selected node and frame before a deferred prompt submission", function()
 		local w = Support.world()
 		w.library.kinds.Stack.fields.width.tokens = true
