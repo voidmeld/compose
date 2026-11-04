@@ -80,6 +80,7 @@ type State<T> = Spring.State & {
 	target: { number },
 	reference: { number },
 	output: Types.Value<T>,
+	running: Types.Value<boolean>,
 	settings: Settings,
 }
 
@@ -164,6 +165,7 @@ local function createMotion<T>(
 			unsubscribe = nil
 			release()
 		end
+		state.running:set(false)
 	end
 
 	local function sweep(delta: number)
@@ -201,9 +203,10 @@ local function createMotion<T>(
 		source: Types.Body<T>,
 		settings: Settings,
 		reducedMotion: Types.Body<boolean>?
-	): Types.ReadOnlyValue<T>
+	): (Types.ReadOnlyValue<T>, Types.ReadOnlyValue<boolean>)
 		local frames = framesOf(host, primitive)
 		local owner = ownerOf(primitive)
+		local running = cellModule.cell(false)
 		settings[4] = 0
 		local state: State<T>? = nil
 		local typeName = ""
@@ -227,6 +230,7 @@ local function createMotion<T>(
 					velocity = if settings.ease then reference else table.create(codec.arity, 0),
 					arity = codec.arity,
 					output = cellModule.cell(wanted),
+					running = running,
 					settings = settings,
 				}
 				state = created
@@ -293,16 +297,20 @@ local function createMotion<T>(
 				if unsubscribe == nil then
 					unsubscribe = frames.onFrame(onFrame)
 				end
+				running:set(true)
 			end
 		end)
 		local output: Types.ReadOnlyValue<T>
 		if state ~= nil then
 			output = state.output
 		end
-		return output
+		return output, running
 	end
 
-	local function spring(source: Types.Body<T>, options: SpringOptions?): Types.ReadOnlyValue<T>
+	local function spring(
+		source: Types.Body<T>,
+		options: SpringOptions?
+	): (Types.ReadOnlyValue<T>, Types.ReadOnlyValue<boolean>)
 		local period = if options ~= nil and options.period ~= nil then options.period else DEFAULT_PERIOD
 		local damping = if options ~= nil and options.damping ~= nil then options.damping else DEFAULT_DAMPING
 		if period <= 0 then
@@ -319,7 +327,10 @@ local function createMotion<T>(
 		}, policyOf(if options ~= nil then options.reducedMotion else nil, "spring"))
 	end
 
-	local function tween(source: Types.Body<T>, options: TweenOptions?): Types.ReadOnlyValue<T>
+	local function tween(
+		source: Types.Body<T>,
+		options: TweenOptions?
+	): (Types.ReadOnlyValue<T>, Types.ReadOnlyValue<boolean>)
 		local wanted: Duration = if options ~= nil and options.seconds ~= nil then options.seconds else DEFAULT_SECONDS
 		local settings: Settings = {
 			0,

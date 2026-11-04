@@ -603,6 +603,12 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
 | `sequence(options)` | Owns a choreography of waits, callbacks, tweens, timelines and parallel groups. |
 
+`spring` and `tween` return the animated readable and a second boolean readable, `running`. The second readable is false initially, true while frame work is scheduled, and false after completion, reduced-motion snapping or owner disposal. Retargeting an active animation keeps it true. The typed methods from `motion(codec)` return the same pair.
+
+```luau
+local opacity, running = runtime.tween(opacityTarget, { seconds = 0.25 })
+```
+
 A fragment can return a typed array of native nodes or a mixture of nodes and directives. Compose reads the array without changing it. Nil entries omit children.
 
 The `spring`, `tween` and `sequence` option tables accept `reducedMotion`, a [reduced motion policy](#reduced-motion).
