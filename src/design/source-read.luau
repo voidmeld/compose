@@ -554,6 +554,12 @@ function source.parse(code: string, library: Library): Types.Document
 				take "use"
 				take ")"
 				take "return"
+				if peek() ~= "use" and peek() ~= "tostring" then
+					local datatype = assert(value(), "A datatype formula returns a constructor")
+					assert(type(datatype.literal) == "table", "A datatype formula returns components")
+					take "end"
+					return datatype, nil
+				end
 				local converted = peek() == "tostring"
 				if converted then
 					take "tostring"
@@ -679,9 +685,26 @@ function source.parse(code: string, library: Library): Types.Document
 					local name = token()
 					if name then
 						components[#components + 1] = { token = name }
+					elseif peek() == "props" or peek() == "use" then
+						local live = peek() == "use"
+						if live then
+							take "use"
+							take "("
+						end
+						take "props"
+						take "."
+						local id = take()
+						assert(id.kind == "name", "A datatype component names an input")
+						if live then
+							take ")"
+						end
+						components[#components + 1] = { input = id.text }
 					else
 						local number = plain()
-						assert(type(number) == "number", "Datatype constructors take numeric or token components")
+						assert(
+							type(number) == "number",
+							"Datatype constructors take numeric, token or input components"
+						)
 						components[#components + 1] = number
 					end
 					if peek() == "," then

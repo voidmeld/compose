@@ -2129,11 +2129,11 @@ A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `s
 
 `Bind.from` also accepts `"pages.rows"` when the current outer collection is `pages` and its row declares a `rows` list field. The qualifier must name that current collection, rather than another input or an arbitrary ancestor. This form emits a local `row_pages` alias and reads `use(row_pages).rows`, retaining the qualified address through parsing. Unqualified row list fields remain supported. Inner rows keep their own keys, bindings and ownership when the outer row changes.
 
-Numeric datatype literals are component arrays. With `tokens = true`, each component accepts a number or `{ token = "size.pill" }`. For example, `{ literal = { 1, 0, 0, { token = "size.pill" } } }` describes `UDim2.new(1, 0, 0, T.size.pill)` when `library.token = "T."`. Names follow the library's token syntax. Plain `value` tables keep their usual meaning.
+Numeric datatype literals are component arrays. Each component accepts a number or `{ input = "offset" }` naming a required numeric input. With `tokens = true`, it also accepts `{ token = "size.pill" }`. For example, `{ literal = { 1, 0, 0, { token = "size.pill" } } }` describes `UDim2.new(1, 0, 0, T.size.pill)` when `library.token = "T."`. Names follow the library's token syntax. Plain `value` tables keep their usual meaning. Input components bind a whole number; callers prepare arithmetic results.
 
 ### `Design.datatype`
 
-`literal(components: { DatatypeComponent }) -> Literal` copies a typed component array into a document literal. `DatatypeComponent` is `number | { token: string }`. `token(literal) -> string?` reads a valid component token name. `arity` lists component counts for `UDim2`, `UDim`, `Vector2`, `Vector3`, `Rect` and `NumberRange`.
+`literal(components: { DatatypeComponent }) -> Literal` copies a typed component array into a document literal. `DatatypeComponent` is `number | { token: string } | { input: string }`. `token(literal) -> string?` and `input(literal) -> string?` read valid component references containing exactly the named field. `arity` lists component counts for `UDim2`, `UDim`, `Vector2`, `Vector3`, `Rect` and `NumberRange`.
 
 ### Design contracts and types
 
@@ -2151,6 +2151,8 @@ An output has `id`, optional `args: { InputType }` or `row` naming a list input 
 
 The writer omits a literal only when it equals its field's declared `default`, the value the called control uses when the prop is absent. Kind `defaults` are values a new node starts with, so the writer keeps them. It also omits a template wrapper's key when it equals the key field's declared default. `UDim2` uses `fromOffset` for zero scales and `fromScale` for zero offsets. Other values use `new`. All-zero and all-one vectors use `zero` and `one`. Token components stay as token expressions, even when their resolved value is zero.
 
+Datatype input components emit `props.offset` for static inputs. If any component reads a readable or cell input, the entire constructor emits inside `function(use) return ... end`, reading those inputs through `use(props.offset)`. This keeps updates on the affected property. The numeric input must be required and cannot override its Luau type with a nonnumeric type.
+
 Nodes may carry `hidden` and `locked` editor flags. Source stores these flags by child path in `_design.editor`. They do not become builder properties or remove nodes from the emitted component.
 
 `EmitOptions` accepts `name`, `rowFunctions`, `localControls`, `controls`, `propsType` and `prelude`. The generated component accepts the library controls parameter and typed `Props`. Readable inputs pass directly to controls. `library.show` and `library.keyed` name structural functions in generated source. A `library.token` ending in `.` writes token paths (`Tokens.font.title`); other token names become resolver calls. Token tables belong to the consumer and may contain host datatypes and reactive values. Attributes use an ordinary `value` field forwarded by the kind to the runtime's reserved `Attributes` property; Design adds no host attribute policy.
@@ -2161,7 +2163,7 @@ Node references use `library.cell<library.returnType?>` cells with explicitly ty
 
 `parse(source, library) -> Document` reads an emitted component and validates its contract without executing source.
 
-It accepts `UDim2.new`, `UDim2.fromOffset`, `UDim2.fromScale`, `UDim.new` and vector `new` calls with numeric or token arguments. It also accepts `Vector2.one`, `Vector2.zero`, `Vector3.one` and `Vector3.zero`. These forms normalize to component arrays. Emitting, parsing and emitting again preserves the emitted bytes.
+It accepts `UDim2.new`, `UDim2.fromOffset`, `UDim2.fromScale`, `UDim.new` and vector `new` calls with numeric, token or input arguments, including constructors wrapped in datatype input formulas. It also accepts `Vector2.one`, `Vector2.zero`, `Vector3.one` and `Vector3.zero`. These forms normalize to component arrays. Emitting, parsing and emitting again preserves the emitted bytes.
 
 ### `Design.literal`
 
@@ -2176,6 +2178,7 @@ It accepts `UDim2.new`, `UDim2.fromOffset`, `UDim2.fromScale`, `UDim.new` and ve
 `render(document, library, context?) -> unknown` builds through the library. `RenderContext` accepts `inputs` (plain snapshot values), `bindings: { [string]: Resolved }`, `outputs` (handlers receiving an argument array), `slots` (owned content factories), `token(name) -> Literal`, `resolveToken(name) -> Resolved`, `decorate(node, built)` and `players(players)`. `resolveToken` takes precedence over `token` and supplies native or reactive tokens directly to kind builders without a second token representation.
 
 Datatype component tokens must resolve to numbers. `resolveToken` can supply a numeric `value`, `literal` or `readable`. Reactive components produce a readable component array. The builder converts the resolved array to its host datatype.
+Input components use `bindings` before snapshot inputs and previews and must also resolve to numbers. A reactive input component produces a readable array, preserving borrowed inputs and updating only consumers of that datatype.
 
 `exclude(node) -> boolean` skips a node and its subtree. The editor uses it for hidden nodes. Rendering without this callback includes hidden nodes.
 

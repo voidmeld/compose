@@ -20,8 +20,9 @@ local library: Design.Library = {
 		"type Target = { name: string }",
 		"type Row = { id: string }",
 		"type Page = { id: string, rows: { Row } }",
+		"type Dimension = { x: number, y: number }",
 		"type Controls = {",
-		"\tBox: (string) -> ({ Target }) -> Target,",
+		"\tBox: (string) -> ({ [number]: Target, Size: Core.Input<Dimension>? }) -> Target,",
 		"\tFlash: (string) -> ({ target: Core.ReadOnlyValue<Target?> | ((Core.Use) -> Target?) }) -> Target,",
 		"\tPanel: (string) -> ({ content: () -> Target }) -> Target,",
 		"\tPages: (string) -> ({ from: Core.Source<{ Page }>, key: string, render: (Core.ReadOnlyValue<Page>) -> Target }) -> Target,",
@@ -33,7 +34,12 @@ local library: Design.Library = {
 	cell = "Core.Value",
 	newCell = "Core.cell",
 	kinds = {
-		Box = { fields = {}, children = "list", call = "UI.Box", build = build },
+		Box = {
+			fields = { Size = { type = "datatype", datatype = "UDim2" } },
+			children = "list",
+			call = "UI.Box",
+			build = build,
+		},
 		Flash = { fields = { target = { type = "node" } }, children = "none", call = "UI.Flash", build = build },
 		Panel = { fields = {}, children = "slot", slot = "content", call = "UI.Panel", build = build },
 		Pages = {
@@ -74,6 +80,32 @@ local function analyze(code: string)
 end
 
 describe("Design emitted source", function()
+	it("strictly types native constructors with prepared static and reactive input components", function()
+		local value = Design.document.setContract(Design.document.new("Components", library, "Box"), library, {
+			inputs = {
+				{ id = "offset", kind = "value", type = "number", required = true },
+				{ id = "rise", kind = "readable", type = "number", required = true },
+			},
+			outputs = {},
+		})
+		value = Design.document.change(
+			value,
+			library,
+			"n1",
+			"Size",
+			{ literal = Design.datatype.literal { 1, { input = "offset" }, 0, { input = "rise" } } }
+		)
+		local options: Design.EmitOptions = {
+			prelude = {
+				"local UDim2 = { new = function(_xs: number, xo: number, _ys: number, yo: number): Dimension return { x = xo, y = yo } end }",
+			},
+		}
+		local code = Design.emit(value, library, options)
+		expect(Design.parse(code, library)):toEqual(value)
+		expect(Design.emit(Design.parse(code, library), library, options)):toBe(code)
+		analyze(code)
+	end)
+
 	it("strictly types qualified outer row lists in inline and named row functions", function()
 		local fields: { Design.ItemField } = { { id = "id", type = "string" } }
 		local pageFields: { Design.ItemField } =
@@ -89,7 +121,7 @@ describe("Design emitted source", function()
 		value = Design.document.bind(value, library, rows, { from = "pages.rows", key = "id" })
 		value = Design.document.insert(value, library, rows, "Box")
 		for _, rowFunctions in { false, true } do
-			local options = { rowFunctions = rowFunctions }
+			local options: Design.EmitOptions = { rowFunctions = rowFunctions }
 			local code = Design.emit(value, library, options)
 			expect(Design.emit(Design.parse(code, library), library, options)):toBe(code)
 			analyze(code)

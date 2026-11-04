@@ -38,6 +38,10 @@ not overwrite the module. Keep every edit inside the shapes below.
 - A literal: a string, a number, a boolean or a table of literals. Write colors
   as `Color3.fromHex "RRGGBB"` and enum items as `Enum.Category.Item`.
 - An input: `props.id`. A state value: `state.id`.
+- A datatype component: a number, token, or required numeric input.
+  `{ input = "offset" }` emits `props.offset` in a constructor, or
+  `use(props.offset)` inside a constructor formula for a readable or cell input.
+  Prepare arithmetic in the caller.
 - An item field inside a row: `function(use) return use(current).field end`.
   Wrap a non-text field that a text property reads in `tostring(...)`.
 - An output call: `function(...) if props.onThing then props.onThing(...) end end`.

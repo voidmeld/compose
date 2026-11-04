@@ -48,6 +48,9 @@ With `tokens = true`, each component's ◆ button cycles through token choices.
 A token component displays its name. Enter a number to replace it.
 The document stores it as `{ token = "size.pill" }` inside the component array.
 For example, `{ 1, 0, 0, { token = "size.pill" } }` emits `UDim2.new(1, 0, 0, T.size.pill)` with a `T.` token prefix.
+Source-authored components can also use `{ input = "offset" }` with a required numeric input.
+Static inputs become constructor arguments; readable and cell inputs wrap the constructor in a reactive formula.
+The caller prepares the number, including any arithmetic. Component input bindings remain editable through source.
 It selects design nodes for `node` fields.
 `Design.literal` writes literals. `Design.parseLiteral` reads them.
 An invalid literal sets `session.problem` and preserves the previous value.

@@ -254,15 +254,26 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 				local reactive = false
 				for index, component in current do
 					local tokenName = Datatype.token(component)
-					if tokenName ~= nil and type(index) == "number" then
-						local resolver = resolveToken
-						local resolved: Resolved = if resolver
-							then resolver(tokenName)
-							else {
-								literal = assert(token, "This design reads theme tokens; supply a token resolver")(
-									tokenName
-								),
-							}
+					local inputName = Datatype.input(component)
+					if (tokenName ~= nil or inputName ~= nil) and type(index) == "number" then
+						local resolved: Resolved
+						if inputName then
+							local preview: Resolved = { literal = inputs[inputName] }
+							resolved = bindings[inputName] or preview
+						else
+							local componentToken = assert(tokenName)
+							local resolver = resolveToken
+							if resolver then
+								resolved = resolver(componentToken)
+							else
+								local preview: Resolved = {
+									literal = assert(token, "This design reads theme tokens; supply a token resolver")(
+										componentToken
+									),
+								}
+								resolved = preview
+							end
+						end
 						components[index] = resolved
 						reactive = reactive or resolved.readable ~= nil
 					end
@@ -286,7 +297,7 @@ return function(value: Types.Document, library: Types.Library, context: Context?
 						local number = if readable
 							then (if use then use(readable) else readable:peek())
 							else if resolved.value ~= nil then resolved.value else resolved.literal
-						assert(type(number) == "number", `Datatype component {index} needs a numeric token`)
+						assert(type(number) == "number", `Datatype component {index} needs a numeric token or input`)
 						result[index] = number
 					end
 					return result

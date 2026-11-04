@@ -297,6 +297,19 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 				local valid = type(current) == "table" and (arity == nil or #current == arity)
 				if valid and type(current) == "table" then
 					for index, component in current do
+						local componentInput = Datatype.input(component)
+						if componentInput then
+							local declared = assert(
+								inputOf(value, componentInput),
+								`{key} component reads unknown input {componentInput}`
+							)
+							assert(
+								declared.type == "number"
+									and declared.required == true
+									and (declared.luauType == nil or declared.luauType == "number"),
+								`{key} component needs a required numeric input`
+							)
+						end
 						valid = valid
 							and type(index) == "number"
 							and index % 1 == 0
@@ -305,10 +318,11 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 							and (
 								type(component) == "number"
 								or (field.tokens == true and Datatype.token(component) ~= nil)
+								or componentInput ~= nil
 							)
 					end
 				end
-				assert(valid, `{key} must be {arity or "some"} numeric or token components for {datatype}`)
+				assert(valid, `{key} must be {arity or "some"} numeric, token or input components for {datatype}`)
 			end
 		else
 			assert(field.type == "value", `{key} must be bound`)

@@ -216,6 +216,7 @@ describe("Compose Design documents", function()
 					preview = "inline",
 				},
 				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "rows", kind = "readable", type = "list", fields = rowFields },
 			},
 			outputs = {},
 		})
@@ -225,6 +226,10 @@ describe("Compose Design documents", function()
 		value, label = Design.document.insert(value, library, content, "Label")
 		value, flash = Design.document.insert(value, library, content, "Flash")
 		value = Design.document.change(value, library, flash, "target", { node = label })
+		local list
+		value, list = Design.document.insert(value, library, content, "List")
+		value = Design.document.bind(value, library, list, { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, list, "Label")
 		value = Design.document.setRootVariant(
 			value,
 			library,
@@ -235,6 +240,9 @@ describe("Compose Design documents", function()
 		expect(string.find(code, "local function rootContent(): Instance", 1, true) ~= nil):toBe(true)
 		expect(Design.parse(code, library)):toEqual(value)
 		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local named = Design.emit(value, library, { rowFunctions = true })
+		expect(Design.parse(named, library)):toEqual(value)
+		expect(Design.emit(Design.parse(named, library), library, { rowFunctions = true })):toBe(named)
 		local inline = builtNode(Design.render(value, library, { inputs = { name = "Direct" } }))
 		expect(inline.kind):toBe "Stack"
 		expect(inline.name):toBe "Direct"
@@ -611,8 +619,9 @@ describe("Compose Design documents", function()
 		local named = Design.emit(value, library, { rowFunctions = true })
 		expect(Design.emit(Design.parse(named, library), library, { rowFunctions = true })):toBe(named)
 		local current = value
+		local innerId: string = inner
 		expect(function()
-			Design.document.bind(current, library, inner, { from = "other.rows", key = "id" })
+			Design.document.bind(current, library, innerId, { from = "other.rows", key = "id" })
 		end):toThrow "unknown input"
 		expect(function()
 			Design.document.bind(current, library, "n1", { from = "pages.rows", key = "id" })

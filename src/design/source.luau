@@ -87,7 +87,13 @@ local function tokenExpression(library: Library, token: string): string
 	return if string.sub(call, -1) == "." then call .. token else `{call} {literal(token)}`
 end
 
-local function datatypeLiteral(library: Library, datatype: string, value: Literal): string
+local function datatypeLiteral(
+	document: Types.Document,
+	library: Library,
+	datatype: string,
+	value: Literal,
+	depth: number
+): string
 	if string.sub(datatype, 1, 5) == "Enum." then
 		return `{datatype}.{tostring(value)}`
 	end
@@ -95,16 +101,29 @@ local function datatypeLiteral(library: Library, datatype: string, value: Litera
 		return `Color3.fromHex {literal((string.gsub(value, "^#", "")))}`
 	end
 	local parts: { string } = {}
+	local reactive = false
+	local function finish(expression: string): string
+		return if reactive
+			then `function(use)\n{string.rep("\t", depth + 1)}return {expression}\n{string.rep("\t", depth)}end`
+			else expression
+	end
 	if type(value) == "table" then
 		for _, component in value do
 			local token = Datatype.token(component)
-			table.insert(parts, if token then tokenExpression(library, token) else literal(component))
+			local input = Datatype.input(component)
+			local part = if token then tokenExpression(library, token) else literal(component)
+			if input then
+				local live = assert(Document.input(document, input)).kind ~= "value"
+				reactive = reactive or live
+				part = if live then `use(props.{input})` else `props.{input}`
+			end
+			table.insert(parts, part)
 		end
 		if datatype == "UDim2" then
 			if value[1] == 0 and value[3] == 0 then
-				return `UDim2.fromOffset({parts[2]}, {parts[4]})`
+				return finish(`UDim2.fromOffset({parts[2]}, {parts[4]})`)
 			elseif value[2] == 0 and value[4] == 0 then
-				return `UDim2.fromScale({parts[1]}, {parts[3]})`
+				return finish(`UDim2.fromScale({parts[1]}, {parts[3]})`)
 			end
 		elseif datatype == "Vector2" or datatype == "Vector3" then
 			for _, constant in { "zero", "one" } do
@@ -118,7 +137,7 @@ local function datatypeLiteral(library: Library, datatype: string, value: Litera
 			end
 		end
 	end
-	return `{datatype}.new({table.concat(parts, ", ")})`
+	return finish(`{datatype}.new({table.concat(parts, ", ")})`)
 end
 
 local function fieldsLiteral(fields: { Types.ItemField }): Record
@@ -838,7 +857,7 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 				written = returning(parameter, layout(current, depth + 2, 0), depth + 1, luauType)
 				table.remove(scopes)
 			elseif current ~= nil and datatype ~= nil then
-				written = datatypeLiteral(library, datatype, current)
+				written = datatypeLiteral(value, library, datatype, current, depth + 1)
 			elseif current ~= nil and type(current) == "table" and luauType and not carriesRow(current) then
 				written = hoist(node, key, luauType, current)
 			else
@@ -986,7 +1005,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 		end
 		table.insert(
 			lines,
-			`\tlocal refs: \{ [string]: {library.cell}<{library.returnType}?> } = \{ `
+			"\tlocal refs: { [string]: "
+				.. `{library.cell}<{library.returnType}?>`
+				.. " } = { "
 				.. table.concat(cells, ", ")
 				.. " }"
 		)
@@ -1006,7 +1027,9 @@ function source.emit(value: Types.Document, library: Library, options: EmitOptio
 			end
 			table.insert(
 				lines,
-				`\tlocal named: \{ [string]: {library.readable}<{library.returnType}?> } = \{ `
+				"\tlocal named: { [string]: "
+					.. `{library.readable}<{library.returnType}?>`
+					.. " } = { "
 					.. table.concat(entries, ", ")
 					.. " }"
 			)
