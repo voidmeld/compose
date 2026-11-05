@@ -188,6 +188,45 @@ describe("OrderedCollection recycle", function()
 		expect(world.host.liveNodes()):toBe(1)
 	end)
 
+	it("releases spare row resources when their key leaves the source", function()
+		local items = Compose.cell(rows(3))
+		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }
+		local viewport = Compose.cell(initialViewport)
+		local released: { string } = {}
+		local dispose, root = world.runtime.mount(function()
+			return world.create "Frame" {
+				Compose.OrderedCollection {
+					from = items,
+					key = idOf,
+					mode = "windowed",
+					viewport = viewport,
+					layout = (function(value: Compose.OrderedCollectionLayout): Compose.OrderedCollectionLayout
+						return value
+					end) { itemSize = 10 },
+					overscan = 0,
+					recycle = function(value, _placement, key)
+						Compose.cleanup(function()
+							table.insert(released, key:peek())
+						end)
+						return world.create "Row" { Id = Compose.map(value, idOf) }
+					end,
+				},
+			}
+		end, world.root)
+		local original = items:peek()
+		viewport:set { offset = 0, size = 20 }
+		expect(idsOf(root)):toEqual { "r1", "r2" }
+		expect(released):toEqual {}
+		items:set { original[1], original[2] }
+		expect(released):toEqual { "r3" }
+		items:set { original[2] }
+		expect(idsOf(root)):toEqual { "r2" }
+		expect(released):toEqual { "r3", "r1" }
+		dispose()
+		expect(released):toEqual { "r3", "r1", "r2" }
+		expect(world.host.liveNodes()):toBe(1)
+	end)
+
 	it("keeps a row for a key that stays in the window", function()
 		local items = Compose.cell(rows(500))
 		local initialViewport: Compose.OrderedCollectionViewport = { offset = 0, size = 30 }

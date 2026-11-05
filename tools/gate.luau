@@ -114,6 +114,7 @@ local draft: Gate.Draft = {
 			"strict maintained Luau has no explicit any or type assertions",
 			"tools/check-no-any.luau"
 		),
+		script("environments", "production code preserves safe environments", "tools/check-environments.luau"),
 		script(
 			"spec-style",
 			"specifications declare compact describe, it and expect bindings once, except raw harness API subjects",

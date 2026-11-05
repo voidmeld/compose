@@ -28,6 +28,7 @@ export type Options = {
 	resolveToken: ((name: string) -> Design.Resolved)?,
 	inputs: { [string]: Design.Literal }?,
 	bindings: { [string]: Design.Resolved }?,
+	outputs: { [string]: (args: { Design.Literal }) -> () }?,
 	slots: { [string]: () -> unknown }?,
 	backdrop: (() -> unknown)?,
 }
@@ -509,13 +510,29 @@ return function(ui: UI.UI)
 				table.clear(connections)
 			end
 			local shown: { Compose.Node } = {}
+			local function visible(instance: Compose.Node): boolean
+				local current: Compose.Node? = instance
+				while current and current ~= surface do
+					if ui.isA(current, "GuiObject") and ui.get(current, "Visible") == false then
+						return false
+					end
+					current = ui.optionalNode(ui.get(current, "Parent"))
+				end
+				return current == surface
+			end
 			local function place()
-				local instance = shown[1]
-				if instance == nil or ui.get(instance, "Parent") == nil or ui.get(instance, "Visible") == false then
+				local displayed: { Compose.Node } = {}
+				for _, instance in shown do
+					if visible(instance) then
+						table.insert(displayed, instance)
+					end
+				end
+				local instance = displayed[1]
+				if instance == nil then
 					ui.set(box, "Visible", false)
 					return
 				end
-				local factor = scaleOf(instance)
+				local factor = scaleOf(overlay)
 				local at = Math.scale(
 					Math.sub(ui.xy(instance, "AbsolutePosition"), ui.xy(overlay, "AbsolutePosition")),
 					1 / factor
@@ -525,7 +542,7 @@ return function(ui: UI.UI)
 				local top = at.Y
 				local right = at.X + extent.X
 				local bottom = at.Y + extent.Y
-				for _, other in shown do
+				for _, other in displayed do
 					local point = Math.scale(
 						Math.sub(ui.xy(other, "AbsolutePosition"), ui.xy(overlay, "AbsolutePosition")),
 						1 / factor
@@ -563,8 +580,15 @@ return function(ui: UI.UI)
 				local ids = target(use)
 				table.clear(shown)
 				for _, id in ids do
-					if nodes[id] then
-						table.insert(shown, nodes[id])
+					local built = nodes[id]
+					local node = Design.document.find(session.document:peek().root, id)
+					local kind = if node then library.kinds[node.kind] else nil
+					local resolve = if kind then kind.selectionTarget else nil
+					local instance = if built
+						then ui.optionalNode(if resolve then resolve(built, use) else built)
+						else nil
+					if instance and ui.isA(instance, "GuiObject") then
+						table.insert(shown, instance)
 					end
 				end
 				local id = ids[1]
@@ -575,6 +599,14 @@ return function(ui: UI.UI)
 				for _, instance in shown do
 					table.insert(connections, ui.changed(instance, "AbsolutePosition", place))
 					table.insert(connections, ui.changed(instance, "AbsoluteSize", place))
+					table.insert(connections, ui.connect(instance, "AncestryChanged", place))
+					local current: Compose.Node? = instance
+					while current and current ~= surface do
+						if ui.isA(current, "GuiObject") then
+							table.insert(connections, ui.changed(current, "Visible", place))
+						end
+						current = ui.optionalNode(ui.get(current, "Parent"))
+					end
 					table.insert(connections, ui.changed(overlay, "AbsolutePosition", place))
 					table.insert(connections, ui.changed(overlay, "AbsoluteSize", place))
 				end
@@ -602,11 +634,13 @@ return function(ui: UI.UI)
 				stopDesign = runtime.mountFragment(function(): { Compose.Child }
 					local rendered, content = pcall(function(): unknown
 						return Design.render(value, library, {
+							use = use,
 							exclude = function(node: Design.Node): boolean
 								return node.hidden == true
 							end,
 							inputs = options.inputs,
 							bindings = options.bindings,
+							outputs = options.outputs,
 							slots = options.slots,
 							token = options.token,
 							resolveToken = options.resolveToken,

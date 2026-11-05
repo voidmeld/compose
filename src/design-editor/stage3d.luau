@@ -50,6 +50,7 @@ export type Options = {
 	resolveToken: ((name: string) -> Design.Resolved)?,
 	inputs: { [string]: Design.Literal }?,
 	bindings: { [string]: Design.Resolved }?,
+	outputs: { [string]: (args: { Design.Literal }) -> () }?,
 	slots: { [string]: () -> unknown }?,
 }
 
@@ -364,11 +365,13 @@ return function(ui: UI.UI)
 				table.clear(nodes)
 				stopDesign = runtime.mount(function(): Compose.Node
 					return ui.node(Design.render(value, library, {
+						use = use,
 						exclude = function(node: Design.Node): boolean
 							return node.hidden == true
 						end,
 						inputs = options.inputs,
 						bindings = options.bindings,
+						outputs = options.outputs,
 						slots = options.slots,
 						players = function(made: { [string]: Design.Player })
 							players = made

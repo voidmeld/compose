@@ -594,6 +594,159 @@ local checks: { Check } = {
 		end,
 	},
 	{
+		id = "design-imported-assembly-source-updates",
+		name = "imported 3D Designs refresh nested and assembly source within two seconds and keep selection",
+		requires = { "roblox-engine", "roblox-client" },
+		run = function(_container: Instance): string
+			local player = assert(game:GetService("Players").LocalPlayer)
+			local screen = Instance.new "ScreenGui"
+			screen.Name = "ComposeAssemblyProbe"
+			screen.Parent = player:WaitForChild "PlayerGui"
+			local runtime: Compose.Runtime = ComposeRoblox.createRuntime()
+			local environment = ComposeRoblox.designEnvironment()
+			local base = DesignEditor.roblox3DLibrary(runtime, environment)
+			local function subDesign(name: string, collision: boolean): string
+				local value = Design.document.setContract(Design.document.new(name, base, "Model"), base, {
+					inputs = {
+						{ id = "name", kind = "value", type = "string", required = true },
+						{ id = "offset", kind = "value", type = "vector3", required = true, preview = { 0, 0, 0 } },
+						{ id = "detail", kind = "value", type = "slot" },
+					},
+					outputs = {},
+				})
+				value.root.nameInput = "name"
+				value = Design.document.change(value, base, "n1", "position", { input = "offset" })
+				value = Design.document.insert(value, base, "n1", "Part")
+				value = Design.document.rename(value, base, "n2", "Geometry")
+				value = Design.document.change(value, base, "n2", "size", { literal = { 2, 4, 6 } })
+				value = Design.document.change(value, base, "n2", "position", { literal = { 1, 2, 3 } })
+				value = Design.document.change(value, base, "n2", "canCollide", { literal = collision })
+				value = Design.document.insertSlot(value, base, "n1", "detail")
+				return Design.emit(value, base)
+			end
+			local initial: { [string]: string } = { Wall = subDesign("Wall", true), Brace = subDesign("Brace", false) }
+			local sources = Compose.cell(initial)
+			local function imported(name: string): Design.Import
+				return {
+					source = Compose.formula(function(use: Compose.Use): string
+						return use(sources)[name]
+					end),
+					call = "Pieces." .. name,
+					save = function(expected: string, generated: string): boolean
+						if sources:peek()[name] ~= expected then
+							return false
+						end
+						local nextSources = table.clone(sources:peek())
+						nextSources[name] = generated
+						sources:set(nextSources)
+						return true
+					end,
+				}
+			end
+			local library = Design.imports(base, { Wall = imported "Wall", Brace = imported "Brace" })
+			local value = Design.document.new("Assembly", library, "Model")
+			local ids: { string } = {}
+			for index, name in { "Wall", "Brace" } do
+				local id
+				value, id = Design.document.insert(value, library, "n1", name)
+				value = Design.document.change(value, library, id, "offset", { literal = { index * 10, 0, 0 } })
+				value = Design.document.content(value, library, id, "detail", "Part")
+				table.insert(ids, id)
+			end
+			local code = Design.emit(value, library)
+			local notify: (() -> ())? = nil
+			local editor = DesignEditor.create(library, value, screen, {
+				runtime = runtime,
+				environment = environment,
+				stageSize = { X = 1280, Y = 720 },
+				link = {
+					read = function(): string
+						return code
+					end,
+					write = function(): boolean
+						return false
+					end,
+					watch = function(changed: () -> ()): () -> ()
+						notify = changed
+						return function()
+							notify = nil
+						end
+					end,
+				},
+			})
+			local function model(id: string): Model
+				local node = assert(editor.canvas.current().scene).nodes[id]
+				assert(typeof(node) == "Instance" and node:IsA "Model")
+				return node
+			end
+			local function geometry(id: string): BasePart
+				local part = model(id):FindFirstChild "Geometry"
+				assert(part and part:IsA "BasePart")
+				return part
+			end
+			local function withinTwoSeconds(started: number, ready: () -> boolean): number
+				repeat
+					runtime:settle()
+					if ready() then
+						local elapsed = os.clock() - started
+						assertThat(elapsed < 2, "source refresh exceeds two seconds")
+						return elapsed
+					end
+					task.wait()
+				until os.clock() - started >= 2
+				error("source did not refresh within two seconds", 0)
+			end
+			runtime:settle()
+			for index, id in ids do
+				assertThat(geometry(id).CanCollide == (index == 1), "collision matches the canonical Design")
+				assertThat(
+					geometry(id).Position == Vector3.new(index * 10 + 1, 2, 3),
+					"geometry keeps its local transform"
+				)
+				assertThat(
+					model(id):GetPivot().Position == Vector3.new(index * 10, 0, 0),
+					"the imported model keeps its pivot"
+				)
+				assertThat(#model(id):GetChildren() == 3, "the import adds no wrapper or copied geometry")
+			end
+			editor.session.select(ids[1])
+			assertThat(editor.execute({ action = "OpenDesign" }).ok, "nested Design opens with editable layers")
+			local nested = assert(editor.nested())
+			nested.session.select "n2"
+			local nestedStart = os.clock()
+			assertThat(nested.session.change("size", { literal = { 8, 4, 6 } }), "nested source saves")
+			local nestedSeconds = withinTwoSeconds(nestedStart, function(): boolean
+				return geometry(ids[1]).Size == Vector3.new(8, 4, 6)
+			end)
+			assertThat(nested.session.selected:peek() == "n2", "the nested selection stays selected")
+			assertThat(editor.session.selected:peek() == ids[1], "the assembly selection stays selected")
+			editor.execute { action = "CloseDesign" }
+			value = Design.document.change(value, library, ids[1], "offset", { literal = { 30, 0, 0 } })
+			local assemblyStart = os.clock()
+			code = Design.emit(value, library)
+			assert(notify)()
+			local assemblySeconds = withinTwoSeconds(assemblyStart, function(): boolean
+				return model(ids[1]):GetPivot().Position == Vector3.new(30, 0, 0)
+			end)
+			assertThat(editor.session.selected:peek() == ids[1], "saving the assembly keeps selection")
+			assertThat(Design.emit(Design.parse(code, library), library) == code, "assembly source is byte exact")
+			for _, source in sources:peek() do
+				assertThat(
+					Design.emit(Design.parse(source, base), base) == source,
+					"nested source is independently byte exact"
+				)
+			end
+			editor.dispose()
+			runtime:dispose()
+			screen:Destroy()
+			return string.format(
+				"nested source %.3fs; assembly source %.3fs; native hierarchy, collision, pivots and selections match",
+				nestedSeconds,
+				assemblySeconds
+			)
+		end,
+	},
+	{
 		id = "design-scene-renders-picks-and-moves",
 		name = "the Compose Design editor opens a 3D library in a scene that renders, picks and moves parts",
 		requires = { "roblox-engine", "roblox-client" },

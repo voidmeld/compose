@@ -141,6 +141,118 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("preserves ordered row and event arguments, false values and the current row key", function()
+		local value = Design.document.setContract(Design.document.new("Editable", library, "List"), library, {
+			inputs = { { id = "rows", kind = "readable", type = "list", fields = rowFields } },
+			outputs = { { id = "onChange", args = { "boolean", "string", "string" } } },
+		})
+		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, "n1", "Button")
+		local arguments: { Design.ActionArgument } = { { event = 2 }, { item = "id" }, { event = 1 } }
+		value =
+			Design.document.change(value, library, "n2", "onActivate", { output = "onChange", arguments = arguments })
+		table.clear(built)
+		local received: { { Design.Literal } } = {}
+		Core.withRootOwner(function()
+			Design.render(value, library, {
+				outputs = {
+					onChange = function(args: { Design.Literal })
+						table.insert(received, args)
+					end,
+				},
+			})
+			local row = Core.cell<<Design.Row>> { id = "first", name = "Ada" }
+			assert(built[#built].props.render.template)(row)
+			local callback = assert(built[#built].props.onActivate.callback)
+			callback("new", false)
+			row:set { id = "second", name = "Bo" }
+			callback("edited", true)
+			expect(received):toEqual { { false, "first", "new" }, { true, "second", "edited" } }
+			expect(function()
+				callback "missing"
+			end):toThrow "Missing action argument 1"
+		end)
+		local function rejected(arguments: { Design.ActionArgument }, output: string?)
+			return function()
+				Design.document.change(value, library, "n2", "onActivate", {
+					output = output or "onChange",
+					arguments = arguments,
+				})
+			end
+		end
+		expect(rejected { { event = 1 } }):toThrow "output arity"
+		expect(rejected { { event = 0 }, { item = "id" }, { event = 1 } }):toThrow "positive contiguous"
+		expect(rejected { { event = 2 }, { item = "id" }, { event = 2 } }):toThrow "conflicting types"
+		expect(rejected { { event = 2 }, { item = "missing" }, { event = 1 } }):toThrow "must match output type"
+		expect(rejected { { item = "id" }, { event = 1 }, { event = 2 } }):toThrow "must match output type"
+		expect(rejected { { event = 3 }, { item = "id" }, { item = "name" } }):toThrow "positive contiguous"
+	end)
+
+	it("validates imported interfaces and forwards outputs without owning their readable sources", function()
+		local value = Design.document.setContract(Design.document.new("Action", library, "Button"), library, {
+			inputs = {
+				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "text", kind = "readable", type = "string", required = true },
+			},
+			outputs = { { id = "onAction", args = { "number" } } },
+		})
+		value.root.nameInput = "name"
+		value = Design.document.change(value, library, "n1", "label", { input = "text" })
+		value = Design.document.change(value, library, "n1", "onActivate", { output = "onAction", args = { 7 } })
+		local source = Core.cell(Design.emit(value, library))
+		local imported = Design.imports(library, { Action = { source = source, call = "Action" } })
+		local assembly = Design.document.setContract(Design.document.new("Assembly", imported, "Action"), imported, {
+			inputs = {
+				{ id = "title", kind = "readable", type = "string" },
+				{ id = "staticTitle", kind = "value", type = "string" },
+			},
+			outputs = { { id = "onChoose", args = { "number" } } },
+		})
+		expect(function()
+			Design.document.change(assembly, imported, "n1", "text", { input = "staticTitle" })
+		end):toThrow "needs its declared input kind"
+		expect(function()
+			Design.document.change(assembly, imported, "n1", "text", { literal = "Text" })
+		end):toThrow "needs a readable or cell input"
+		assembly = Design.document.change(assembly, imported, "n1", "text", { input = "title" })
+		assembly = Design.document.change(assembly, imported, "n1", "onAction", { output = "onChoose" })
+		local title = Core.cell<<Design.Literal?>> "Hello"
+		local received: { Design.Literal } = {}
+		local button = builtNode(Design.render(assembly, imported, {
+			bindings = { title = { readable = title } },
+			outputs = {
+				onChoose = function(args: { Design.Literal })
+					received = args
+				end,
+			},
+		}))
+		expect(button.name):toBe "Action"
+		expect(button.props.label.readable):toBe(title)
+		assert(button.props.onActivate.callback)()
+		expect(received):toEqual { 7 }
+		expect(Design.emit(Design.parse(Design.emit(assembly, imported), imported), imported)):toBe(
+			Design.emit(assembly, imported)
+		)
+		local changed = Design.document.copy(value)
+		changed.contract.inputs[2].required = nil
+		source:set(Design.emit(changed, library))
+		expect(function()
+			Design.render(assembly, imported)
+		end):toThrow "Imported Design contract changed"
+		expect(function()
+			local missing = Design.emit(Design.document.new("Missing", library, "Stack"), library)
+			Design.imports(library, { Missing = { source = Core.cell(missing), call = "Missing" } })
+		end):toThrow "need a root name input"
+		expect(function()
+			Design.imports(
+				library,
+				{ First = { source = source, call = "Same" }, Second = { source = source, call = "Same" } }
+			)
+		end):toThrow "calls must be distinct"
+		title:set "Still borrowed"
+		expect(title:peek()):toBe "Still borrowed"
+	end)
+
 	it("retains enum selected row roots and disposes removed alternatives", function()
 		local world = Support.world()
 		local toy = table.clone(library)
@@ -1072,6 +1184,51 @@ describe("Compose Design documents", function()
 		Support.invoke(Support.read(rowChoices[1], "onActivate"))
 		expect(chosen[1]):toBe(alpha)
 		library.kinds = kinds
+	end)
+
+	it("builds a value field's authored node once before its receiver and remaps copied children", function()
+		local extended = Design.extend(library, {
+			kinds = {
+				Trailing = {
+					fields = { item = { type = "value" } },
+					children = "none",
+					call = "UI.Trailing",
+					build = builder "Trailing",
+				},
+			},
+		})
+		local value, receiver =
+			Design.document.insert(Design.document.new("Navigation", extended, "Stack"), extended, "n1", "Trailing")
+		local child
+		value, child = Design.document.content(value, extended, receiver, "item", "Label")
+		expect(function()
+			Design.document.change(
+				value,
+				extended,
+				receiver,
+				"item",
+				{ literal = { ["$template"] = child, extra = true } }
+			)
+		end):toThrow "marker holds only $template"
+		table.clear(built)
+		local root = builtNode(Design.render(value, extended))
+		expect(#built):toBe(3)
+		expect(built[1].kind):toBe "Label"
+		expect(#root.children[1].children):toBe(0)
+		expect(root.children[1].props.item.value):toBe(built[1])
+		local code = Design.emit(value, extended)
+		expect(Design.emit(Design.parse(code, extended), extended)):toBe(code)
+		local session = Design.session(extended, value)
+		session.select(receiver)
+		session.copy()
+		session.select "n1"
+		session.paste()
+		local pasted = session.document:peek().root.children[2]
+		expect(pasted.props.item.literal):toEqual { ["$template"] = pasted.children[1].id }
+		expect(pasted.children[1].id == child):toBe(false)
+		value = Design.document.change(value, extended, receiver, "item", nil)
+		local remaining = Design.document.find(value.root, receiver)
+		expect(#assert(remaining).children):toBe(0)
 	end)
 
 	it("holds a content field's subtree as a child and writes it as a builder", function()

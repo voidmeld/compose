@@ -10,6 +10,638 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("exposes the active UI stage and mounted root through public create across device selections", function()
+		local w = Support.world(nil, true)
+		local devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] }
+		local editor = DesignEditor.create(w.library, w.document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			devices = devices,
+		})
+		local first = assert(editor.stage)
+		expect(first):toBe(editor.canvas.current().stage)
+		expect(editor.scene):toBeNil()
+		expect(w.read(first.nodes[w.document.root.id], "Parent")):toBe(first.surface)
+		editor.canvas.select(devices[2].id)
+		local second = assert(editor.stage)
+		expect(second):toBe(editor.canvas.current().stage)
+		expect(second == first):toBe(false)
+		expect(w.read(second.nodes[w.document.root.id], "Parent")):toBe(second.surface)
+		editor.canvas.showAll(true)
+		w.fire(first.overlay, "InputBegan", w.pointer("MouseButton1", 0, 0))
+		expect(editor.stage):toBe(first)
+		expect(editor.scene):toBeNil()
+		expect(editor.execute({ action = "Read" }).device):toBe(devices[1].id)
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("exposes the 3D scene and mounted root through public create without a scene target", function()
+		local w = Support.world "3d"
+		local editor = DesignEditor.create(w.library, w.document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+		})
+		local scene = assert(editor.scene)
+		expect(scene):toBe(editor.canvas.current().scene)
+		expect(editor.stage):toBeNil()
+		expect(w.read(scene.nodes[w.document.root.id], "Parent")):toBe(scene.world)
+		expect(w.read(scene.world, "Parent")):toBe(scene.viewport)
+		expect(w.read(scene.viewport, "CurrentCamera")):toBe(scene.camera)
+		w.settle()
+		expect(editor.session.problem:peek()):toBeNil()
+		expect(editor.execute({ action = "Camera", preset = "fit" }).ok):toBe(true)
+		local at, size = w.point(scene.viewport, "AbsolutePosition"), w.point(scene.viewport, "AbsoluteSize")
+		expect(scene.pick { X = at.X + size.X / 2, Y = at.Y + size.Y / 2 }):toBe(w.first)
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("delivers native text changes and focus with stable row keys in the editor and direct rendering", function()
+		local w = Support.world()
+		local inputKind: Design.Kind = {
+			fields = { onChange = { type = "event" }, onFocus = { type = "event" } },
+			children = "none",
+			call = "UI.Input",
+			build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+				local input = w.runtime.constructors.TextBox {
+					Name = name,
+					Text = "initial",
+					Size = w.values.UDim2.new(0, 120, 0, 36),
+				}
+				w.runtime.connect(input, "Changed", function(property: unknown)
+					if property == "Text" then
+						local text = w.read(input, "Text")
+						assert(type(text) == "string")
+						assert(props.onChange.callback)(text)
+					end
+				end)
+				w.runtime.connect(input, "Focused", function()
+					assert(props.onFocus.callback)()
+				end)
+				return input
+			end,
+		}
+		local rowsKind: Design.Kind = {
+			fields = {},
+			children = "template",
+			call = "UI.Rows",
+			source = "from",
+			key = "key",
+			template = "render",
+			build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+				local key = assert(props.from.key)
+				local render = assert(props.render.template)
+				return w.runtime.constructors.Frame {
+					Name = name,
+					Size = w.values.UDim2.new(0, 400, 0, 240),
+					Compose.keyed {
+						from = assert(props.from.rows),
+						key = function(row: Design.Row): Design.Literal
+							return assert(row[key])
+						end,
+						render = function(row: Compose.ReadOnlyValue<Design.Row>): Compose.Node
+							return Support.node(render(row))
+						end,
+					},
+				}
+			end,
+		}
+		local library = Design.extend(w.library, { kinds = { Input = inputKind, Rows = rowsKind } })
+		local value = Design.document.setContract(Design.document.new("Editable", library, "Rows"), library, {
+			inputs = { { id = "rows", kind = "readable", type = "list", fields = { { id = "id", type = "string" } } } },
+			outputs = { { id = "onChange", args = { "string", "string" } }, { id = "onFocus", args = { "string" } } },
+		})
+		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, "n1", "Input")
+		value.root.children[1].nameField = "id"
+		value = Design.document.change(value, library, "n2", "onChange", {
+			output = "onChange",
+			arguments = { { item = "id" }, { event = 1 } },
+		})
+		value = Design.document.change(value, library, "n2", "onFocus", {
+			output = "onFocus",
+			arguments = { { item = "id" } },
+		})
+		local source = Design.emit(value, library)
+		value = Design.parse(source, library)
+		expect(Design.emit(value, library)):toBe(source)
+		local rows = Compose.cell<<{ Design.Row }>> { { id = "stable" } }
+		local events: { { Design.Literal } } = {}
+		local function receive(args: { Design.Literal })
+			table.insert(events, args)
+		end
+		local bindings: { [string]: Design.Resolved } = { rows = { rows = rows } }
+		local outputs = { onChange = receive, onFocus = receive }
+		local stop, direct = w.runtime.mount(function(): Compose.Node
+			return Support.node(Design.render(value, library, { bindings = bindings, outputs = outputs }))
+		end, w.screen)
+		local editor = DesignEditor.create(library, value, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			bindings = bindings,
+			outputs = outputs,
+			devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] },
+		})
+		editor.execute { action = "Select", ids = {} }
+		editor.execute { action = "AllDevices", enabled = true }
+		w.settle()
+		local function exercise(root: Compose.Node)
+			table.clear(events)
+			local input = w.find(root, "stable")
+			input.Text = "new text"
+			w.fire(input, "Focused")
+			expect(events):toEqual { { "stable", "new text" }, { "stable" } }
+		end
+		exercise(direct)
+		for _, frame in editor.canvas.frames() do
+			exercise(frame.root)
+		end
+		stop()
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it(
+		"populates parent slot samples with live child Designs on every device and shares capture and close controls",
+		function()
+			local w = Support.world(nil, true)
+			local child = Design.document.setContract(Design.document.new("Child", w.library, "Stack"), w.library, {
+				inputs = {
+					{ id = "name", kind = "value", type = "string", required = true },
+					{ id = "text", kind = "readable", type = "string", preview = "ordinary" },
+				},
+				outputs = {},
+			})
+			child.root.nameInput = "name"
+			child = Design.document.insert(child, w.library, "n1", "Text")
+			child = Design.document.rename(child, w.library, "n2", "SampleText")
+			child = Design.document.change(child, w.library, "n2", "text", { input = "text" })
+			child = Design.document.change(child, w.library, "n2", "textSize", { literal = 100 })
+			local canonical = Compose.cell(Design.emit(child, w.library))
+			local library = Design.imports(w.library, {
+				Child = {
+					source = canonical,
+					call = "Child",
+					save = function(expected: string, generated: string): boolean
+						if canonical:peek() ~= expected then
+							return false
+						end
+						canonical:set(generated)
+						return true
+					end,
+				},
+			})
+			local parent = Design.document.setContract(Design.document.new("Parent", library, "Stack"), library, {
+				inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+				outputs = {},
+			})
+			parent = Design.document.insertSlot(parent, library, "n1", "body")
+			local instance = Design.document.setContract(Design.document.new("Instance", library, "Child"), library, {
+				inputs = { { id = "text", kind = "readable", type = "string", preview = "ordinary" } },
+				outputs = {},
+			})
+			instance = Design.document.change(instance, library, "n1", "text", { input = "text" })
+			local state = Compose.cell<<Design.Literal?>> "ordinary"
+			local backdrop = Compose.cell(false)
+			local captures: { string } = {}
+			local closed = 0
+			local editor = DesignEditor.create(library, parent, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				identity = { commit = "revision", path = "Parent.luau" },
+				devices = DesignEditor.devices.all,
+				slotSamples = {
+					body = function(frameLibrary: Design.Library, device: DesignEditor.Device): unknown
+						local value = Design.document.rename(instance, frameLibrary, "n1", device.id)
+						return Design.render(value, frameLibrary, { bindings = { text = { readable = state } } })
+					end,
+				},
+				backdrop = function(): unknown
+					return w.runtime.constructors.Frame {
+						Name = "SampleBackdrop",
+						Visible = backdrop,
+					}
+				end,
+				previews = {
+					{
+						name = "State",
+						choices = { "ordinary", "empty", "busy", "error" },
+						select = function(choice: string)
+							state:set(choice)
+						end,
+					},
+					{
+						name = "Backdrop",
+						choices = { "none", "scene" },
+						select = function(choice: string)
+							backdrop:set(choice == "scene")
+						end,
+					},
+				},
+				capture = function(name: string, frame: DesignEditor.Frame): { string }
+					table.insert(captures, name .. "/" .. frame.device.id)
+					return { name .. ".png" }
+				end,
+				onClose = function()
+					closed += 1
+				end,
+			})
+			editor.execute { action = "Select", ids = {} }
+			expect(editor.execute({ action = "AllDevices", enabled = true }).ok):toBe(true)
+			for _, choice in { "ordinary", "empty", "busy", "error" } do
+				local result = editor.execute { action = "Preview", name = "State", choice = choice }
+				w.settle()
+				expect(result.previews.State):toBe(choice)
+				expect(w.find(editor.root, "State").Text):toBe(choice)
+				expect(#editor.canvas.frames()):toBe(#DesignEditor.devices.all)
+				local seen: { [unknown]: boolean } = {}
+				for _, frame in editor.canvas.frames() do
+					local text = w.find(frame.root, "SampleText")
+					expect(text.Text):toBe(choice)
+					expect(seen[text]):toBe(nil)
+					seen[text] = true
+				end
+			end
+			editor.execute { action = "Preview", name = "Backdrop", choice = "scene" }
+			w.settle()
+			expect(w.find(editor.root, "Backdrop").Text):toBe "scene"
+			for _, frame in editor.canvas.frames() do
+				expect(w.find(frame.root, "SampleBackdrop").Visible):toBe(true)
+			end
+			local device = DesignEditor.devices.all[2]
+			editor.execute { action = "Device", id = device.id }
+			w.settle()
+			expect(w.find(editor.root, "Device").Text):toBe(device.name)
+			local result = editor.execute { action = "Capture", name = "busy" }
+			expect({ result.ok, result.target, result.commit, result.files[1] }):toEqual {
+				true,
+				"Parent.luau",
+				"revision",
+				"busy.png",
+			}
+			w.fire(w.find(editor.root, "Capture"), "Activated")
+			expect(captures):toEqual { "busy/" .. device.id, "Parent/" .. device.id }
+			w.fire(w.find(editor.root, "Close"), "Activated")
+			expect(editor.execute({ action = "Read" }).closed):toBe(true)
+			expect(editor.execute({ action = "Close" }).ok):toBe(true)
+			expect(editor.execute({ action = "Undo" }).ok):toBe(false)
+			expect(closed):toBe(1)
+			editor.dispose()
+			w.settle()
+			expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+			expect(w.env.liveObjects()):toBe(w.objectsBefore)
+			w.close()
+		end
+	)
+
+	it("inspects required slot leaves and edits children of declared slot kinds", function()
+		local w = Support.world()
+		local stack = w.library.kinds.Stack
+		local panel = table.clone(stack)
+		panel.children = "slot"
+		panel.slot = "content"
+		panel.call = "Design.Panel"
+		panel.build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+			return stack.build(props, { assert(props.content.slot)() }, name)
+		end
+		local library = Design.extend(w.library, { kinds = { Panel = panel } })
+		local document = Design.document.setContract(Design.document.new("Parent", library, "Stack"), library, {
+			inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+			outputs = {},
+		})
+		local slot, container, text
+		document, slot = Design.document.insertSlot(document, library, "n1", "body")
+		document, container = Design.document.insert(document, library, "n1", "Panel")
+		document, text = Design.document.insert(document, library, container, "Text")
+		local child = Design.document.new("Child", library, "Text")
+		child = Design.document.rename(child, library, "n1", "SampleText")
+		child = Design.document.change(child, library, "n1", "text", { literal = "Sample" })
+		local editor = DesignEditor.create(library, document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			stageSize = { X = 480, Y = 320 },
+			slotSamples = {
+				body = function(library: Design.Library, _device: DesignEditor.Device): unknown
+					return Design.render(child, library)
+				end,
+			},
+		})
+		w.settle()
+		expect(w.find(editor.root, "SampleText").Text):toBe "Sample"
+		local inspector = w.find(editor.root, "DesignInspector")
+		local layers = w.find(editor.root, "DesignLayers")
+		w.fire(w.find(layers, slot), "Activated")
+		w.settle()
+		expect(editor.session.selected:peek()):toBe(slot)
+		expect(w.find(inspector, "NodeName").Text):toBe "body"
+		expect(inspector:FindFirstChild "Data"):toBeNil()
+		expect(inspector:FindFirstChild "text"):toBeNil()
+		for _, ids in { { text, slot }, { slot, text } } do
+			editor.session.selectMany(ids)
+			w.settle()
+			expect(w.find(inspector, "NodeName").Text):toBe "2 selected"
+			expect(inspector:FindFirstChild "text"):toBeNil()
+		end
+		w.fire(w.find(layers, text), "Activated")
+		w.settle()
+		local input = assert(w.find(inspector, "text"):FindFirstChildWhichIsA("TextBox", true))
+		expect(input.Text):toBe "Text"
+		input.Text = "Edited"
+		w.fire(input, "FocusLost")
+		w.settle()
+		local edited = assert((Design.document.find(editor.session.document:peek().root, text)))
+		expect(edited.props.text.literal):toBe "Edited"
+		expect(w.read(assert(editor.stage).nodes[text], "Text")):toBe "Edited"
+		expect(editor.session.undo()):toBe(true)
+		w.settle()
+		expect(assert(w.find(inspector, "text"):FindFirstChildWhichIsA("TextBox", true)).Text):toBe "Text"
+		expect(Design.emit(editor.session.document:peek(), library)):toBe(Design.emit(document, library))
+		expect(editor.session.problem:peek()):toBeNil()
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("rejects unknown slot samples and unwinds a child sample that fails during construction", function()
+		local w = Support.world()
+		local function mount(name: string): DesignEditor.Editor
+			local value = Design.document.setContract(w.document, w.library, {
+				inputs = { { id = "body", kind = "value", type = "slot" } },
+				outputs = {},
+			})
+			value = Design.document.insertSlot(value, w.library, "n1", "body")
+			return DesignEditor.create(w.library, value, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				slotSamples = {
+					[name] = function(): unknown
+						w.runtime.constructors.Frame { Name = "FailedSample" }
+						error("sample failed", 0)
+					end,
+				},
+			})
+		end
+		expect(function()
+			mount "missing"
+		end):toThrow "Unknown slot sample: missing"
+		expect(function()
+			mount "body"
+		end):toThrow "sample failed"
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		local editor = w.mount()
+		expect(function()
+			w.mount { previews = { { name = "Device", choices = { "test" }, select = function() end } } }
+		end):toThrow "Preview name conflicts with an editor control: Device"
+		local result = editor.execute { action = "Capture", name = "sample" }
+		expect(result.ok):toBe(false)
+		expect(string.find(assert(result.problem), "host capture callback", 1, true) ~= nil):toBe(true)
+		editor.dispose()
+		w.close()
+	end)
+
+	it("projects imported layer collectors with the active frame library", function()
+		local w = Support.world(nil, true)
+		local base = Design.extend(w.library, {
+			kinds = {
+				Surface = {
+					fields = {},
+					children = "none",
+					call = "UI.Surface",
+					build = function(
+						_props: { [string]: Design.Resolved },
+						_children: { unknown },
+						name: string
+					): unknown
+						return w.runtime.constructors.ScreenGui { Name = name, Enabled = true }
+					end,
+				},
+			},
+		})
+		local value = Design.document.setContract(Design.document.new("Screen", base, "Surface"), base, {
+			inputs = { { id = "name", kind = "value", type = "string", required = true } },
+			outputs = {},
+		})
+		value.root.nameInput = "name"
+		local library =
+			Design.imports(base, { Screen = { source = Compose.cell(Design.emit(value, base)), call = "Screen" } })
+		local editor = DesignEditor.create(library, Design.document.new("Imported", library, "Screen"), w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			devices = { DesignEditor.devices.all[1] },
+		})
+		w.settle()
+		local stage = assert(editor.canvas.current().stage)
+		expect(w.read(stage.nodes.n1, "ClassName")):toBe "Frame"
+		expect(w.read(stage.nodes.n1, "Parent")):toBe(stage.surface)
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("unwinds an authored value node when its receiving kind fails and disposes successful builds once", function()
+		local w = Support.world()
+		local fail = true
+		local library = Design.extend(w.library, {
+			kinds = {
+				Trailing = {
+					fields = { item = { type = "value" } },
+					children = "none",
+					call = "UI.Trailing",
+					build = function(
+						props: { [string]: Design.Resolved },
+						_children: { unknown },
+						name: string
+					): unknown
+						if fail then
+							error("receiver rejected the node", 0)
+						end
+						return w.runtime.constructors.Frame { Name = name, EditorUI.node(props.item.value) }
+					end,
+				},
+			},
+		})
+		local value =
+			Design.document.content(Design.document.new("Direct", library, "Trailing"), library, "n1", "item", "Text")
+		expect(function()
+			w.runtime.mount(function(): Compose.Node
+				return EditorUI.node(Design.render(value, library))
+			end, w.screen)
+		end):toThrow "receiver rejected the node"
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		fail = false
+		local stop = w.runtime.mount(function(): Compose.Node
+			return EditorUI.node(Design.render(value, library))
+		end, w.screen)
+		stop()
+		stop()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it(
+		"edits canonical nested 3D Designs and refreshes an assembly from one readable source while preserving selection",
+		function()
+			local w = Support.world "3d"
+			local function canonical(name: string, collision: boolean): Design.Document
+				local value = Design.document.setContract(Design.document.new(name, w.library, "Model"), w.library, {
+					inputs = {
+						{ id = "name", kind = "value", type = "string", required = true },
+						{ id = "fade", kind = "readable", type = "number", required = true, preview = 0.2 },
+						{ id = "offset", kind = "value", type = "vector3", required = true, preview = { 0, 0, 0 } },
+						{ id = "detail", kind = "value", type = "slot" },
+					},
+					outputs = {},
+				})
+				value.root.nameInput = "name"
+				value = Design.document.change(value, w.library, "n1", "position", { input = "offset" })
+				local part
+				value, part = Design.document.insert(value, w.library, "n1", "Part")
+				value = Design.document.rename(value, w.library, part, "Geometry")
+				value = Design.document.change(value, w.library, part, "size", { literal = { 2, 4, 6 } })
+				value = Design.document.change(value, w.library, part, "position", { literal = { 1, 2, 3 } })
+				value = Design.document.change(value, w.library, part, "canCollide", { literal = collision })
+				value = Design.document.change(value, w.library, part, "transparency", { input = "fade" })
+				value = Design.document.insertSlot(value, w.library, "n1", "detail")
+				return value
+			end
+			local wall, brace = canonical("Wall", true), canonical("Brace", false)
+			local texts: { [string]: string } =
+				{ Wall = Design.emit(wall, w.library), Brace = Design.emit(brace, w.library) }
+			local sources = Compose.cell(texts)
+			local function imported(name: string): Design.Import
+				return {
+					source = Compose.formula(function(use: Compose.Use): string
+						return use(sources)[name]
+					end),
+					call = "Pieces." .. name,
+					save = function(expected: string, generated: string): boolean
+						if sources:peek()[name] ~= expected then
+							return false
+						end
+						local nextSources = table.clone(sources:peek())
+						nextSources[name] = generated
+						sources:set(nextSources)
+						return true
+					end,
+				}
+			end
+			local library = Design.imports(w.library, { Wall = imported "Wall", Brace = imported "Brace" })
+			local assembly = Design.document.setContract(Design.document.new("Assembly", library, "Model"), library, {
+				inputs = { { id = "fade", kind = "readable", type = "number", required = true, preview = 0.2 } },
+				outputs = {},
+			})
+			local ids: { string } = {}
+			for index, kind in { "Wall", "Brace" } do
+				local id
+				assembly, id = Design.document.insert(assembly, library, "n1", kind)
+				assembly = Design.document.rename(assembly, library, id, kind .. "Instance")
+				assembly = Design.document.change(assembly, library, id, "fade", { input = "fade" })
+				assembly = Design.document.change(assembly, library, id, "offset", { literal = { index * 10, 0, 0 } })
+				assembly = Design.document.content(assembly, library, id, "detail", "Part")
+				table.insert(ids, id)
+			end
+			local assemblySource = Design.emit(assembly, library)
+			local fade = Compose.cell<<Design.Literal?>>(0.2)
+			local notify: (() -> ())? = nil
+			local editor = DesignEditor.create(library, assembly, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				bindings = { fade = { readable = fade } },
+				link = {
+					read = function(): string
+						return assemblySource
+					end,
+					write = function(): boolean
+						return false
+					end,
+					watch = function(changed: () -> ()): () -> ()
+						notify = changed
+						return function()
+							notify = nil
+						end
+					end,
+				},
+			})
+			w.settle()
+			local scene = assert(editor.canvas.current().scene)
+			for index, id in ids do
+				local model = Support.instance(scene.nodes[id])
+				expect(model.Name):toBe(({ "WallInstance", "BraceInstance" })[index])
+				expect(w.find(model, "Geometry").CanCollide):toBe(index == 1)
+				expect(w.find(model, "Geometry").Size):toBe(w.values.Vector3.new(2, 4, 6))
+				expect(w.find(model, "Geometry").CFrame):toBe(w.values.CFrame.new(index * 10 + 1, 2, 3))
+				expect(w.find(model, "Pivot").CFrame):toBe(w.values.CFrame.new(index * 10, 0, 0))
+				expect(w.find(model, "Pivot").CanCollide):toBe(false)
+				expect(#model:GetChildren()):toBe(3)
+			end
+			local retained = scene.nodes[ids[1]]
+			fade:set(0.6)
+			w.settle()
+			expect(scene.nodes[ids[1]]):toBe(retained)
+			expect(w.find(retained, "Geometry").Transparency):toBe(0.6)
+			editor.session.select(ids[1])
+			expect(editor.execute({ action = "OpenDesign" }).ok):toBe(true)
+			local nested = assert(editor.nested())
+			expect(w.find(editor.root, "ComposeDesignShortcuts").Enabled):toBe(false)
+			nested.session.select "n2"
+			expect(nested.execute({ action = "Change", field = "size", value = { literal = { 8, 4, 6 } } }).ok):toBe(
+				true
+			)
+			w.settle()
+			expect(w.find(scene.nodes[ids[1]], "Geometry").Size):toBe(w.values.Vector3.new(8, 4, 6))
+			local changedSource = sources:peek().Wall
+			expect(nested.execute({ action = "Undo" }).ok):toBe(true)
+			w.settle()
+			expect(sources:peek().Wall):toBe(texts.Wall)
+			expect(nested.execute({ action = "Redo" }).ok):toBe(true)
+			w.settle()
+			expect(sources:peek().Wall):toBe(changedSource)
+			expect(Design.emit(Design.parse(changedSource, w.library), w.library)):toBe(changedSource)
+			expect(editor.session.selection:peek()):toEqual { ids[1] }
+			expect(nested.session.selection:peek()):toEqual { "n2" }
+			local external = Design.parse(sources:peek().Wall, w.library)
+			local extra
+			external, extra = Design.document.insert(external, w.library, "n1", "Part", 1)
+			external = Design.document.rename(external, w.library, extra, "Extra")
+			local nextSources = table.clone(sources:peek())
+			nextSources.Wall = Design.emit(external, w.library)
+			sources:set(nextSources)
+			w.settle()
+			expect(nested.session.selected:peek()):toBe "n3"
+			expect(editor.session.selection:peek()):toEqual { ids[1] }
+			expect(w.find(scene.nodes[ids[1]], "Extra").Parent):toBe(Support.instance(scene.nodes[ids[1]]))
+			expect(Design.emit(Design.parse(sources:peek().Wall, w.library), w.library)):toBe(sources:peek().Wall)
+			expect(editor.execute({ action = "CloseDesign" }).ok):toBe(true)
+			expect(w.find(editor.root, "ComposeDesignShortcuts").Enabled):toBe(true)
+			assembly = Design.document.change(assembly, library, ids[1], "offset", { literal = { 30, 0, 0 } })
+			assemblySource = Design.emit(assembly, library)
+			assert(notify)()
+			w.settle()
+			expect(w.find(scene.nodes[ids[1]], "Pivot").CFrame):toBe(w.values.CFrame.new(30, 0, 0))
+			expect(editor.session.selection:peek()):toEqual { ids[1] }
+			expect(Design.emit(Design.parse(assemblySource, library), library)):toBe(assemblySource)
+			expect(Design.emit(Design.parse(texts.Brace, w.library), w.library)):toBe(texts.Brace)
+			expect(#editor.session.document:peek().root.children):toBe(2)
+			editor.dispose()
+			w.settle()
+			expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+			w.close()
+		end
+	)
+
 	it("keeps actual size per device through switches, grid layout and command-driven fits", function()
 		local w = Support.world(nil, true)
 		local editor = w.mount { devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[5] } }
@@ -1148,6 +1780,54 @@ describe("host-neutral design editor", function()
 		w.close()
 	end)
 
+	it("resolves live visual selection targets inside each stage and releases closed or detached bounds", function()
+		local w = Support.world()
+		local target = Compose.cell<<unknown>>(nil)
+		w.library.kinds.Button.selectionTarget = function(_built: unknown, use: Compose.Use): unknown
+			return use(target)
+		end
+		local source = Design.emit(w.document, w.library)
+		local editor = w.mount()
+		local stage = assert(editor.canvas.current().stage)
+		editor.session.select(w.second)
+		w.settle()
+		local outline = w.find(stage.overlay, "DesignSelected")
+		expect(w.read(outline, "Visible")):toBe(false)
+		local surface = w.env.createInstance "Frame"
+		surface.Size = w.values.UDim2.fromOffset(200, 100)
+		surface.Position = w.values.UDim2.fromOffset(32, 48)
+		surface.Parent = w.find(editor.root, "DesignSurface")
+		target:set(surface)
+		for _, zoom in { 1, 2 } do
+			stage.zoomTo(zoom)
+			w.settle()
+			local at, size = w.point(surface, "AbsolutePosition"), w.point(surface, "AbsoluteSize")
+			local origin, extent = w.point(outline, "AbsolutePosition"), w.point(outline, "AbsoluteSize")
+			expect(w.read(outline, "Visible")):toBe(true)
+			expect(origin.X):toBeCloseTo(at.X, 0.01)
+			expect(origin.Y):toBeCloseTo(at.Y, 0.01)
+			expect(extent.X):toBeCloseTo(size.X, 0.01)
+			expect(extent.Y):toBeCloseTo(size.Y, 0.01)
+		end
+		surface.Visible = false
+		expect(w.read(outline, "Visible")):toBe(false)
+		surface.Visible = true
+		expect(w.read(outline, "Visible")):toBe(true)
+		target:set(nil)
+		expect(w.read(outline, "Visible")):toBe(false)
+		target:set(surface)
+		surface.Parent = w.screen
+		expect(w.read(outline, "Visible")):toBe(false)
+		surface.Parent = w.find(editor.root, "DesignSurface")
+		expect(w.read(outline, "Visible")):toBe(true)
+		surface:Destroy()
+		expect(w.read(outline, "Visible")):toBe(false)
+		expect(Design.emit(editor.session.document:peek(), w.library)):toBe(source)
+		target:set(nil)
+		editor.dispose()
+		w.close()
+	end)
+
 	it("places selection outlines and constant-screen-size grips at 100% and 200%", function()
 		local w = Support.world()
 		local editor = w.mount()
@@ -1590,7 +2270,7 @@ describe("host-neutral design editor", function()
 	end)
 
 	it("keeps the cursor anchor during zoom, clamps scale and fits the available stage room", function()
-		local w = Support.world()
+		local w = Support.world(nil, true)
 		local editor = w.mount()
 		w.settle()
 		local stage = assert(editor.canvas.current().stage)

@@ -8,12 +8,16 @@ local Stage = require "./stage"
 local Stage3D = require "./stage3d"
 local Projection = require "./projection"
 
+export type SlotSample = (Design.Library, Devices.Profile) -> unknown
+
 export type Context = {
 	library: Design.Library?,
 	token: ((string) -> Design.Literal)?,
 	resolveToken: ((string) -> Design.Resolved)?,
 	bindings: { [string]: Design.Resolved }?,
+	outputs: { [string]: (args: { Design.Literal }) -> () }?,
 	slots: { [string]: () -> unknown }?,
+	slotSamples: { [string]: SlotSample }?,
 	backdrop: (() -> unknown)?,
 	dispose: (() -> ())?,
 }
@@ -148,6 +152,14 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 		local body = Theme.frame "DeviceCanvas"
 		Theme.place(body, frame, ui.values.udim2(1, 0, 1, -header), ui.values.udim2(0, 0, 0, header))
 		local library = Projection(ui, context.library or session.library, device)
+		local slots = table.clone(context.slots or options.slots or {})
+		for slotName, sample in context.slotSamples or options.slotSamples or {} do
+			if slots[slotName] == nil then
+				slots[slotName] = function(): unknown
+					return sample(library, device)
+				end
+			end
+		end
 		local entry: Frame = { device = device, root = frame, scale = scale, actualSize = Compose.cell(false) }
 		if library.space == "3d" then
 			entry.scene = Stage3D(ui)(session, body, {
@@ -155,9 +167,10 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 				readOnly = options.readOnly,
 				library = library,
 				bindings = context.bindings or options.bindings,
+				outputs = context.outputs or options.outputs,
 				token = context.token or options.token,
 				resolveToken = context.resolveToken or options.resolveToken,
-				slots = context.slots or options.slots,
+				slots = slots,
 			})
 		else
 			entry.stage = Stage(ui)(session, body, {
@@ -167,9 +180,10 @@ return function(ui: UI.UI, session: Design.Session, parent: Compose.Node, option
 				backdrop = context.backdrop or options.backdrop,
 				compact = #options.devices > 1,
 				bindings = context.bindings or options.bindings,
+				outputs = context.outputs or options.outputs,
 				token = context.token or options.token,
 				resolveToken = context.resolveToken or options.resolveToken,
-				slots = context.slots or options.slots,
+				slots = slots,
 			})
 		end
 		entries[index] = entry

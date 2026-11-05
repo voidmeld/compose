@@ -1051,6 +1051,7 @@ Pass `recycle` instead of `render` to reuse mounted rows.
 `recycle` receives the value, the placement and the key as readables.
 When a key leaves the window, Compose can reuse its row for an arriving key. It updates the row's readables instead of destroying and rebuilding the row.
 A recycled collection also keeps at most one retained window's worth of detached spare rows. This avoids remounting when fractional scrolling changes the visible count. An empty window releases every spare. Spare rows retain their subscriptions until reused or released.
+When a key leaves the source, Compose releases its unused spare row and subscriptions.
 A key that stays in the window keeps its row.
 Use `recycle` only when the row reads its key and value through these readables and keeps no state that belongs to one key.
 Pass exactly one of `render` and `recycle`.
@@ -2150,9 +2151,11 @@ Require `src/design`. A `Library` provides `name`, `parameter`, `parameterType`,
 
 `insertSlot(value, library, parentId, input, at?) -> (Document, id)` inserts a slot factory at an ordinary child position in a list container. The node is `{ id, kind = "$slot", name = input, slot = input, props = {}, children = {} }`. It accepts only a value slot input and carries no props, tags, bindings or children. Required slots emit `props.body()`; optional slots emit `if props.body then props.body() else nil`. This presence check is restricted to the declared slot factory. Rendering calls the supplied factory at that position under the active owner, with normal failed-build unwind. A missing optional factory contributes no child; a missing required factory raises an error. No runtime wrapper node is added.
 
+`content(value, library, id, key, kind) -> (Document, childId)` also accepts a `value` field without `perRow`. Its top-level `{ ["$template"] = childId }` marker supplies one authored node directly, emitted as `item = UI.Kind "Name" { ... }` and resolved as `Resolved.value` before the receiving kind builds. The child remains editable and owned by the active owner. Content fields and nested record templates retain their lazy factory form; node references retain their deferred capture form.
+
 A field's `type` is `string`, `number`, `boolean`, `choice`, `color`, `vector3`, `value`, `event`, `content`, `node` or `datatype`. `value` accepts plain tables, including attribute maps. `datatype` supplies a name such as `UDim2` or `Enum.AutomaticSize`. The source writer converts these literals into constructor calls. Kind builders interpret literals during direct rendering. `tokens = true` permits token bindings. `luauType` annotates emitted table literals. `perRow` makes a literal a row function. `requires` controls dependent fields. `seeds` provides children on insertion.
 
-A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can provide fixed `args` and current item `fields`. A `content` field binds a slot input or a content subtree. `Bind` is `{ from, key, row? }`. `from` names a list input or the enclosing row's list field. `key` names its stable key. `row` selects the template child. Other children stay beside the repeated content. Template kinds receive `rows` and `template` values through the properties named by `source` and `template`.
+A `Value` holds exactly one of `literal`, `input`, `item`, `output`, `token`, `state`, `node`, `nodeFrom` or `play`. Event outputs can provide fixed `args` and current item `fields`. A `content` field binds a slot input or a content subtree. `Bind` is `{ from, key, row? }`. `from` names a list input or the enclosing row's list field. `key` names its stable key. `row` selects the template child. Row variants of different kinds can share a `nameField`; each selected root reads that same field directly. Other children stay beside the repeated content. Template kinds receive `rows` and `template` values through the properties named by `source` and `template`.
 
 `Bind.from` also accepts `"pages.rows"` when the current outer collection is `pages` and its row declares a `rows` list field. The qualifier must name that current collection, rather than another input or an arbitrary ancestor. This form emits a local `row_pages` alias and reads `use(row_pages).rows`, retaining the qualified address through parsing. Unqualified row list fields remain supported. Inner rows keep their own keys, bindings and ownership when the outer row changes.
 
@@ -2164,6 +2167,8 @@ Numeric datatype literals are component arrays. Each component accepts a number 
 
 ### Design contracts and types
 
+`Kind.selectionTarget(built, use) -> unknown` is an optional editor hook. Return the current visual GuiObject for the object returned by `build`, or `nil` when no surface is presented. Read live target state with `use` so outlines update when a portal opens, closes or replaces its surface. The editor reads native bounds and hides outlines for detached or hidden targets outside its stage. Kinds without this hook use their built object. The hook does not change emitted source or authored node references.
+
 `Contract` is `{ inputs: { Input }, outputs: { Output } }`. An input has `id`, `kind` (`value`, `readable` or `cell`), `type`, optional plain-data `preview`, `required`, `fields` and `luauType`. Input types are `string`, `number`, `boolean`, `color`, `image`, `list`, `record` and `slot`. List and record `fields` recursively declare `{ id, type, fields?, luauType?, options? }`. String item fields can declare at least two distinct nonempty enum options, which emit a string literal union and cannot override `luauType`. Emitted list items and nested records retain these shapes.
 
 `luauType` overrides the emitted base type of an input or item field. It accepts identifiers and qualified type names, such as `UDim2` and `Controls.Geometry`. `kind` still wraps that type in the library's readable or cell type. The library prelude provides named imports. This annotation does not convert previews or runtime values. Slot inputs require `kind = "value"` and use `() -> <library.returnType>`. They reject `luauType` overrides. Validation rejects invalid type paths.
@@ -2171,6 +2176,8 @@ Numeric datatype literals are component arrays. Each component accepts a number 
 A static string input can declare `options: { string }` with at least two distinct nonempty strings. It emits a union of those string literals and retains the options in the contract header. A preview must be one of the options. Root selection reads only this enum; no expressions or arbitrary value conditions are part of the format. Direct rendering rejects missing or unknown root selections and readable selector bindings.
 
 An output has `id`, optional `args: { InputType }` or `row` naming a list input with fields. Outputs emit optional typed callbacks; a row output receives the exported list item type. An output marker inside a literal is `{ ["$output"] = "onPick", ["$row"] = true }` to pass the current row. A literal record field can read an input with `{ ["$input"] = "title" }`, which emits `props.title`. The marker contains only `$input` and must name a declared input. It works beside `$template` factories in page records, including typed hoisted records. Direct rendering forwards the supplied value or readable, so the receiving control owns its normal binding behavior. Slots and outputs keep behavior in the consumer while the document owns structure.
+
+An event Value can set `output` and ordered `arguments: { ActionArgument }`, with each argument either `{ item: string }` or `{ event: number }`. For `(rowKey, text)`, use `{ output = "onChange", arguments = { { item = "id" }, { event = 1 } } }`; for focus, use only `{ item = "id" }`. Declare the output's `args` in that same order. Item types must match; event indices are positive, contiguous and refer to native event positions. Repeated event indices must agree on type. Emission writes typed `event1`, `event2` parameters and preserves the list order through parse/emit and rendering. Row fields are read at invocation. This form cannot mix with legacy constant `args` or `fields`.
 
 ### `Design.emit`
 
@@ -2219,6 +2226,25 @@ Supplying `bindings`, including an empty table, enables live conditional childre
 
 `extend(library, { kinds, prelude? }) -> Library` adds kinds and deduplicates prelude lines; duplicate kinds refuse.
 
+### `Design.imports`
+
+`imports(base, { [kindName]: Import }) -> Library` adds reusable Design kinds. An `Import` supplies `source: Compose.ReadOnlyValue<string>`, `call`, optional `library` (defaults to `base`), `prelude` and `save(expected, generated) -> boolean`. `call` names a component with the standard `(controls, Props)` signature; its require belongs in `prelude`. Each source must parse independently and bind its root name to a required string value input. Other inputs become fields, slot inputs become named content fields, and outputs become event fields. Value/readable/cell input bindings retain their declared types and input kinds; a cell can supply a readable. Prepare reactive values in the caller.
+
+```luau
+local assemblyLibrary = Design.imports(library, {
+    Wall = {
+        source = wallSource,
+        call = "Wall",
+        prelude = { 'local Wall = require(script.Parent.Wall)' },
+        save = saveWall,
+    },
+})
+```
+
+An authored `Wall` node emits `Wall(UI, { name = "WestWall", ... })`, using the library's controls parameter and the imported root's name input. Geometry remains in the imported source; the call adds no wrapper. Named slots use `document.content` or slot input bindings. Rendering forwards resolved inputs, outputs and token resolvers under the active owner. Source contracts and the root name input stay stable while linked; rebuild the library after changing that interface.
+
+`RenderContext.use` subscribes the rendering watch to imported source readables, including transitive imports. Editor stages supply it automatically. Sources stay borrowed. An editor's **Edit Design** action (`OpenDesign`) opens the selected import's canonical layers in a nested editor; `CloseDesign` or **Back to assembly** returns to the assembly. `Editor.nested()` exposes the open editor. Editing requires `save`, which must compare the expected bytes, persist the generated source and publish it through `source`. The existing source-link conflict checks apply. Source changes refresh all consuming instances while the assembly and nested selections retain their layer identities.
+
 ### `Design.session`
 
 `session(library, initial) -> Session` owns document, selection and edit history. Edit methods return success and put refusals in `problem` without replacing the current document.
@@ -2251,11 +2277,19 @@ Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime` and `
 
 `Editor` returns `root`, `session`, `canvas`, `execute(request)` and an idempotent `dispose()`. Commands and structured results are documented in [editor commands](design-editor.md#editor-commands). Optional `identity = { commit, path }` binds results to source. `canvas.current()` returns the active `Frame`, with `device`, `root`, `scale` and either `stage` or `scene`. `canvas.select(id)` opens a profile, `showAll(enabled)` switches UI grid mode, `frames()` lists open frames, and `fit()` fits visible frames. A 3D Design always opens one full-size scene. Optional `scene = { world, camera, eyeHeight? }` borrows a host world and camera for a viewport overlay using normal world rendering and lighting. The scene adds `setCamera(preset)`, `orbit(yawDegrees, pitchDegrees)`, `preset`, `readCamera()` and `reframe()`; presets are `fit`, `eye-height`, `approach-20`, `close-up` and `top-down`. `canvas.zoom` follows the active view; `zoomTo(scale, around?)` controls it. All frames share one session, selection, history and source link. Each frame owns its rendered tree and layout context. Disposing the editor releases every frame and context, watcher, subscription and source link, and restores a borrowed scene camera. The supplied runtime, parent and services remain borrowed. Failed construction unwinds resources and raises the original failure.
 
+`editor.stage` and `editor.scene` read the active canvas frame's `stage` and `scene`. A UI Design supplies only `stage`; a 3D Design supplies only `scene`. These aliases follow device selections and frame clicks immediately. Read them again after switching frames to reach the active view and its mounted nodes.
+
 A 2D `stage` exposes `surface`, `overlay`, `nodes`, `zoom`, `zoomTo(scale, around?)`, `fit()` and `play(sequence)`. A 3D `scene` exposes `viewport`, `world`, `camera`, `nodes`, `zoom`, `zoomTo(scale, around?)`, `fit()` and `pick(point)`. Node handles are opaque `Compose.Node` values. `nodes` maps document ids to rendered nodes. Points are plain `{ X: number, Y: number }` records. A 2D zoom clamps to `[0.02, 8]`. Fit reserves space for editing controls and resets pan. A 3D fit uses the frame's aspect and field of view. `pick` returns a document id or nil and excludes scene guides and gizmos.
 
 Each frame exposes `actualSize: Compose.Value<boolean>`. `canvas.actualSize(enabled)` sets one UI frame to scale 1 or returns it to fit. Layout preserves this mode per device; Fit and zoom clear it for affected frames. Both stage types expose `pan(offset: Point)` and `play(sequence)`; an unknown sequence raises. A scene's `guides(enabled)` attaches or detaches its owned grid and selection helpers for captures. `Workspace` also accepts `backdrop` and forwards it to each UI frame.
 
 `frame(device, scale) -> FrameContext` supplies a library and optional bindings, token resolvers, slots and disposal for one frame. Missing bindings and resolvers inherit the editor defaults. Construct the library with the game's viewport, inset, input and typography seams driven by `device`. `scale` reports displayed pixels per device pixel; measurements taken from scaled native GUI bounds must divide by it. This preserves layout decisions when zooming. A library's `provide(content)` wraps its 2D render.
+
+`Options`, `Workspace` and `FrameContext` accept `slotSamples: { [string]: SlotSample }`, where `SlotSample = (library: Design.Library, device: Device) -> unknown`. Each factory runs under the frame's active owner with its projected library; render a child Design there with its live bindings. Return fresh owned content per call. Explicit slots and slot bindings take precedence. Editor-level names must name contract slot inputs. Keep factories and sample selection callbacks outside the logic-free Design source.
+
+`Options`, `Workspace` and `FrameContext` also accept `outputs: { [string]: (args: { Design.Literal }) -> () }`, using the `Design.render` protocol. Every stage forwards native control callbacks to those handlers with the same ordered action arguments as runtime rendering. Frame outputs override editor defaults.
+
+`Capture { name }` calls optional `capture(name, frame) -> { string }` and returns the host's actual capture paths in `files`. The identically named Capture control uses the Design name. `Close` disposes the editor once, then calls optional `onClose()`; subsequent Read returns `closed = true`. Other commands then return an actionable failure. Both controls share `execute`. Every result includes `target` (the identity path or Design name), optional `commit` and `path`, and `files`; commands without capture return an empty file list. `Workspace.capture` supplies kit captures; closing also releases the workspace once.
 
 `Environment` contains `service(name: string) -> unknown`, `invoke(node: unknown, method: string, ...unknown) -> ...unknown`, `descendants(node: unknown) -> { unknown }` and `values: Values`. `Values` supplies `vector2(x, y)`, `vector3(x, y, z)`, `udim(scale, offset)`, `udim2(xScale, xOffset, yScale, yOffset)`, `color(r, g, b)` with normalized channels, `font(family, weight)`, `enum(category, item)`, `cframe(components)` with twelve position/rotation components, and `raycastParams(include, instances)`. Each constructor returns an opaque value. `invoke` must preserve method results and failures. Service lookup supplies `UserInputService`; a source store supplies any ScriptEditorService integration separately.
 

@@ -3,6 +3,7 @@
 local fs = require "@std/fs"
 local process = require "@lute/process"
 local Design = require "../../src/design"
+local Core = require "../../src/core"
 local Test = require "../harness"
 
 local describe, it, expect = Test.describe, Test.it, Test.expect
@@ -31,6 +32,7 @@ local library: Design.Library = {
 		"\tBook: (string) -> ({ pages: { PageRecord } }) -> Target,",
 		"\ttag: (Target, Core.Input<string | Tags>) -> Target,",
 		"\tFlash: (string) -> ({ target: Core.Source<Target> }) -> Target,",
+		"\tTrailing: (string) -> ({ item: Target }) -> Target,",
 		"\tPanel: (string) -> ({ content: () -> Target }) -> Target,",
 		"\tPages: (",
 		"\t\tstring",
@@ -56,6 +58,12 @@ local library: Design.Library = {
 			build = build,
 		},
 		Flash = { fields = { target = { type = "node" } }, children = "none", call = "UI.Flash", build = build },
+		Trailing = {
+			fields = { item = { type = "value", luauType = "Target" } },
+			children = "none",
+			call = "UI.Trailing",
+			build = build,
+		},
 		Button = { fields = { label = { type = "string" } }, children = "none", call = "UI.Button", build = build },
 		Notice = { fields = { text = { type = "string" } }, children = "none", call = "UI.Notice", build = build },
 		Book = {
@@ -121,6 +129,198 @@ local function canonical(code: string)
 end
 
 describe("Design emitted source", function()
+	it("types and round trips ordered row actions and executes the emitted callbacks", function()
+		local typed = table.clone(library)
+		typed.prelude = {
+			'local Core = require "../src/core"',
+			"type Row = { id: string }",
+			"type Target = { name: string }",
+			"type InputProps = { onChange: (string) -> (), onFocus: () -> (), onMixed: (string, boolean) -> () }",
+			"type Controls = {",
+			"\tInput: (string) -> (InputProps) -> Target,",
+			"\tRows: (",
+			"\t\tstring",
+			"\t) -> ({ from: Core.Source<{ Row }>, key: string, render: (Core.ReadOnlyValue<Row>) -> Target }) -> Target,",
+			"}",
+		}
+		typed.kinds = table.clone(library.kinds)
+		local inputKind: Design.Kind = {
+			fields = { onChange = { type = "event" }, onFocus = { type = "event" }, onMixed = { type = "event" } },
+			children = "none",
+			call = "UI.Input",
+			build = build,
+		}
+		typed.kinds.Input = inputKind
+		local value = Design.document.setContract(Design.document.new("Editable", typed, "Rows"), typed, {
+			inputs = {
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					required = true,
+					fields = { { id = "id", type = "string" } },
+				},
+			},
+			outputs = {
+				{ id = "onChange", args = { "string", "string" } },
+				{ id = "onFocus", args = { "string" } },
+				{ id = "onMixed", args = { "boolean", "string", "string" } },
+			},
+		})
+		value = Design.document.bind(value, typed, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, typed, "n1", "Input")
+		local actions: { [string]: { Design.ActionArgument } } = {
+			onChange = { { item = "id" }, { event = 1 } },
+			onFocus = { { item = "id" } },
+			onMixed = { { event = 2 }, { item = "id" }, { event = 1 } },
+		}
+		for name, arguments in actions do
+			value = Design.document.change(value, typed, "n2", name, { output = name, arguments = arguments })
+		end
+		local code = Design.emit(value, typed)
+		expect(Design.emit(Design.parse(code, typed), typed)):toBe(code)
+		analyze(code)
+		canonical(code)
+		fs.writeStringToFile(".worker-tmp/typed-row.luau", code)
+		fs.writeStringToFile(
+			".worker-tmp/typed-row-run.luau",
+			[[
+--!strict
+local Core = require "../src/core"
+local editable = require "./typed-row"
+local calls = {}
+local row = Core.cell { id = "stable" }
+local input
+editable({
+    Rows = function(name)
+        return function(props)
+            props.render(row)
+            return { name = name }
+        end
+    end,
+    Input = function(name)
+        return function(props)
+            input = props
+            return { name = name }
+        end
+    end,
+}, {
+    rows = Core.cell { { id = "stable" } },
+    onChange = function(key, text) table.insert(calls, { key, text }) end,
+    onFocus = function(key) table.insert(calls, { key }) end,
+    onMixed = function(flag, key, text) table.insert(calls, { flag, key, text }) end,
+})
+assert(input)
+input.onChange("new")
+input.onFocus()
+input.onMixed("changed", false)
+row:set { id = "retained" }
+input.onChange("again")
+assert(calls[1][1] == "stable" and calls[1][2] == "new")
+assert(calls[2][1] == "stable" and #calls[2] == 1)
+assert(calls[3][1] == false and calls[3][2] == "stable" and calls[3][3] == "changed")
+assert(calls[4][1] == "retained" and calls[4][2] == "again")
+]]
+		)
+		local ran = process.run { "lute", "run", ".worker-tmp/typed-row-run.luau" }
+		expect(ran.ok, ran.stdout .. ran.stderr):toBe(true)
+	end)
+
+	it("round trips typed imported components with named slots without expanding their trees", function()
+		local nested = Design.document.setContract(Design.document.new("Reusable", library, "Box"), library, {
+			inputs = {
+				{ id = "name", kind = "value", type = "string", required = true },
+				{ id = "text", kind = "readable", type = "string", required = true },
+				{ id = "body", kind = "value", type = "slot" },
+			},
+			outputs = {},
+		})
+		nested.root.nameInput = "name"
+		nested = Design.document.insert(nested, library, "n1", "Button")
+		nested = Design.document.change(nested, library, "n2", "label", { input = "text" })
+		nested = Design.document.insertSlot(nested, library, "n1", "body")
+		local nestedCode = Design.emit(nested, library)
+		canonical(nestedCode)
+		analyze(nestedCode)
+		local imported = Design.imports(library, {
+			Reusable = {
+				source = Core.cell(nestedCode),
+				call = "ReusableRow",
+				prelude = {
+					"local function ReusableRow(",
+					"\t_ui: Controls,",
+					"\tprops: { name: string, text: Core.ReadOnlyValue<string>, body: (() -> Target)? }",
+					"): Target",
+					"\treturn { name = props.name }",
+					"end",
+				},
+			},
+		})
+		local assembly = Design.document.setContract(Design.document.new("Assembly", imported, "Box"), imported, {
+			inputs = { { id = "text", kind = "readable", type = "string", required = true } },
+			outputs = {},
+		})
+		for _, name in { "Left", "Right" } do
+			local id
+			assembly, id = Design.document.insert(assembly, imported, "n1", "Reusable")
+			assembly = Design.document.rename(assembly, imported, id, name)
+			assembly = Design.document.change(assembly, imported, id, "text", { input = "text" })
+			assembly = Design.document.content(assembly, imported, id, "body", "Box")
+		end
+		local code = Design.emit(assembly, imported)
+		expect(string.find(code, "ReusableRow(UI, {", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "label =", 1, true)):toBeNil()
+		expect(Design.emit(Design.parse(code, imported), imported)):toBe(code)
+		expect(Design.emit(Design.parse(nestedCode, library), library)):toBe(nestedCode)
+		canonical(code)
+		analyze(code)
+		local rows = Design.document.setContract(Design.document.new("Rows", imported, "Choices"), imported, {
+			inputs = {
+				{ id = "text", kind = "readable", type = "string", required = true },
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					required = true,
+					fields = {
+						{ id = "id", type = "string" },
+						{ id = "kind", type = "string", options = { "button", "notice", "stack" } },
+						{ id = "text", type = "string" },
+						{ id = "tags", type = "list", luauType = "Tags" },
+					},
+				},
+			},
+			outputs = {},
+		})
+		rows = Design.document.bind(rows, imported, "n1", { from = "rows", key = "id" })
+		rows = Design.document.insert(rows, imported, "n1", "Reusable")
+		rows = Design.document.change(rows, imported, "n2", "text", { input = "text" })
+		rows.root.children[1].nameField = "id"
+		for _, named in { false, true } do
+			local options: Design.EmitOptions = { rowFunctions = named }
+			local rowCode = Design.emit(rows, imported, options)
+			expect(Design.emit(Design.parse(rowCode, imported), imported, options)):toBe(rowCode)
+			canonical(rowCode)
+			analyze(rowCode)
+		end
+	end)
+
+	it("strictly types one authored node passed directly to a value field", function()
+		local value, child = Design.document.content(
+			Design.document.new("Navigation", library, "Trailing"),
+			library,
+			"n1",
+			"item",
+			"Button"
+		)
+		value = Design.document.change(value, library, child, "label", { literal = "Next" })
+		local code = Design.emit(value, library)
+		expect(string.find(code, 'item = UI.Button "Button"', 1, true) ~= nil):toBe(true)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		canonical(code)
+		analyze(code)
+	end)
+
 	it("strictly types native constructors with prepared static and reactive input components", function()
 		local value = Design.document.setContract(Design.document.new("Components", library, "Box"), library, {
 			inputs = {
@@ -278,6 +478,7 @@ describe("Design emitted source", function()
 		value = Design.document.bind(value, library, "n1", { from = "rows", key = "id" })
 		value = Design.document.insert(value, library, "n1", "Button")
 		value = Design.document.change(value, library, "n2", "label", { item = "text" })
+		value.root.children[1].nameField = "id"
 		value = Design.document.bindTags(value, library, "n2", { item = "tags" })
 		value.nextId = 4
 		value = Design.document.setRowVariant(value, library, "n2", {

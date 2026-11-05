@@ -368,6 +368,30 @@ describe("ownership", function()
 			expectClean(world)
 		end)
 
+		it("keeps owner identities distinct across runtimes after earlier owners end", function()
+			local world = Support.world()
+			local other = Compose.createRuntime(world.host.adapter)
+			local first = Compose.createOwner(world.runtime.reactor)
+			Compose.withOwner(first, function()
+				world.create "Earlier" {}
+			end)
+			Compose.owner.dispose(first)
+			local original = Compose.createOwner(other.reactor)
+			local child = Compose.withOwner(original, function()
+				return other.create "External" {}
+			end)
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { world.create "Row" { child } }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "owned"
+			Compose.owner.dispose(original)
+			other:dispose()
+			expectClean(world)
+		end)
+
 		it("releases protected descendants before destroying a static ancestor", function()
 			for _, dynamic in { false, true } do
 				local world = Support.world()
@@ -403,6 +427,45 @@ describe("ownership", function()
 			end):toThrow()
 			expect(world.host.isAlive(child)):toBe(true)
 			expect(world.host.parentOf(child)):toBe(nil)
+			Compose.owner.dispose(owner)
+			expectClean(world)
+		end)
+
+		it("preserves an earlier child borrowed while its new parent build fails", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local child = Compose.withOwner(owner, function()
+				return world.create "Row" {}
+			end)
+			local function borrowChild(_mountPoint: Compose.MountPoint)
+				world.runtime.borrow(child)
+			end
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { child, borrowChild, false }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "borrowed"
+			Compose.owner.dispose(owner)
+			expectClean(world)
+		end)
+
+		it("continues unwinding earlier same-owner children after a detach failure", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local first, second = Compose.withOwner(owner, function()
+				return world.create "First" {}, world.create "Second" {}
+			end)
+			world.host.failNext "removeChild"
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { first, second, false }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(first)):toBe(true)
+			expect(world.host.parentOf(first)):toBe(nil)
 			Compose.owner.dispose(owner)
 			expectClean(world)
 		end)

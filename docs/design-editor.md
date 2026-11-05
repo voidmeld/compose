@@ -141,6 +141,12 @@ Pass a `Design.LinkStore` as `options.link` to link source.
 The Roblox adapter `studio/design/script-store.luau` wraps `ScriptEditorService`.
 The editor uses only the store protocol.
 
+`Design.imports` registers reusable source-backed kinds with typed inputs and named slots.
+Select an instance and choose **Edit Design** to open its canonical layers inside the editor.
+**Back to assembly** returns to the assembly's selection. The import's source writer saves
+those edits, and its readable refreshes every consuming instance. The assembly source
+keeps component calls and slot children rather than copies of the imported geometry.
+
 Shift-click or Command/Ctrl-click on the stage toggles a node. Command/Ctrl-click in layers also toggles; Shift-click selects a sibling range. Drag on empty canvas to select intersecting bounds. Selection has a union outline and an outline per node. Escape clears it. Delete, Duplicate, Copy, Paste, Alt+Up/Down and dragging act on the selection. Each edit is one undo step. The inspector shows shared fields, marks differing values as Mixed, and applies an edit to every selected node.
 
 Command/Ctrl+G wraps selected siblings in the library's default list container. Their order stays the same. Command/Ctrl+Shift+G replaces a selected container with its children. Right-click a layer for Wrap and Unwrap. Both commands support undo and redo.
@@ -215,6 +221,8 @@ Screen roots project their authored ScreenInsets into the frame. Billboard roots
 | Play | `sequence`: sequence ID |
 | Prompt | `text`, optional `count`: 1, 2 or 3, optional `theme`: boolean |
 | ChooseDraft | `index`: one-based draft index |
+| Capture | `name`: nonempty capture name; requires `capture(name, frame) -> { string }` |
+| Close | none; disposes once, then calls optional `onClose()` |
 
 The commands use the same session, camera and preview callbacks as the visible controls.
 Supply `identity = { commit = commit, path = sourcePath }` to bind results to a source revision.
@@ -224,8 +232,14 @@ available `devices`, `allDevices`, `actualSize`, `zoom`, chrome `textSize`, curr
 `busy`, `drafts` and `status` on subsequent Read calls. A rejected session edit returns `ok = false`, as
 does a raised callback; failures include `problem` and the next Read command. Read can return an existing
 session problem while succeeding. Theme writes validate the same token ranges as the inspector.
-The library writes no files itself (`files` is empty); the host reports its actual
-source writes and named native captures. The host also owns open, capture and close commands.
+`target` is the identity path or Design name. Capture returns the host's actual paths in `files`;
+other commands leave `files` empty. The host owns native capture and source persistence.
+Close releases the editor; subsequent Read reports `closed = true` and edits fail with a reopening instruction.
+
+For child Designs in slots, pass `slotSamples = { body = function(library, device) return Design.render(child, library, context) end }`
+in editor options or a frame context. Each factory runs under the frame owner with the projected library.
+Build fresh content and supply the same live bindings driven by named previews. Explicit slots take precedence.
+Editor-level sample names must name contract slot inputs. Factories stay outside the Design source.
 
 ```luau
 editor.execute({ action = "Camera", preset = "approach-20" })
