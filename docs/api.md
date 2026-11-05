@@ -2291,6 +2291,15 @@ Each frame exposes `actualSize: Compose.Value<boolean>`. `canvas.actualSize(enab
 
 `Options`, `Workspace` and `FrameContext` also accept `outputs: { [string]: (args: { Design.Literal }) -> () }`, using the `Design.render` protocol. Every stage forwards native control callbacks to those handlers with the same ordered action arguments as runtime rendering. Frame outputs override editor defaults.
 
+`renderPreview: RenderPreview` in `Options`, `Workspace` or `FrameContext` projects
+the render without editing source. Its signature is
+`(document: Design.Document, library: Design.Library, use: Compose.Use) -> (Design.Document, { [string]: Design.Resolved })`.
+It runs under each render owner with the projected library. Use it to read sample
+state and return a preview document and bindings, including owned cells and slot
+factories. Changing a tracked sample releases the old render. The session,
+source link and undo history keep the authored document; explicit editor commands
+still edit that document. Frame callbacks override the editor callback.
+
 `Capture { name }` calls optional `capture(name, frame) -> { string }` and returns the host's actual capture paths in `files`. The identically named Capture control uses the Design name. `Close` disposes the editor once, then calls optional `onClose()`; subsequent Read returns `closed = true`. Other commands then return an actionable failure. Both controls share `execute`. Every result includes `target` (the identity path or Design name), optional `commit` and `path`, and `files`; commands without capture return an empty file list. `Workspace.capture` supplies kit captures; closing also releases the workspace once.
 
 `Environment` contains `service(name: string) -> unknown`, `invoke(node: unknown, method: string, ...unknown) -> ...unknown`, `descendants(node: unknown) -> { unknown }` and `values: Values`. `Values` supplies `vector2(x, y)`, `vector3(x, y, z)`, `udim(scale, offset)`, `udim2(xScale, xOffset, yScale, yOffset)`, `color(r, g, b)` with normalized channels, `font(family, weight)`, `enum(category, item)`, `cframe(components)` with twelve position/rotation components, and `raycastParams(include, instances)`. Each constructor returns an opaque value. `invoke` must preserve method results and failures. Service lookup supplies `UserInputService`; a source store supplies any ScriptEditorService integration separately.

@@ -10,6 +10,59 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("keeps owned sample projections out of source and undo history in UI and 3D previews", function()
+		for _, space in { "2d", "3d" } do
+			local w = Support.world(space)
+			local state = Compose.cell(0)
+			local source = Design.emit(w.document, w.library)
+			local original = source
+			local writes, builds, releases = 0, 0, 0
+			local editor = DesignEditor.create(w.library, w.document, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				renderPreview = function(value, _library, use)
+					builds += 1
+					Compose.cleanup(function()
+						releases += 1
+					end)
+					return Design.document.rename(value, w.library, value.root.id, "Sample" .. use(state)), {}
+				end,
+				link = {
+					read = function(): string
+						return source
+					end,
+					write = function(expected: string, generated: string): boolean
+						expect(expected):toBe(source)
+						source = generated
+						writes += 1
+						return true
+					end,
+					watch = function(): () -> ()
+						return function() end
+					end,
+				},
+			})
+			for index = 1, 4 do
+				state:set(index)
+				w.settle()
+				local frame = editor.canvas.current()
+				local view = assert(frame.stage or frame.scene)
+				expect(w.read(view.nodes[w.document.root.id], "Name")):toBe("Sample" .. index)
+				expect(source):toBe(original)
+				expect(writes):toBe(0)
+				expect(editor.session.canUndo:peek()):toBe(false)
+			end
+			expect(editor.execute({ action = "Rename", name = "Authored" }).ok):toBe(true)
+			w.settle()
+			expect(Design.parse(source, w.library).root.name):toBe "Authored"
+			expect(writes):toBe(1)
+			editor.dispose()
+			w.settle()
+			expect(releases):toBe(builds)
+			w.close()
+		end
+	end)
+
 	it("exposes the active UI stage and mounted root through public create across device selections", function()
 		local w = Support.world(nil, true)
 		local devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] }
