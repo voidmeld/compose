@@ -109,6 +109,21 @@ export type Runtime = {
 	dispose: (self: Runtime) -> (),
 }
 
+local function rollbackChildren(removeChild: (Node, Node) -> (), props: unknown, node: Node, token: number)
+	local entries = Dynamic.entries(props)
+	local failures: { unknown } = {}
+	for index = #entries, 1, -1 do
+		local child = entries[index]
+		if (type(child) == "table" or type(child) == "userdata") and Nodes.belongsTo(child, token) then
+			local ok, failure: unknown = pcall(removeChild, node, child)
+			if not ok then
+				table.insert(failures, failure)
+			end
+		end
+	end
+	Owner.raiseAll(failures)
+end
+
 local function createRuntime(host: Host.Host): Runtime
 	local reactor = Reactor.create()
 
@@ -208,36 +223,29 @@ local function createRuntime(host: Host.Host): Runtime
 			local list: Children.ChildList? = nil
 			local staticSlot = 0
 			local staticChildren: { Node }? = nil
-			local hasForeignChild = false
+			local token = assert(owner.nodeToken)
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
-					local attached = staticChildren
-					if attached == nil then
-						local children: { Node } = {}
-						attached = children
-						staticChildren = children
-						Owner.adopt(owner, function()
-							if owner.disposed and not hasForeignChild then
-								return
-							end
-							local failures: { unknown } = {}
-							for at = #children, 1, -1 do
-								local current = children[at]
-								if not owner.disposed or not Nodes.belongsTo(current, assert(owner.nodeToken)) then
-									local ok, failure: unknown = pcall(supplied.render.removeChild, node, current)
+					if not Nodes.belongsTo(child, token) then
+						local attached = staticChildren
+						if attached == nil then
+							local children: { Node } = {}
+							attached = children
+							staticChildren = children
+							Nodes.protect(node)
+							Owner.adopt(owner, function()
+								local failures: { unknown } = {}
+								for at = #children, 1, -1 do
+									local ok, failure: unknown = pcall(supplied.render.removeChild, node, children[at])
 									if not ok then
 										table.insert(failures, failure)
 									end
 								end
-							end
-							Owner.raiseAll(failures)
-						end)
-					end
-					table.insert(assert(attached), child)
-					if not Nodes.belongsTo(child, assert(owner.nodeToken)) then
-						hasForeignChild = true
-						Nodes.protect(node)
+								Owner.raiseAll(failures)
+							end)
+						end
+						table.insert(assert(attached), child)
 					end
 					if list == nil then
 						supplied.render.insertChild(node, child, index)
@@ -288,7 +296,6 @@ local function createRuntime(host: Host.Host): Runtime
 				end
 			end
 		end
-
 		local function build(label: string?, props: unknown): Node
 			if type(props) ~= "table" then
 				return Diagnostics.raise("props/not-a-table", ("create(%q) expects a props table"):format(kind), {
@@ -321,10 +328,15 @@ local function createRuntime(host: Host.Host): Runtime
 				Active.pop(owner, running)
 			end
 			if not ok then
+				local released, cleanup: unknown =
+					pcall(rollbackChildren, supplied.render.removeChild, props, node, token)
 				Owner.rollbackTo(owner, mark)
 				Owner.rollbackHeld(owner, heldMark)
 				local key = applying.key
 				applying.key = savedKey
+				if not released then
+					Owner.raiseAll { err, cleanup }
+				end
 				if key ~= nil then
 					error(("%s\n  while applying: %s.%s"):format(tostring(err), kind, tostring(key)), 0)
 				end

@@ -431,6 +431,24 @@ describe("ownership", function()
 			expectClean(world)
 		end)
 
+		it("continues unwinding earlier same-owner children after a detach failure", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local first, second = Compose.withOwner(owner, function()
+				return world.create "First" {}, world.create "Second" {}
+			end)
+			world.host.failNext "removeChild"
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { first, second, false }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(first)):toBe(true)
+			expect(world.host.parentOf(first)):toBe(nil)
+			Compose.owner.dispose(owner)
+			expectClean(world)
+		end)
+
 		it("continues releasing static attachments after one detachment fails", function()
 			local world = Support.world()
 			local first = world.host.makeNode "First"
