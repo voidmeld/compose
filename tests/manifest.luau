@@ -85,6 +85,7 @@ return table.freeze {
 	"tests/tools/compose-check.lute.verify.luau",
 	"tests/tools/dependency-source.lute.verify.luau",
 	"tests/tools/dispositions.lute.verify.luau",
+	"tests/tools/environments.lute.verify.luau",
 	"tests/tools/gate-resources.lute.verify.luau",
 	"tests/tools/lint-contract.lute.verify.luau",
 	"tests/tools/readable-types.lute.verify.luau",

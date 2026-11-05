@@ -108,6 +108,7 @@ local productMaterial: { Rule } = {
 }
 
 return {
+	environments = rulesFor({ "getfenv", "setfenv" }, "production code must preserve safe environments"),
 	boundary = boundary,
 	leakage = productMaterial,
 	selfPath = "tools/checks-policy.luau",
