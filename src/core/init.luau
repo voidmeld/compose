@@ -3,6 +3,7 @@
 local sharedModule: typeof(require "@self/async/shared")? = nil
 local geometryModule: typeof(require "@self/geometry")? = nil
 local rootScopeModule: typeof(require "@self/ownership/root-scope")? = nil
+local cubicBezierModule: typeof(require "@self/animation/cubic-bezier")? = nil
 local springModule: typeof(require "@self/animation/spring")? = nil
 local poolModule: typeof(require "@self/pool")? = nil
 local keyedCacheModule: typeof(require "@self/keyed-cache")? = nil
@@ -31,7 +32,6 @@ local profileModule: typeof(require "@self/reactive/profile")? = nil
 local Active = require "@self/ownership/active"
 local AnimationCodec = require "@self/animation/codec"
 local AnimationEasing = require "@self/animation/easing"
-local cubicBezier = require "@self/animation/cubic-bezier"
 local ContextModule = require "@self/context"
 local Diagnostics = require "@self/diagnostics"
 local Dynamic = require "@self/dynamic"
@@ -226,6 +226,12 @@ local function createRootOwner(body: (owner: OwnerModule.Owner) -> (), reactor: 
 	local loaded = rootScopeModule or require "@self/ownership/root-scope"
 	rootScopeModule = loaded
 	return loaded.createRootOwner(body, reactor)
+end
+
+local function cubicBezier(x1: number, y1: number, x2: number, y2: number): AnimationEasing.Easing
+	local loaded = cubicBezierModule or require "@self/animation/cubic-bezier"
+	cubicBezierModule = loaded
+	return loaded(x1, y1, x2, y2)
 end
 
 local function createSpringState(position: { number }, arity: number): CoreTypes.SpringState

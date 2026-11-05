@@ -348,10 +348,14 @@ describe("easing", function()
 		expect(ease(0)):toBe(0)
 		expect(ease(1)):toBe(1)
 		expect(ease(0.5)):toBeCloseTo(0.3153568125725393, 1e-7)
+		local opposite = Compose.cubicBezier(0, 0, 0.58, 1)
+		expect(opposite(0.5)):toBeCloseTo(1 - ease(0.5), 1e-7)
 		local linear = Compose.cubicBezier(0, 0, 1, 1)
 		for step = 0, 100 do
 			local t = step / 100
 			expect(linear(t)):toBeCloseTo(t, 1e-7)
+
+			expect(ease(t) + opposite(1 - t)):toBeCloseTo(1, 1e-7)
 		end
 	end)
 
