@@ -295,6 +295,9 @@ local function listItemName(input: Types.Input): string
 end
 
 local function base(library: Library, input: Types.Input): string
+	if input.type == "slot" then
+		return `() -> {input.luauType or library.returnType}`
+	end
 	if input.options then
 		local choices: { string } = {}
 		for _, option in input.options do

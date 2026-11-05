@@ -534,6 +534,51 @@ assert(calls[4][1] == "retained" and calls[4][2] == "again")
 		end
 	end)
 
+	it("types native slot results independently of the UI root and preserves optional factories", function()
+		local typed = table.clone(library)
+		typed.prelude = table.clone(library.prelude)
+		table.insert(typed.prelude, "type Model = { parts: number }")
+		table.insert(typed.prelude, "type StageControls = Controls & {")
+		table.insert(typed.prelude, "\tStage: (string) -> ({ model: (() -> Model)?, content: () -> Model }) -> Target,")
+		table.insert(typed.prelude, "}")
+		typed.parameterType = "StageControls"
+		typed.kinds = table.clone(library.kinds)
+		local stageKind: Design.Kind = {
+			fields = { model = { type = "content" }, content = { type = "content" } },
+			children = "none",
+			call = "UI.Stage",
+			build = build,
+		}
+		typed.kinds.Stage = stageKind
+		local value = Design.document.setContract(Design.document.new("Stage", typed, "Box"), typed, {
+			inputs = {
+				{ id = "model", kind = "value", type = "slot", luauType = "Model" },
+				{ id = "content", kind = "value", type = "slot", luauType = "Model", required = true },
+			},
+			outputs = {},
+		})
+		value = Design.document.insert(value, typed, "n1", "Stage")
+		value = Design.document.change(value, typed, "n2", "model", { input = "model" })
+		value = Design.document.change(value, typed, "n2", "content", { input = "content" })
+		local code = Design.emit(value, typed)
+		expect(string.find(code, "model: (() -> Model)?", 1, true) ~= nil):toBe(true)
+		expect(string.find(code, "content: () -> Model", 1, true) ~= nil):toBe(true)
+		expect(Design.parse(code, typed)):toEqual(value)
+		expect(Design.emit(Design.parse(code, typed), typed)):toBe(code)
+		canonical(code)
+		analyze(code)
+		local bad = Design.document.copy(value)
+		bad.contract.inputs[1].kind = "readable"
+		expect(function()
+			Design.document.validate(bad, typed)
+		end):toThrow "must be a value"
+		bad = Design.document.copy(value)
+		bad.contract.inputs[1].luauType = "Model | Target"
+		expect(function()
+			Design.document.validate(bad, typed)
+		end):toThrow()
+	end)
+
 	it("strictly types input labels beside document owned page factories", function()
 		local value = Design.document.setContract(Design.document.new("Pages", library, "Book"), library, {
 			inputs = { { id = "title", kind = "value", type = "string", required = true } },

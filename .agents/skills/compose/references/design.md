@@ -153,6 +153,9 @@ Keep layer names stable so linked edits preserve selection.
 
 For populated slot previews, supply editor or frame `slotSamples = { body = function(library, device) return Design.render(child, library, childContext) end }`.
 Factories run under each frame's owner with its projected library and must build fresh children.
+Slot inputs use `kind = "value"`; optional `luauType` names the factory's return type
+(for example `Model`) instead of the library's root return type. Bind native samples
+to the host runtime and WorldModel outside the source; normal owners release replacements.
 Keep live sample bindings and `previews` callbacks in the host. `execute` shares named controls;
 Read reports preview/device/camera selections and source identity, Capture returns host file paths,
 and Close disposes once. These callbacks do not belong in the Design module.
