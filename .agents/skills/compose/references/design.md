@@ -69,7 +69,12 @@ not overwrite the module. Keep every edit inside the shapes below.
   list in the caller; the document contains no tag selection expression.
   `Design.document.bindTags` stores the input or item binding. For a list,
   declare a named string-list `luauType` in the library prelude.
-- A node reference: `refs.nN`, with the node wrapped in `capture("nN", <node>)`.
+- A node reference wraps its target in `capture("nN", <node>)`. Fields default to
+  a deferred `function(use)` that asserts `use(refs.nN)`. A library field with
+  `type = "node", reference = "native"` emits
+  `assert(refs.nN:peek(), "Node reference is not captured")` directly. Capture
+  that target before the receiving node; native fields reject `nodeFrom`.
+  Direct-render builders still sample `Resolved.node` before passing it onward.
 - A static root variant: a required string input declares enum `options`.
   `Design.document.setRootVariant` selects one alternative kind and its props
   for a matching option. An optional `children` list gives the alternative its

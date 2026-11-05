@@ -413,6 +413,102 @@ assert(calls[4][1] == "retained" and calls[4][2] == "again")
 		analyze(code)
 	end)
 
+	it("emits narrowed native anchors with exact identity and formatter stable bytes", function()
+		local typed = table.clone(library)
+		typed.prelude = table.clone(library.prelude)
+		table.insert(typed.prelude, "type NativeControls = Controls & {")
+		table.insert(typed.prelude, "\tCallout: (string) -> ({ anchor: Target, onRetire: (() -> ())? }) -> Target,")
+		table.insert(typed.prelude, "}")
+		typed.parameterType = "NativeControls"
+		typed.kinds = table.clone(library.kinds)
+		local calloutKind: Design.Kind = {
+			fields = { anchor = { type = "node", reference = "native" }, onRetire = { type = "event" } },
+			children = "none",
+			call = "UI.Callout",
+			build = build,
+		}
+		typed.kinds.Callout = calloutKind
+		local value = Design.document.setContract(Design.document.new("Anchored", typed, "Box"), typed, {
+			inputs = { { id = "selected", kind = "value", type = "string" } },
+			outputs = { { id = "onRetire", args = {} } },
+		})
+		local trigger, callout
+		value, trigger = Design.document.insert(value, typed, "n1", "Button")
+		value = Design.document.change(value, typed, trigger, "label", { literal = "Help" })
+		value, callout = Design.document.insert(value, typed, "n1", "Callout")
+		value = Design.document.change(value, typed, callout, "anchor", { node = trigger })
+		value = Design.document.change(value, typed, callout, "onRetire", { output = "onRetire" })
+		local code = Design.emit(value, typed)
+		expect(string.find(code, `assert(refs.{trigger}:peek(), "Node reference is not captured")`, 1, true) ~= nil):toBe(
+			true
+		)
+		expect(string.find(code, "::", 1, true)):toBeNil()
+		expect(Design.parse(code, typed)):toEqual(value)
+		expect(Design.emit(Design.parse(code, typed), typed)):toBe(code)
+		canonical(code)
+		analyze(code)
+		fs.writeStringToFile(".worker-tmp/native-anchor.luau", code)
+		expect(function()
+			Design.parse((string.gsub(code, '"Node reference is not captured"', '"Missing"')), typed)
+		end):toThrow "assert their capture"
+		local moved = Design.document.move(value, typed, callout, "n1", 1)
+		fs.writeStringToFile(".worker-tmp/native-anchor-missing.luau", Design.emit(moved, typed))
+		fs.writeStringToFile(
+			".worker-tmp/native-anchor-run.luau",
+			[[
+--!strict
+local anchored = require "./native-anchor"
+local missing = require "./native-anchor-missing"
+local trigger = { name = "trigger" }
+local calls, retired = 0, 0
+local controls = {
+    Box = function(name)
+        return function() return { name = name } end
+    end,
+    Button = function()
+        return function() return trigger end
+    end,
+    Callout = function(name)
+        return function(props)
+            assert(props.anchor == trigger)
+            calls += 1
+            props.onRetire()
+            return { name = name }
+        end
+    end,
+}
+anchored(controls, { onRetire = function() retired += 1 end })
+assert(calls == 1 and retired == 1)
+local ok, problem = pcall(function() missing(controls, {}) end)
+assert(not ok and string.find(tostring(problem), "Node reference is not captured", 1, true))
+assert(calls == 1)
+]]
+		)
+		local ran = process.run { "lute", "run", ".worker-tmp/native-anchor-run.luau" }
+		expect(ran.ok, ran.stdout .. ran.stderr):toBe(true)
+		local current = value
+		local calloutId: string = callout
+		local triggerId: string = trigger
+		expect(function()
+			Design.document.change(
+				current,
+				typed,
+				calloutId,
+				"anchor",
+				{ nodeFrom = "selected", nodes = { triggerId } }
+			)
+		end):toThrow "direct node reference"
+		local parent = "n1"
+		for _ = 1, 10 do
+			value, parent = Design.document.insert(value, typed, parent, "Box")
+		end
+		value = Design.document.move(value, typed, callout, parent)
+		code = Design.emit(value, typed)
+		expect(Design.emit(Design.parse(code, typed), typed)):toBe(code)
+		canonical(code)
+		analyze(code)
+	end)
+
 	it("emits two typed reference cells with formatter stable bytes", function()
 		local typed = table.clone(library)
 		typed.returnType = "CapturedTarget"

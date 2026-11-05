@@ -262,6 +262,7 @@ local function checkValue(value: Document, field: Types.Field, property: Value, 
 	local source = property.nodeFrom
 	if source ~= nil then
 		assert(field.type == "node", `{key} cannot reference a node`)
+		assert(field.reference ~= "native", `{key} needs a direct node reference for native emission`)
 		local declared = inputOf(value, source)
 		local held = stateOf(value, source)
 		local typed = if declared then declared.type elseif held then held.type else nil
