@@ -92,6 +92,44 @@ describe("teardown heap", function()
 		runtime:dispose()
 	end)
 
+	it("releases animation activity storage while its runtime remains alive", function(_own, context)
+		local host = TestScene.create()
+		local runtime = Compose.createRuntime(host.adapter)
+		local target = Compose.cell(0)
+		local function source(use: Compose.Use): number
+			return use(target)
+		end
+		local warm = Compose.createOwner(runtime.reactor)
+		Compose.withOwner(warm, function()
+			runtime.spring(source)
+		end)
+		Compose.owner.dispose(warm)
+		local result = Lute.memory.measure({
+			setup = function(): Compose.Owner
+				local owner = Compose.createOwner(runtime.reactor)
+				Compose.withOwner(owner, function()
+					for _ = 1, 1024 do
+						runtime.spring(source)
+					end
+				end)
+				return owner
+			end,
+			run = function(_owner: Compose.Owner)
+				target:set(1)
+				runtime:settle()
+			end,
+			teardown = function(owner: Compose.Owner)
+				Compose.owner.dispose(owner)
+			end,
+			iterations = 1,
+		}, { cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 })
+		context:attach("animation activity", "application/json", Lute.encode(result))
+		expect(result.mountedKb):toBeGreaterThan(64)
+		expect(result.teardownRetainedKb):toBeLessThan(48)
+		expect(host.counts().frameListeners):toBe(0)
+		runtime:dispose()
+	end)
+
 	it("releases static child ownership storage", function(_own, context)
 		measure(context, "static children", function(runtime, target, remember)
 			local Frame = runtime.create "Frame"

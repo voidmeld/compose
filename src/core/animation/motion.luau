@@ -13,7 +13,7 @@ local Spring = require "./spring"
 local Types = require "../reactive/types"
 local cellModule = require "../reactive/cell"
 local watchModule = require "../reactive/watch"
-local Weak = require "../weak"
+local Nodes = require "../reactive/node"
 
 export type ReducedMotion = CoreTypes.ReducedMotion
 
@@ -30,15 +30,18 @@ local DEFAULT_DAMPING = 1
 local DEFAULT_TOLERANCE = 1e-4
 local DEFAULT_SECONDS = 0.25
 
-local activity: { [unknown]: Types.ReadOnlyValue<boolean> } = {}
-Weak.keys(activity)
-
 local function running<V>(value: Types.ReadOnlyValue<V>): Types.ReadOnlyValue<boolean>
-	local signal = activity[value]
-	if signal == nil then
+	local node = Nodes.asValueNode(value)
+	local activity = if node ~= nil then node.activity else nil
+	if activity == nil then
 		return Diagnostics.raise("animation/not-animated", "running needs an animated value", {
 			expected = "a spring, tween or ramp value",
 		})
+	end
+	local signal = activity.value
+	if signal == nil then
+		signal = cellModule.cell(activity.active)
+		activity.value = signal
 	end
 	return signal
 end
@@ -94,7 +97,7 @@ type State<T> = Spring.State & {
 	target: { number },
 	reference: { number },
 	output: Types.Value<T>,
-	running: Types.Value<boolean>,
+	activity: { active: boolean, value: Types.Value<boolean>? },
 	settings: Settings,
 }
 
@@ -179,7 +182,11 @@ local function createMotion<T>(
 			unsubscribe = nil
 			release()
 		end
-		state.running:set(false)
+		state.activity.active = false
+		local running = state.activity.value
+		if running ~= nil then
+			running:set(false)
+		end
 	end
 
 	local function sweep(delta: number)
@@ -220,7 +227,6 @@ local function createMotion<T>(
 	): Types.ReadOnlyValue<T>
 		local frames = framesOf(host, primitive)
 		local owner = ownerOf(primitive)
-		local running = cellModule.cell(false)
 		settings[4] = 0
 		local state: State<T>? = nil
 		local typeName = ""
@@ -244,11 +250,12 @@ local function createMotion<T>(
 					velocity = if settings.ease then reference else table.create(codec.arity, 0),
 					arity = codec.arity,
 					output = cellModule.cell(wanted),
-					running = running,
+					activity = { active = false },
 					settings = settings,
 				}
 				state = created
-				activity[created.output] = running
+				local output: Types.Node = created.output
+				output.activity = created.activity
 				Owner.holdSubject(owner, stop, settings)
 				return
 			end
@@ -312,7 +319,11 @@ local function createMotion<T>(
 				if unsubscribe == nil then
 					unsubscribe = frames.onFrame(onFrame)
 				end
-				running:set(true)
+				currentState.activity.active = true
+				local running = currentState.activity.value
+				if running ~= nil then
+					running:set(true)
+				end
 			end
 		end)
 		local output: Types.ReadOnlyValue<T>

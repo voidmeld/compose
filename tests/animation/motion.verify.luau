@@ -47,6 +47,41 @@ describe("shared motion frames", function()
 	end)
 
 	for _, primitive in { "spring", "tween" } do
+		it("first queries " .. primitive .. " activity during motion or after disposal", function()
+			for _, afterDispose in { false, true } do
+				local world = Support.world()
+				local target = Compose.cell(0)
+				local value, owner = Support.owned(function()
+					local function source(use: Compose.Use): number
+						return use(target)
+					end
+					return if primitive == "spring" then world.runtime.spring(source) else world.runtime.tween(source)
+				end)
+				target:set(10)
+				world.settle()
+				if afterDispose then
+					Compose.owner.dispose(owner)
+				end
+				local running = world.runtime.running(value)
+				expect(world.runtime.running(value)):toBe(running)
+				expect(running:peek()):toBe(not afterDispose)
+				if not afterDispose then
+					for _ = 1, 300 do
+						world.host.step(FRAME)
+					end
+					world.settle()
+					expect(running:peek()):toBe(false)
+					target:set(20)
+					world.settle()
+					expect(running:peek()):toBe(true)
+					Compose.owner.dispose(owner)
+					expect(running:peek()):toBe(false)
+				end
+			end
+		end)
+	end
+
+	for _, primitive in { "spring", "tween" } do
 		it("exposes " .. primitive .. " activity through retargeting completion and disposal", function()
 			local world = Support.world()
 			local target = Compose.cell(0)
