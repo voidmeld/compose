@@ -669,6 +669,147 @@ describe("ownership", function()
 		end)
 	end)
 	describe("across yields", function()
+		for _, checking in { false, true } do
+			it(
+				"keeps portal children and async environment watches under their scopes: " .. tostring(checking),
+				function()
+					local world = Support.world()
+					Compose.setYieldChecking(checking)
+					Compose.inspect.start()
+					local owner = Compose.createOwner(world.runtime.reactor)
+					local older, newer = Compose.createOwner(), Compose.createOwner()
+					local layer = world.host.makeNode "Layer"
+					local environment = world.host.makeNode "Environment"
+					world.host.poke(environment, "Size", 1)
+					local open, tab, projection = Compose.cell(false), Compose.cell "table", Compose.cell(1)
+					local allocated, released = 0, 0
+					local function nested(body: () -> ())
+						local ok, failure = coroutine.resume(coroutine.create(body))
+						assert(ok, tostring(failure))
+					end
+					local function signal(body: () -> ())
+						local callback = coroutine.create(function()
+							Compose.withOwner(older, function()
+								coroutine.yield()
+								nested(body)
+							end)
+						end)
+						local ok, failure = coroutine.resume(callback)
+						assert(ok, tostring(failure))
+						Compose.withOwner(newer, function()
+							local resumed, cause = coroutine.resume(callback)
+							assert(resumed, tostring(cause))
+						end)
+					end
+					local function content(kind: string): Compose.Node
+						local child: Compose.Node? = nil
+						nested(function()
+							local size = world.runtime.observe(environment, "Size")
+							Compose.watch(function(use)
+								use(size)
+								nested(function()
+									world.create "Measurement" {}
+									allocated += 1
+									Compose.cleanup(function()
+										released += 1
+									end)
+								end)
+							end)
+							child = world.create(kind) { Size = size }
+						end)
+						return assert(child)
+					end
+					Compose.withOwner(owner, function()
+						world.runtime.mount(function()
+							return world.create "Shell" {
+								Compose.show(open, function()
+									return Compose.portal(layer, function()
+										return {
+											world.create "Sheet" {
+												Compose.switch(tab, {
+													table = function()
+														return content "Table"
+													end,
+													stage = function()
+														return world.create "Stage" {
+															Compose.keyed {
+																from = function(use)
+																	return { use(projection) }
+																end,
+																key = function(value)
+																	return value
+																end,
+																render = function()
+																	return content "Projection"
+																end,
+															},
+														}
+													end,
+												}),
+											},
+										}
+									end)
+								end),
+							}
+						end, world.root)
+					end)
+					local function liveScopes(report: Compose.InspectOwner): number
+						local count = if report.disposed then 0 else 1
+						for _, child in report.children do
+							count += liveScopes(child)
+						end
+						return count
+					end
+					local baseline = required(Compose.inspect.owner(owner))
+					for cycle = 1, 2 do
+						signal(function()
+							open:set(true)
+						end)
+						local sheet = world.host.childrenOf(layer)[1]
+						expect(world.host.kindOf(sheet)):toBe "Sheet"
+						signal(function()
+							tab:set "stage"
+						end)
+						local previous = world.host.childrenOf(world.host.childrenOf(sheet)[1])[1]
+						signal(function()
+							projection:set(cycle + 1)
+							world.host.poke(environment, "Size", cycle + 1)
+						end)
+						local stage = world.host.childrenOf(sheet)[1]
+						local projected = world.host.childrenOf(stage)[1]
+						expect(world.host.kindOf(stage)):toBe "Stage"
+						expect(world.host.kindOf(projected)):toBe "Projection"
+						expect(projected == previous):toBe(false)
+						expect(world.host.isAlive(previous)):toBe(false)
+						expect(world.host.propertyOf(projected, "Size")):toBe(cycle + 1)
+						expect(world.host.liveSubscriptions()):toBe(1)
+						expect(allocated - released):toBe(1)
+						signal(function()
+							open:set(false)
+							tab:set "table"
+						end)
+						expect(world.host.childrenOf(layer)):toEqual {}
+						expect(world.host.liveSubscriptions()):toBe(0)
+						expect(allocated):toBe(released)
+						local closed = required(Compose.inspect.owner(owner))
+						expect(closed.totalHolding):toBe(baseline.totalHolding)
+						expect(liveScopes(closed)):toBe(liveScopes(baseline))
+					end
+					Compose.owner.dispose(owner)
+					Compose.owner.dispose(older)
+					Compose.owner.dispose(newer)
+					local disposed = required(Compose.inspect.owner(owner))
+					expect(disposed.totalHolding):toBe(0)
+					expect(liveScopes(disposed)):toBe(0)
+					expect(Compose.inspect.snapshot().outstandingMounts):toBe(0)
+					expect(world.host.isAlive(layer)):toBe(true)
+					expect(world.host.liveNodes()):toBe(3)
+					Compose.inspect.stop()
+					Compose.setYieldChecking(false)
+				end
+			)
+		end
+
 		it("keeps reactive run resources when distinct owners resume a host notification", function()
 			local world = Support.world()
 			local watcher = Compose.createOwner(world.runtime.reactor)
@@ -711,8 +852,9 @@ describe("ownership", function()
 			expect(releases):toBe(2)
 			expectClean(world)
 		end)
-		for _, binding in { "unbound", "bindOwner", "withOwner" } do
-			it("refuses ambiguous resumers unless the child explicitly selects its owner: " .. binding, function()
+		for _, mode in { "unbound", "bindOwner", "withOwner", "scoped-unbound", "scoped-bindOwner", "scoped-withOwner" } do
+			it("refuses ambiguous resumers unless the child explicitly selects its owner: " .. mode, function()
+				local binding = string.gsub(mode, "^scoped%-", "")
 				local world = Support.world()
 				world.host.declareEvent("Frame", "Activated")
 				local borrowed = world.host.makeNode "Frame"
@@ -742,12 +884,21 @@ describe("ownership", function()
 						childOk, childCause = coroutine.resume(coroutine.create(child))
 					end)
 				end)
-				local ok, failure = coroutine.resume(callback)
-				assert(ok, tostring(failure))
-				Compose.withOwner(newer, function()
-					local resumed, cause = coroutine.resume(callback)
-					assert(resumed, tostring(cause))
-				end)
+				local function notify()
+					local ok, failure = coroutine.resume(callback)
+					assert(ok, tostring(failure))
+					Compose.withOwner(newer, function()
+						local resumed, cause = coroutine.resume(callback)
+						assert(resumed, tostring(cause))
+					end)
+				end
+				if binding ~= mode then
+					local watcher = Compose.createOwner(world.runtime.reactor)
+					Compose.owner.watch(watcher, notify)
+					Compose.owner.dispose(watcher)
+				else
+					notify()
+				end
 				Compose.owner.dispose(older)
 				local afterOlder = releases
 				Compose.owner.dispose(newer)

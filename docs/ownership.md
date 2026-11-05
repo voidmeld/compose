@@ -97,6 +97,12 @@ Luau reports resuming threads as `normal`, but does not give their order.
 Different owners on those threads cause `owner/no-active-owner`.
 An explicit activation on the running thread resolves that ambiguity.
 
+A watch keeps its run scope when an asynchronous signal starts an update.
+An explicit activation entered within that reactive evaluation, including a portal's
+relocated build scope, follows nested callbacks in the same evaluation.
+Unrelated resumer activations do not replace that scope.
+Distinct resumer owners within the same evaluation still require an explicit binding.
+
 A suspended component keeps its owner after resumption.
 Other mounts do not change that ownership.
 The reactive evaluation context follows the same thread and resume chain.
