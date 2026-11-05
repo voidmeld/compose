@@ -18,6 +18,7 @@ describe("production environments", function()
 	it("rejects calls and aliases of environment access", function()
 		for _, source in { "return getfenv(0)", "local change = setfenv; return change" } do
 			expect(#Denylist.scan("src/roblox/ambient.luau", source, Policy.environments)):toBe(1)
+			expect(#Denylist.scan("src/roblox/ambient.lua", source, Policy.environments)):toBe(1)
 		end
 		expect(Denylist.scan("src/core/init.luau", "local getfenvFree = game; return getfenvFree", Policy.environments)):toEqual {}
 	end)
