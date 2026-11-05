@@ -10,6 +10,57 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("exposes the active UI stage and mounted root through public create across device selections", function()
+		local w = Support.world(nil, true)
+		local devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] }
+		local editor = DesignEditor.create(w.library, w.document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			devices = devices,
+		})
+		local first = assert(editor.stage)
+		expect(first):toBe(editor.canvas.current().stage)
+		expect(editor.scene):toBeNil()
+		expect(w.read(first.nodes[w.document.root.id], "Parent")):toBe(first.surface)
+		editor.canvas.select(devices[2].id)
+		local second = assert(editor.stage)
+		expect(second):toBe(editor.canvas.current().stage)
+		expect(second == first):toBe(false)
+		expect(w.read(second.nodes[w.document.root.id], "Parent")):toBe(second.surface)
+		editor.canvas.showAll(true)
+		w.fire(first.overlay, "InputBegan", w.pointer("MouseButton1", 0, 0))
+		expect(editor.stage):toBe(first)
+		expect(editor.scene):toBeNil()
+		expect(editor.execute({ action = "Read" }).device):toBe(devices[1].id)
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
+	it("exposes the 3D scene and mounted root through public create without a scene target", function()
+		local w = Support.world "3d"
+		local editor = DesignEditor.create(w.library, w.document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+		})
+		local scene = assert(editor.scene)
+		expect(scene):toBe(editor.canvas.current().scene)
+		expect(editor.stage):toBeNil()
+		expect(w.read(scene.nodes[w.document.root.id], "Parent")):toBe(scene.world)
+		expect(w.read(scene.world, "Parent")):toBe(scene.viewport)
+		expect(w.read(scene.viewport, "CurrentCamera")):toBe(scene.camera)
+		w.settle()
+		expect(editor.session.problem:peek()):toBeNil()
+		expect(editor.execute({ action = "Camera", preset = "fit" }).ok):toBe(true)
+		local at, size = w.point(scene.viewport, "AbsolutePosition"), w.point(scene.viewport, "AbsoluteSize")
+		expect(scene.pick { X = at.X + size.X / 2, Y = at.Y + size.Y / 2 }):toBe(w.first)
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it("delivers native text changes and focus with stable row keys in the editor and direct rendering", function()
 		local w = Support.world()
 		local inputKind: Design.Kind = {

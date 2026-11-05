@@ -121,7 +121,7 @@ local function create(
 			error(cleanupFailure, 0)
 		end
 	end
-	return {
+	local editor: Editor.Editor = {
 		root = result.root,
 		session = result.session,
 		canvas = result.canvas,
@@ -129,6 +129,17 @@ local function create(
 		nested = result.nested,
 		dispose = dispose,
 	}
+	setmetatable(editor, {
+		__index = function(_, key: string): unknown
+			if key == "stage" then
+				return result.canvas.current().stage
+			elseif key == "scene" then
+				return result.canvas.current().scene
+			end
+			return nil
+		end,
+	})
+	return editor
 end
 
 local function kit(name: string, open: () -> Workspace): Kit

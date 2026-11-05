@@ -11,6 +11,7 @@ local LibraryPanel = require "./library-panel"
 local Inspector = require "./inspector"
 local Prompt = require "./prompt"
 local ThemePanel = require "./theme-panel"
+local Stage = require "./stage"
 local Stage3D = require "./stage3d"
 
 export type Command =
@@ -90,6 +91,8 @@ export type Result = {
 export type Editor = {
 	root: Compose.Node,
 	session: Design.Session,
+	stage: Stage.Stage?,
+	scene: Stage3D.Scene?,
 	canvas: Canvas.Canvas,
 	execute: (Command) -> Result,
 	nested: () -> Editor?,
