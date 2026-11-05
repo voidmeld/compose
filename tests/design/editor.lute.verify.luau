@@ -2152,7 +2152,7 @@ describe("host-neutral design editor", function()
 	end)
 
 	it("keeps the cursor anchor during zoom, clamps scale and fits the available stage room", function()
-		local w = Support.world()
+		local w = Support.world(nil, true)
 		local editor = w.mount()
 		w.settle()
 		local stage = assert(editor.canvas.current().stage)
