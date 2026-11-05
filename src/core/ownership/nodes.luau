@@ -9,7 +9,8 @@ type Node = Host.Node
 
 export type Custody = "owned" | "adopted" | "borrowed"
 
-local custody: { [unknown]: Custody } = {}
+local custody: { [unknown]: Custody | number } = {}
+local issuedToken = 0
 
 Weak.keys(custody)
 
@@ -33,9 +34,25 @@ local function assertReference(node: Node, operation: string)
 	)
 end
 
-local function markOwned(node: Node)
+local function ownerToken(): number
+	issuedToken += 1
+	return issuedToken
+end
+
+local function markOwned(node: Node, token: number)
 	assertReference(node, "createNode")
-	custody[node] = "owned"
+	custody[node] = token
+end
+
+local function belongsTo(node: Node, token: number): boolean
+	return custody[node] == token
+end
+
+local function protect(node: Node)
+	local known = custody[node]
+	if type(known) == "number" and known > 0 then
+		custody[node] = -known
+	end
 end
 
 local function markAdopted(node: Node)
@@ -49,7 +66,10 @@ local function markBorrowed(node: Node)
 end
 
 local function custodyOf(node: Node): Custody
-	local known: Custody? = custody[node]
+	local known = custody[node]
+	if type(known) == "number" then
+		return "owned"
+	end
 	if known ~= nil then
 		return known
 	end
@@ -58,7 +78,7 @@ end
 
 local function isDestructible(node: unknown): boolean
 	local known = custody[node]
-	return known == "owned" or known == "adopted"
+	return type(known) == "number" or known == "owned" or known == "adopted"
 end
 
 local dependents: { [Node]: { () -> () } } = {}
@@ -190,6 +210,9 @@ return {
 	inspecting = inspecting,
 	tracked = tracked,
 	markOwned = markOwned,
+	ownerToken = ownerToken,
+	belongsTo = belongsTo,
+	protect = protect,
 	markAdopted = markAdopted,
 	markBorrowed = markBorrowed,
 	custodyOf = custodyOf,

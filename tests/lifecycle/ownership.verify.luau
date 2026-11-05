@@ -368,6 +368,30 @@ describe("ownership", function()
 			expectClean(world)
 		end)
 
+		it("keeps owner identities distinct across runtimes after earlier owners end", function()
+			local world = Support.world()
+			local other = Compose.createRuntime(world.host.adapter)
+			local first = Compose.createOwner(world.runtime.reactor)
+			Compose.withOwner(first, function()
+				world.create "Earlier" {}
+			end)
+			Compose.owner.dispose(first)
+			local original = Compose.createOwner(other.reactor)
+			local child = Compose.withOwner(original, function()
+				return other.create "External" {}
+			end)
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { world.create "Row" { child } }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "owned"
+			Compose.owner.dispose(original)
+			other:dispose()
+			expectClean(world)
+		end)
+
 		it("releases protected descendants before destroying a static ancestor", function()
 			for _, dynamic in { false, true } do
 				local world = Support.world()
