@@ -129,6 +129,168 @@ local function canonical(code: string)
 end
 
 describe("Design emitted source", function()
+	it("preserves static type import paths and deduplicates library declarations", function()
+		local value = Design.document.new("Imports", library, "Button")
+		for _, declaration in
+			{
+				'local Roles = require "./button-roles"',
+				"local Roles = require(script.Parent.Button)",
+				'local Roles = require(script.Parent["button-roles"])',
+				'local Roles = require(game:GetService("ReplicatedStorage").Controls.Button)',
+			}
+		do
+			local code = Design.emit(value, library, { prelude = { declaration } })
+			local parsed = Design.parse(code, library)
+			expect(parsed.typeImports):toEqual { declaration }
+			expect(Design.emit(parsed, library)):toBe(code)
+			canonical(code)
+		end
+		local code = Design.emit(value, library)
+		local parenthesized = string.gsub(code, 'require "../src/core"', 'require("../src/core")')
+		expect(Design.parse(parenthesized, library).typeImports):toBeNil()
+		expect(Design.emit(Design.parse(parenthesized, library), library)):toBe(code)
+		local configured = table.clone(library)
+		configured.prelude = table.clone(library.prelude)
+		table.insert(configured.prelude, "local Config = require(resolveConfig())")
+		local configuredCode = Design.emit(value, configured)
+		expect(Design.parse(configuredCode, configured).typeImports):toBeNil()
+		expect(Design.emit(Design.parse(configuredCode, configured), configured)):toBe(configuredCode)
+		for _, declaration in
+			{
+				"local Roles = require(resolveRoles())",
+				'local Roles = require(script:FindFirstChild("Roles"))',
+				'local Roles = require("./button-roles").choose()',
+			}
+		do
+			local custom = string.gsub(code, "export type Props", declaration .. "\n\nexport type Props", 1)
+			expect(function()
+				Design.parse(custom, library)
+			end):toThrow "Type imports require a static module path"
+		end
+	end)
+
+	it("keeps public role type imports through linked edits and reactive control updates", function()
+		fs.createDirectory(".worker-tmp", { makeParents = true })
+		fs.writeStringToFile(
+			".worker-tmp/button-roles.luau",
+			'--!strict\n\nexport type ButtonRole = "ordinary" | "primary"\n\nreturn {}\n'
+		)
+		fs.writeStringToFile(
+			".worker-tmp/role-controls.luau",
+			[[
+--!strict
+
+local Core = require "../src/core"
+local Roles = require "./button-roles"
+
+export type Target = { name: string, role: Roles.ButtonRole }
+export type Controls = { Button: (string) -> ({ role: Core.ReadOnlyValue<Roles.ButtonRole> }) -> Target }
+
+local calls = 0
+local controls: Controls = {
+	Button = function(name: string)
+		return function(props: { role: Core.ReadOnlyValue<Roles.ButtonRole> }): Target
+			calls += 1
+			local target: Target = { name = name, role = props.role:peek() }
+			Core.watch(function(use: Core.Use)
+				target.role = use(props.role)
+			end)
+			return target
+		end
+	end,
+}
+
+return { controls = controls, calls = function(): number return calls end }
+]]
+		)
+		local controls: Design.Library = {
+			name = "Roles",
+			parameter = "UI",
+			parameterType = "Facade.Controls",
+			prelude = { 'local Core = require "../src/core"', 'local Facade = require "./role-controls"' },
+			returnType = "Facade.Target",
+			readable = "Core.ReadOnlyValue",
+			cell = "Core.Value",
+			kinds = {
+				Button = {
+					fields = { role = { type = "choice", options = { "ordinary", "primary" } } },
+					children = "none",
+					call = "UI.Button",
+					build = build,
+				},
+			},
+		}
+		local value = Design.document.setContract(Design.document.new("Action", controls, "Button"), controls, {
+			inputs = {
+				{ id = "role", kind = "readable", type = "string", luauType = "Roles.ButtonRole", required = true },
+			},
+			outputs = {},
+		})
+		value = Design.document.change(value, controls, "n1", "role", { input = "role" })
+		local declaration = 'local Roles = require "./button-roles"'
+		local code = Design.emit(value, controls, { prelude = { declaration } })
+		local parsed = Design.parse(code, controls)
+		expect(parsed.typeImports):toEqual { declaration }
+		expect(parsed.root.kind):toBe "Button"
+		expect(parsed.root.props.role.input):toBe "role"
+		expect(Design.emit(parsed, controls)):toBe(code)
+		expect(Design.emit(parsed, controls, { prelude = { declaration } })):toBe(code)
+		local copied = Design.document.copy(parsed)
+		table.clear(assert(copied.typeImports))
+		expect(parsed.typeImports):toEqual { declaration }
+		Core.withRootOwner(function()
+			local session = Design.session(controls, value)
+			local link = Design.link(session, {
+				read = function(): string
+					return code
+				end,
+				write = function(expected: string, generated: string): boolean
+					expect(expected):toBe(code)
+					code = generated
+					return true
+				end,
+				watch = function(_callback: () -> ()): () -> ()
+					return function() end
+				end,
+			})
+			expect(link.status:peek()):toBe "synchronized"
+			session.select "n1"
+			expect(session.rename "Confirm"):toBe(true)
+			expect(link.status:peek()):toBe "synchronized"
+			expect(Design.parse(code, controls).root.name):toBe "Confirm"
+			expect(Design.emit(Design.parse(code, controls), controls)):toBe(code)
+			link.dispose()
+		end)
+		canonical(code)
+		analyze(code)
+		fs.writeStringToFile(".worker-tmp/role-design.luau", code)
+		local runner = [[
+--!strict
+
+local Core = require "../src/core"
+local Roles = require "./button-roles"
+local Facade = require "./role-controls"
+local action = require "./role-design"
+
+local role = Core.cell<<Roles.ButtonRole>>("ordinary")
+local owner = Core.createRootOwner(function()
+	local target = action(Facade.controls, { role = role })
+	assert(target.name == "Confirm" and target.role == "ordinary")
+	assert(Facade.calls() == 1)
+	role:set "primary"
+	assert(target.role == "primary")
+	assert(Facade.calls() == 1)
+end)
+owner.dispose()
+role:set "ordinary"
+role:dispose()
+]]
+		analyze(runner)
+		fs.writeStringToFile(".worker-tmp/role-design-run.luau", runner)
+		local ran = process.run { "lute", "run", ".worker-tmp/role-design-run.luau" }
+		expect(ran.ok, ran.stdout .. ran.stderr):toBe(true)
+	end)
+
 	it("types and round trips ordered row actions and executes the emitted callbacks", function()
 		local typed = table.clone(library)
 		typed.prelude = {
