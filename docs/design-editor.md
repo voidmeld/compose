@@ -172,6 +172,13 @@ Profiles include aspect, native GUI insets, cutouts, safe area and camera field 
 
 Supply `Workspace.frame(device, scale)` to build each frame's library using the same layout sources as the game. A shared viewport cell cannot represent simultaneous frames. Frame-local sources resolve at the profile's full logical resolution; zoom scales their display. Native measurements used for layout must normalize by `scale`.
 
+Set `renderPreview(document, library, use)` in editor options or a frame context
+to return a preview document and its resolved input bindings. It runs under the
+render owner with the projected library. Read sample state with `use` and build
+fresh slot factories and cells in that owner. Sample changes release the previous
+render. This projection does not change the session document, source link or undo
+history. Editor commands still edit the authored session document.
+
 The **Actual size** control sets the current UI frame to one logical pixel per host GUI pixel. Each device
 remembers this mode across device switches, grid changes and editor resizing. **Fit size** returns that
 frame to fitting the available room. Fit clears the mode on visible frames; a zoom clears it on the

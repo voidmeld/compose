@@ -10,6 +10,59 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("keeps owned sample projections out of source and undo history in UI and 3D previews", function()
+		for _, space in { "2d", "3d" } do
+			local w = Support.world(space)
+			local state = Compose.cell(0)
+			local source = Design.emit(w.document, w.library)
+			local original = source
+			local writes, builds, releases = 0, 0, 0
+			local editor = DesignEditor.create(w.library, w.document, w.screen, {
+				runtime = w.runtime,
+				environment = w.environment,
+				renderPreview = function(value, _library, use)
+					builds += 1
+					Compose.cleanup(function()
+						releases += 1
+					end)
+					return Design.document.rename(value, w.library, value.root.id, "Sample" .. use(state)), {}
+				end,
+				link = {
+					read = function(): string
+						return source
+					end,
+					write = function(expected: string, generated: string): boolean
+						expect(expected):toBe(source)
+						source = generated
+						writes += 1
+						return true
+					end,
+					watch = function(): () -> ()
+						return function() end
+					end,
+				},
+			})
+			for index = 1, 4 do
+				state:set(index)
+				w.settle()
+				local frame = editor.canvas.current()
+				local view = assert(frame.stage or frame.scene)
+				expect(w.read(view.nodes[w.document.root.id], "Name")):toBe("Sample" .. index)
+				expect(source):toBe(original)
+				expect(writes):toBe(0)
+				expect(editor.session.canUndo:peek()):toBe(false)
+			end
+			expect(editor.execute({ action = "Rename", name = "Authored" }).ok):toBe(true)
+			w.settle()
+			expect(Design.parse(source, w.library).root.name):toBe "Authored"
+			expect(writes):toBe(1)
+			editor.dispose()
+			w.settle()
+			expect(releases):toBe(builds)
+			w.close()
+		end
+	end)
+
 	it("exposes the active UI stage and mounted root through public create across device selections", function()
 		local w = Support.world(nil, true)
 		local devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] }
@@ -300,6 +353,100 @@ describe("host-neutral design editor", function()
 			w.close()
 		end
 	)
+
+	it("owns authored stage content and replacing native model samples on every device", function()
+		local w = Support.world(nil, true)
+		local library = table.clone(w.library)
+		library.kinds = table.clone(w.library.kinds)
+		local Host = w.runtime.constructors
+		local stageKind: Design.Kind = {
+			fields = { content = { type = "content" }, model = { type = "content" } },
+			children = "none",
+			call = "UI.Stage",
+			build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+				return Host.ViewportFrame(name) {
+					Host.WorldModel "StageWorld" {
+						assert(props.content.slot)(),
+						assert(props.model.slot)(),
+					},
+				}
+			end,
+		}
+		library.kinds.Stage = stageKind
+		local modelKind: Design.Kind = {
+			fields = {},
+			children = "none",
+			call = "Host.Model",
+			build = function(_props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+				return Host.Model(name) { Host.Part "AuthoredPart" {} }
+			end,
+		}
+		library.kinds.Model = modelKind
+		local value = Design.document.setContract(Design.document.new("Stages", library, "Stack"), library, {
+			inputs = { { id = "model", kind = "value", type = "slot", luauType = "Model", required = true } },
+			outputs = {},
+		})
+		value = Design.document.insert(value, library, "n1", "Stage")
+		value = Design.document.content(value, library, "n2", "content", "Model")
+		value = Design.document.change(value, library, "n2", "model", { input = "model" })
+		local code = Design.emit(value, library)
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		local state = Compose.cell "ordinary"
+		local built, released = 0, 0
+		local editor = DesignEditor.create(library, value, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			devices = DesignEditor.devices.all,
+			slotSamples = {
+				model = function(frameLibrary: Design.Library, device: DesignEditor.Device): unknown
+					expect(frameLibrary.returnType):toBe(library.returnType)
+					local branches: { [string]: () -> Compose.Node | Compose.Directive } = {}
+					for _, choice in { "ordinary", "busy", "error" } do
+						branches[choice] = function(): Compose.Node | Compose.Directive
+							built += 1
+							Compose.cleanup(function()
+								released += 1
+							end)
+							return Host.Part(choice) {}
+						end
+					end
+					return Host.Model(device.id) { Compose.switch(state, branches) }
+				end,
+			},
+		})
+		editor.execute { action = "AllDevices", enabled = true }
+		local previous: { Compose.Node } = {}
+		for _, choice in { "ordinary", "empty", "busy", "error", "ordinary" } do
+			state:set(choice)
+			w.settle()
+			for _, part in previous do
+				expect(w.read(part, "Parent")):toBeNil()
+			end
+			previous = {}
+			expect(#editor.canvas.frames()):toBe(#DesignEditor.devices.all)
+			local seen: { [unknown]: boolean } = {}
+			for _, frame in editor.canvas.frames() do
+				local world = w.find(frame.root, "StageWorld")
+				expect(seen[world]):toBeNil()
+				seen[world] = true
+				expect(w.read(w.find(world, "AuthoredPart"), "ClassName")):toBe "Part"
+				local model = w.find(world, frame.device.id)
+				expect(w.read(model, "Parent")):toBe(world)
+				if choice == "empty" then
+					expect(#Support.instance(model):GetChildren()):toBe(0)
+				else
+					table.insert(previous, w.find(model, choice))
+				end
+			end
+		end
+		expect(built - released):toBe(#DesignEditor.devices.all)
+		editor.dispose()
+		editor.dispose()
+		expect(released):toBe(built)
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
 
 	it("inspects required slot leaves and edits children of declared slot kinds", function()
 		local w = Support.world()
