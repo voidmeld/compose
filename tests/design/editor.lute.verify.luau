@@ -301,6 +301,76 @@ describe("host-neutral design editor", function()
 		end
 	)
 
+	it("inspects required slot leaves and edits children of declared slot kinds", function()
+		local w = Support.world()
+		local stack = w.library.kinds.Stack
+		local panel = table.clone(stack)
+		panel.children = "slot"
+		panel.slot = "content"
+		panel.call = "Design.Panel"
+		panel.build = function(props: { [string]: Design.Resolved }, _children: { unknown }, name: string): unknown
+			return stack.build(props, { assert(props.content.slot)() }, name)
+		end
+		local library = Design.extend(w.library, { kinds = { Panel = panel } })
+		local document = Design.document.setContract(Design.document.new("Parent", library, "Stack"), library, {
+			inputs = { { id = "body", kind = "value", type = "slot", required = true } },
+			outputs = {},
+		})
+		local slot, container, text
+		document, slot = Design.document.insertSlot(document, library, "n1", "body")
+		document, container = Design.document.insert(document, library, "n1", "Panel")
+		document, text = Design.document.insert(document, library, container, "Text")
+		local child = Design.document.new("Child", library, "Text")
+		child = Design.document.rename(child, library, "n1", "SampleText")
+		child = Design.document.change(child, library, "n1", "text", { literal = "Sample" })
+		local editor = DesignEditor.create(library, document, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			stageSize = { X = 480, Y = 320 },
+			slotSamples = {
+				body = function(library: Design.Library, _device: DesignEditor.Device): unknown
+					return Design.render(child, library)
+				end,
+			},
+		})
+		w.settle()
+		expect(w.find(editor.root, "SampleText").Text):toBe "Sample"
+		local inspector = w.find(editor.root, "DesignInspector")
+		local layers = w.find(editor.root, "DesignLayers")
+		w.fire(w.find(layers, slot), "Activated")
+		w.settle()
+		expect(editor.session.selected:peek()):toBe(slot)
+		expect(w.find(inspector, "NodeName").Text):toBe "body"
+		expect(inspector:FindFirstChild "Data"):toBeNil()
+		expect(inspector:FindFirstChild "text"):toBeNil()
+		for _, ids in { { text, slot }, { slot, text } } do
+			editor.session.selectMany(ids)
+			w.settle()
+			expect(w.find(inspector, "NodeName").Text):toBe "2 selected"
+			expect(inspector:FindFirstChild "text"):toBeNil()
+		end
+		w.fire(w.find(layers, text), "Activated")
+		w.settle()
+		local input = assert(w.find(inspector, "text"):FindFirstChildWhichIsA("TextBox", true))
+		expect(input.Text):toBe "Text"
+		input.Text = "Edited"
+		w.fire(input, "FocusLost")
+		w.settle()
+		local edited = assert((Design.document.find(editor.session.document:peek().root, text)))
+		expect(edited.props.text.literal):toBe "Edited"
+		expect(w.read(assert(editor.stage).nodes[text], "Text")):toBe "Edited"
+		expect(editor.session.undo()):toBe(true)
+		w.settle()
+		expect(assert(w.find(inspector, "text"):FindFirstChildWhichIsA("TextBox", true)).Text):toBe "Text"
+		expect(Design.emit(editor.session.document:peek(), library)):toBe(Design.emit(document, library))
+		expect(editor.session.problem:peek()):toBeNil()
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveObjects()):toBe(w.objectsBefore)
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		w.close()
+	end)
+
 	it("rejects unknown slot samples and unwinds a child sample that fails during construction", function()
 		local w = Support.world()
 		local function mount(name: string): DesignEditor.Editor
