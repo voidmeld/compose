@@ -2167,6 +2167,8 @@ Numeric datatype literals are component arrays. Each component accepts a number 
 
 ### Design contracts and types
 
+`Kind.selectionTarget(built, use) -> unknown` is an optional editor hook. Return the current visual GuiObject for the object returned by `build`, or `nil` when no surface is presented. Read live target state with `use` so outlines update when a portal opens, closes or replaces its surface. The editor reads native bounds and hides outlines for detached or hidden targets outside its stage. Kinds without this hook use their built object. The hook does not change emitted source or authored node references.
+
 `Contract` is `{ inputs: { Input }, outputs: { Output } }`. An input has `id`, `kind` (`value`, `readable` or `cell`), `type`, optional plain-data `preview`, `required`, `fields` and `luauType`. Input types are `string`, `number`, `boolean`, `color`, `image`, `list`, `record` and `slot`. List and record `fields` recursively declare `{ id, type, fields?, luauType?, options? }`. String item fields can declare at least two distinct nonempty enum options, which emit a string literal union and cannot override `luauType`. Emitted list items and nested records retain these shapes.
 
 `luauType` overrides the emitted base type of an input or item field. It accepts identifiers and qualified type names, such as `UDim2` and `Controls.Geometry`. `kind` still wraps that type in the library's readable or cell type. The library prelude provides named imports. This annotation does not convert previews or runtime values. Slot inputs require `kind = "value"` and use `() -> <library.returnType>`. They reject `luauType` overrides. Validation rejects invalid type paths.
