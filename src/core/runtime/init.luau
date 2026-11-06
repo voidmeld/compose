@@ -171,6 +171,7 @@ local function createRuntime(host: Host.Host): Runtime
 		end
 		local node = subject
 		if not Nodes.isDestructible(node) then
+			Props.detach(host, node)
 			return
 		end
 		Props.forget(node)
