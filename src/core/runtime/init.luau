@@ -18,7 +18,7 @@ local Types = require "./reactive/types"
 local extensionsModule: typeof(require "@self/extensions")? = nil
 local motionModule: typeof(require "./animation/motion")? = nil
 
-local WEAK_KEYS = table.freeze { __mode = "k" }
+local WEAK_KEYS = table.freeze { __mode = "ks" }
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
