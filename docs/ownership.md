@@ -19,6 +19,13 @@ Use `runtime.borrow(node)` to return custody to the external owner.
 An unknown node is already borrowed. An explicit `borrow` call can make this decision clear.
 `adopt` rejects a node that Compose already owns. Each node has one owner.
 
+You can borrow a node after a runtime constructor creates it. Transfer custody before
+the creating owner ends. The node then survives that owner's disposal.
+Its bindings and other owned resources still end with their owners.
+Borrowing a parent does not transfer its children to the external owner.
+See [external Instance construction](roblox.md#create-an-externally-owned-instance) for
+a bare-node example and the caller's destruction responsibility.
+
 Placing an existing node in a constructor's children does not transfer ownership. The constructor releases that attachment before its owner destroys the parent. A borrowed child survives; an owned child remains the responsibility of its original owner. Releasing an old attachment preserves a newer parent.
 
 ### A mount target keeps the custody it has

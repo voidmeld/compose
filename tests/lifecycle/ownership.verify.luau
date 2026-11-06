@@ -449,6 +449,8 @@ describe("ownership", function()
 			expect(world.host.parentOf(child)):toBe(nil)
 			expect(Compose.custodyOf(child)):toBe "borrowed"
 			Compose.owner.dispose(owner)
+			expect(world.host.isAlive(child)):toBe(true)
+			world.host.adapter.render.destroyNode(child)
 			expectClean(world)
 		end)
 
