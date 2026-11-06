@@ -10,6 +10,244 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("host-neutral design editor", function()
+	it("mounts value input samples as static props in UI and 3D previews", function()
+		for _, space in { "2d", "3d" } do
+			for _, projected in { false, true } do
+				local w = Support.world(space)
+				local sample = Compose.cell<<Design.Literal?>> "ordinary"
+				local readable = Compose.cell<<Design.Literal?>> "readable"
+				local cell = Compose.cell<<Design.Literal?>> "cell"
+				local builds, releases = 0, 0
+				local kind: Design.Kind = {
+					fields = { zone = { type = "string" }, label = { type = "string" }, state = { type = "string" } },
+					children = "none",
+					call = "UI.Static",
+					build = function(props, _children, name)
+						local zone = props.zone.value or props.zone.literal or props.zone.readable
+						assert(type(zone) == "string", "zone must be a static string")
+						expect(props.label.readable):toBe(readable)
+						expect(props.state.readable):toBe(cell)
+						builds += 1
+						Compose.cleanup(function()
+							releases += 1
+						end)
+						return w.runtime.create(if space == "3d" then "Model" else "Frame") {
+							Name = name,
+							Attributes = { Zone = zone },
+						}
+					end,
+				}
+				local library = Design.extend(w.library, { kinds = { Static = kind } })
+				local value =
+					Design.document.setContract(Design.document.new("StaticSample", library, "Static"), library, {
+						inputs = {
+							{ id = "zone", kind = "value", type = "string", preview = "preview" },
+							{ id = "label", kind = "readable", type = "string" },
+							{ id = "state", kind = "cell", type = "string" },
+						},
+						outputs = {},
+					})
+				for _, key in { "zone", "label", "state" } do
+					value = Design.document.change(value, library, "n1", key, { input = key })
+				end
+				local bindings: { [string]: Design.Resolved } = {
+					zone = { readable = sample },
+					label = { readable = readable },
+					state = { readable = cell },
+				}
+				local editor = DesignEditor.create(library, value, w.screen, {
+					runtime = w.runtime,
+					environment = w.environment,
+					bindings = if projected then nil else bindings,
+					renderPreview = if projected
+						then function(document: Design.Document, _library: Design.Library, _use: Compose.Use)
+							return document, bindings
+						end
+						else nil,
+				})
+				local function mounted(): Compose.Node
+					local frame = editor.canvas.current()
+					return assert(frame.stage or frame.scene).nodes.n1
+				end
+				local first = mounted()
+				expect(Support.instance(first):GetAttribute "Zone"):toBe "ordinary"
+				readable:set "changed readable"
+				cell:set "changed cell"
+				w.settle()
+				expect(mounted()):toBe(first)
+				expect(builds):toBe(1)
+				sample:set "changed sample"
+				w.settle()
+				expect(mounted() == first):toBe(false)
+				expect(Support.instance(mounted()):GetAttribute "Zone"):toBe "changed sample"
+				expect(builds):toBe(2)
+				expect(releases):toBe(1)
+				expect(bindings.zone.readable):toBe(sample)
+				expect(editor.session.problem:peek()):toBeNil()
+				editor.dispose()
+				w.settle()
+				expect(releases):toBe(builds)
+				expect(sample:peek()):toBe "changed sample"
+				w.close()
+			end
+		end
+	end)
+
+	it("resolves value input samples before root variants, row variants and draft previews on every device", function()
+		local w = Support.world()
+		local zone = Compose.cell<<Design.Literal?>> "ordinary"
+		local presentation = Compose.cell<<Design.Literal?>> "inline"
+		local rows = Compose.cell<<{ Design.Row }>> {
+			{ id = "first", kind = "ordinary" },
+			{ id = "second", kind = "alternate" },
+		}
+		local enabled = Compose.cell<<Design.Literal?>>(false)
+		local config = Compose.cell<<Design.Literal?>> { title = "Prepared" }
+		local leaf: Design.Kind = {
+			fields = { zone = { type = "string" }, title = { type = "string" }, data = { type = "value" } },
+			children = "none",
+			call = "UI.Static",
+			build = function(props, _children, name)
+				local current = props.zone.literal
+				assert(type(current) == "string", "zone must be a static string")
+				expect(props.title.literal):toBe "Prepared"
+				expect(props.data.value):toEqual { enabled = false, zone = current }
+				return w.runtime.create "Frame" { Name = name, Attributes = { Zone = current } }
+			end,
+		}
+		local repeated: Design.Kind = {
+			fields = {},
+			children = "template",
+			call = "UI.Rows",
+			source = "from",
+			key = "key",
+			template = "render",
+			build = function(props, _children, name)
+				local key, render = assert(props.from.key), assert(props.render.template)
+				return w.runtime.create "Frame" {
+					Name = name,
+					Compose.keyed {
+						from = assert(props.from.rows),
+						key = function(row: Design.Row): Design.Literal
+							return assert(row[key])
+						end,
+						render = function(row: Compose.ReadOnlyValue<Design.Row>): Compose.Node
+							return Support.node(render(row))
+						end,
+					},
+				}
+			end,
+		}
+		local library = Design.extend(w.library, { kinds = { Static = leaf, Rows = repeated } })
+		local value = Design.document.setContract(Design.document.new("Samples", library, "Stack"), library, {
+			inputs = {
+				{ id = "zone", kind = "value", type = "string" },
+				{
+					id = "presentation",
+					kind = "value",
+					type = "string",
+					required = true,
+					options = { "inline", "panel" },
+				},
+				{
+					id = "rows",
+					kind = "value",
+					type = "list",
+					fields = {
+						{ id = "id", type = "string" },
+						{ id = "kind", type = "string", options = { "ordinary", "alternate" } },
+					},
+				},
+				{ id = "enabled", kind = "value", type = "boolean" },
+				{ id = "config", kind = "value", type = "record", fields = { { id = "title", type = "string" } } },
+			},
+			outputs = {},
+		})
+		value = Design.document.insert(value, library, "n1", "Rows")
+		value = Design.document.bind(value, library, "n2", { from = "rows", key = "id" })
+		value = Design.document.insert(value, library, "n2", "Static")
+		value.root.children[1].children[1].nameField = "id"
+		local props: { [string]: Design.Value } = {
+			zone = { input = "zone" },
+			title = { input = "config", path = { "title" } },
+			data = { literal = { zone = { ["$input"] = "zone" }, enabled = { ["$input"] = "enabled" } } },
+		}
+		for key, property in props do
+			value = Design.document.change(value, library, "n3", key, property)
+		end
+		value = Design.document.setRowVariant(value, library, "n3", {
+			item = "kind",
+			cases = { { value = "alternate", kind = "Static", props = props, children = {} } },
+		})
+		value = Design.document.setRootVariant(value, library, {
+			input = "presentation",
+			value = "panel",
+			kind = "Stack",
+			props = { width = { literal = 500 } },
+		})
+		local bindings: { [string]: Design.Resolved } = {
+			zone = { readable = zone },
+			presentation = { readable = presentation },
+			rows = { rows = rows },
+			enabled = { readable = enabled },
+			config = { readable = config },
+		}
+		local source = Design.emit(value, library)
+		local editor = DesignEditor.create(library, value, w.screen, {
+			runtime = w.runtime,
+			environment = w.environment,
+			devices = { DesignEditor.devices.all[1], DesignEditor.devices.all[2] },
+			frame = function()
+				return { bindings = bindings }
+			end,
+			prompt = {
+				designPath = "designs/Samples.luau",
+				submit = function()
+					return {
+						message = "Choose a sample",
+						variants = { { title = "First", source = source }, { title = "Second", source = source } },
+						pick = function(): string
+							return "Selected"
+						end,
+					}
+				end,
+			},
+		})
+		editor.canvas.showAll(true)
+		w.settle()
+		for _, frame in editor.canvas.frames() do
+			local root = assert(frame.stage).nodes.n1
+			for _, name in { "first", "second" } do
+				expect(w.find(root, name):GetAttribute "Zone"):toBe "ordinary"
+			end
+		end
+		presentation:set "panel"
+		zone:set "changed sample"
+		rows:set { { id = "replacement", kind = "alternate" } }
+		w.settle()
+		for _, frame in editor.canvas.frames() do
+			local root = assert(frame.stage).nodes.n1
+			expect(w.find(root, "replacement"):GetAttribute "Zone"):toBe "changed sample"
+			expect(Support.instance(root):FindFirstChild("first", true)):toBeNil()
+			expect(w.number(w.read(w.read(root, "Size"), "X"), "Offset")):toBe(500)
+		end
+		expect(editor.execute({ action = "Prompt", text = "Prepare two samples", count = 2 }).ok):toBe(true)
+		w.settle()
+		expect(assert(editor.execute({ action = "Read" }).prompt).drafts):toBe(true)
+		local drafts = w.find(editor.root, "DesignDrafts")
+		for index = 1, 2 do
+			local card = w.find(drafts, "Draft" .. index)
+			expect(w.find(card, "replacement"):GetAttribute "Zone"):toBe "changed sample"
+		end
+		expect(Design.emit(editor.session.document:peek(), library)):toBe(source)
+		expect(editor.session.canUndo:peek()):toBe(false)
+		editor.dispose()
+		w.settle()
+		expect(w.env.liveConnections()):toBe(w.connectionsBefore)
+		expect(rows:peek()):toEqual { { id = "replacement", kind = "alternate" } }
+		w.close()
+	end)
+
 	it("keeps owned sample projections out of source and undo history in UI and 3D previews", function()
 		for _, space in { "2d", "3d" } do
 			local w = Support.world(space)

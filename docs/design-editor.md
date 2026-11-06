@@ -254,6 +254,11 @@ fresh slot factories and cells in that owner. Sample changes release the previou
 render. This projection does not change the session document, source link or undo
 history. Editor commands still edit the authored session document.
 
+Sample bindings follow the preview document's input kinds. Value inputs receive the current
+plain value of a sample readable or row source; changing that sample rebuilds the preview.
+Readable and cell inputs keep their reactive bindings. The same rules apply to 2D and 3D
+stages, device frames and draft comparisons.
+
 The **Actual size** control sets the current UI frame to one logical pixel per host GUI pixel. Each device
 remembers this mode across device switches, grid changes and editor resizing. **Fit size** returns that
 frame to fitting the available room. Fit clears the mode on visible frames; a zoom clears it on the
