@@ -104,6 +104,11 @@ local fastEdges: { [Node]: Types.Node? } = {}
 local fastCount = 0
 local fastPeak = 0
 Weak.keys(fastEdges)
+
+local attached: { [Node]: unknown } = {}
+local attachedMany: { [Node]: { unknown } } = {}
+Weak.keys(attached)
+Weak.keys(attachedMany)
 local ATTRIBUTES = "Attributes"
 
 local applying = State.applying
@@ -112,7 +117,51 @@ export type Props = { [unknown]: unknown }
 
 local classify = Host.classifyKey
 
-local function subscribe(host: Host.Host, node: Node, owner: Owner.Owner, name: string, handler: Host.PropFunction)
+local function remember(node: Node, connection: unknown)
+	local many = attachedMany[node]
+	if many ~= nil then
+		table.insert(many, connection)
+		return
+	end
+	local single = attached[node]
+	if single == nil then
+		attached[node] = connection
+		return
+	end
+	attached[node] = nil
+	attachedMany[node] = { single, connection }
+end
+
+local function detach(host: Host.Host, node: Node)
+	local single, many = attached[node], attachedMany[node]
+	if single == nil and many == nil then
+		return
+	end
+	attached[node] = nil
+	attachedMany[node] = nil
+	local events = host.events
+	local release = if events ~= nil then events.detachEvent else nil
+	if release == nil then
+		return
+	end
+	if single ~= nil then
+		release(single)
+	end
+	if many ~= nil then
+		for _, connection in many do
+			release(connection)
+		end
+	end
+end
+
+local function subscribe(
+	host: Host.Host,
+	node: Node,
+	owner: Owner.Owner,
+	name: string,
+	handler: Host.PropFunction,
+	fresh: boolean?
+)
 	local events = host.events
 	if events == nil then
 		return Diagnostics.raise("host/no-events", ("host %q cannot subscribe to events"):format(host.name), {
@@ -123,6 +172,11 @@ local function subscribe(host: Host.Host, node: Node, owner: Owner.Owner, name: 
 		})
 	end
 	local callback = Dynamic.handler(handler)
+	local attach = events.attachEvent
+	if fresh and attach ~= nil and events.detachEvent ~= nil then
+		remember(node, attach(node, name, callback))
+		return
+	end
 	Owner.adopt(owner, events.connectEvent(node, name, callback))
 end
 
@@ -217,6 +271,8 @@ local function mappedListener(write: (Node, string, unknown) -> (), liveRead: ((
 end
 
 local function forget(node: Node)
+	attached[node] = nil
+	attachedMany[node] = nil
 	if fastEdges[node] ~= nil then
 		fastEdges[node] = nil
 		fastCount -= 1
@@ -427,7 +483,7 @@ local function apply(host: Host.Host, node: Node, source: unknown, owner: Owner.
 			refuseNodeValue(host, node, name, value)
 		elseif type(value) == "function" then
 			if classify(host, node, name) == "event" then
-				subscribe(host, node, owner, name, value)
+				subscribe(host, node, owner, name, value, fresh)
 			elseif fresh then
 				bindFunction(host, node, owner, name, value, write)
 			else
@@ -458,5 +514,6 @@ return {
 	applying = applying,
 	apply = apply,
 	forget = forget,
+	detach = detach,
 	map = map,
 }
