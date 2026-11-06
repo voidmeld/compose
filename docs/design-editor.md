@@ -30,7 +30,12 @@ runtime:dispose()
 ```
 Use a GUI container with a known size as the parent.
 Use `roblox3DLibrary` for a scene stage.
-Chrome uses 15 px body text, 14 px captions and 17 px titles. The **Text** control cycles body text through 15, 17 and 19 px without resizing the Design canvas or its content. The parent container's `ComposeDesignTextSize` attribute remembers the choice when a Design reopens. The Studio plugin persists that attribute with plugin settings across Studio sessions. Other hosts can restore the attribute before mounting and observe it to persist the preference.
+The editor controls use 15 px body text, 14 px captions and 17 px titles.
+The **Text** control cycles body text through 15, 17 and 19 px.
+It preserves the size of the Design canvas and its content.
+The parent container's `ComposeDesignTextSize` attribute stores the choice when a Design reopens.
+The Studio plugin stores that attribute in plugin settings across Studio sessions.
+Other hosts can restore the attribute before mounting and observe it to save the preference.
 The session controls selection and edit history.
 Layer dragging calls `session.move`. Inspector controls call session edits.
 Resize and numeric drag controls show preview values during movement.
@@ -98,12 +103,10 @@ The capture function and selected-reference table preserve that type under stric
 Node fields receive formulas returning the captured non-nil node. Read them after construction;
 uncaptured targets and unknown selected names raise `Node reference is not captured`.
 
-A document can set `rootVariant = { input, value, kind, props }` through `Design.document.setRootVariant`.
-The required static string input declares its enum `options`.
-The matching option selects the alternative wrapper; the others select the ordinary root.
-Both wrappers share one unconditional content subtree and keep one direct root name.
-List and slot wrappers are supported. The emitted `rootContent` function owns the shared composition.
-This selection occurs when the view is built. Prepare the selector in the caller.
+Use `Design.document.setRootVariant` to select a root from a required static string input's enum `options`.
+An alternative can supply its own `children` or share the ordinary root's content.
+Prepare the selector in the caller.
+See [root variants](api.md#designdocument) for the child and naming rules.
 
 A kit workspace can provide `token`, `resolveToken`, `tokens` and `slots`.
 `tokens` lists inspector choices.

@@ -29,6 +29,8 @@ local Host = runtime.constructors
 ```
 
 The examples on this page are fragments, unless the text says otherwise.
+Supply the application values and callbacks that each fragment names.
+Run owner-bound fragments inside a component or `Compose.withRootOwner`.
 [Executable examples](../examples/README.md) show complete setups. [Tests](../tests) exercise the contracts.
 Neither a fragment nor an API inventory proves native rendering or application quality.
 
@@ -42,7 +44,9 @@ A read through `use` records a dependency. Outside a body, use `:peek()` for an 
 
 ### A value, or a source of one
 
-`Compose.Value<T>` is a cell or a formula. It reads with `:peek()` and writes with `:set(value)` and `:update(change)`; a formula refuses writes.
+`Compose.Value<T>` is a cell or a formula.
+Read it with `:peek()`. Write a cell with `:set(value)` or `:update(change)`.
+A formula refuses writes.
 `Compose.ReadOnlyValue<T>` is its read side. A parameter that only reads takes a `ReadOnlyValue`, so it accepts both kinds.
 
 `Compose.Input<T>` is the type of an argument that accepts one of three things:
@@ -58,8 +62,8 @@ type Options = {
     seconds: Compose.Input<number>?,
 }
 
-runtime.tween(opacity, { seconds = 0.25 })
-runtime.tween(opacity, { seconds = configuredSeconds })
+runtime.tween(function(use) return use(opacity) end, { seconds = 0.25 })
+runtime.tween(function(use) return use(opacity) end, { seconds = configuredSeconds })
 ```
 
 `Source<T>` is the narrower union. It accepts a value or a body, but not a plain `T`.
@@ -67,15 +71,9 @@ If a constant is a mistake for the field, use `Source`. If a constant is correct
 
 ### Type checking
 
-Every maintained Luau source begins with `--!strict` and uses no explicit `any` type or type assertion.
-The gate parses all maintained source, tests and tooling and checks the current Luau solver.
+The [maintainer guide](../AGENTS.md#rules) owns the repository's type policy.
 Dynamic host properties and decoded input remain `unknown` until their protocol or an existing validation supplies a concrete shape.
 Generic callbacks keep their argument and result types.
-
-The private dynamic-operation boundary uses the host's protected-call intrinsic for raw property
-callbacks and native member access. It returns `unknown`, preserves failure payloads and multiple
-results, and is the sole production bootstrap allowed to read the global intrinsic table. This
-does not exempt it from the strict, explicit-any or cast policy.
 
 These habits keep consumer code checking:
 
@@ -163,7 +161,10 @@ percent:peek()  --> 0.81
 
 The body runs on its first read. Compose caches the result and recomputes it only when a dependency changes.
 An equal result publishes no change, so downstream consumers do not run again.
-With an `equals` comparator, the formula checks its own result when a dependency changes, before Compose schedules any consumer. An equal result then costs one recomputation, whatever the number of consumers. A body error stays with the consumer that reads the formula.
+With an `equals` comparator, the formula checks its result when a dependency changes.
+This check occurs before Compose schedules any consumer.
+An equal result costs one recomputation, regardless of the number of consumers.
+A body error stays with the consumer that reads the formula.
 
 - A formula that you create under an active owner belongs to that owner. It releases its upstream dependencies on teardown or on failed-build unwind.
 - If you read an existing formula from another owner, you borrow it. The read does not transfer ownership.
@@ -179,7 +180,11 @@ Dispose downstream consumers before their formula, or give the formula an owner 
 
 `selector(source: ReadOnlyValue<K>) -> (key: K) -> ReadOnlyValue<boolean>`
 
-Creates an owner-bound keyed projection of a cell or formula. Each returned readable answers whether the source matches its key, using table-key identity (`rawequal`, without calling equality metamethods). Repeated requests for the same key return the same readable. Nil, false, numbers, strings and identity keys are supported; keys must be valid table keys or nil.
+Creates an owner-bound keyed projection of a cell or formula.
+Each returned readable reports whether the source matches its key.
+The comparison uses table-key identity (`rawequal`) and calls no equality metamethods.
+Repeated requests for the same key return the same readable.
+Keys can be valid table keys or nil. These include false, numbers, strings and identity keys.
 
 ```luau
 local selected = Compose.cell("first")
@@ -188,15 +193,28 @@ local firstSelected = isSelected("first")
 local secondSelected = isSelected("second")
 ```
 
-The selector subscribes once to its source. A source change looks up only the old and new keys and invalidates only their projections. Unchanged answers do not notify subscribers. This avoids running a separate equality formula for every row. Source formulas refresh when routing requires their value. Routing finishes before watches drain, so direct reads, diamonds, batches and independent reactors observe coherent values.
+The selector subscribes once to its source.
+A source change looks up only the old and new keys and invalidates only their projections.
+Unchanged answers do not notify subscribers.
+This avoids running a separate equality formula for every row.
+Source formulas refresh when routing requires their value.
+Routing finishes before watches drain.
+Direct reads, diamonds, batches and independent reactors therefore observe coherent values.
 
-Creation requires an active owner. The owner retains requested keys and projections until teardown, then releases the source subscription. Borrowed sources remain live. Later projection reads or key requests raise `reactive/disposed-selector`. Source failures propagate to readers; a subsequent source change permits recovery.
+Creation requires an active owner.
+The owner retains requested keys and projections until teardown, then releases the source subscription.
+Borrowed sources remain live.
+Later projection reads or key requests raise `reactive/disposed-selector`.
+Source failures propagate to readers. A subsequent source change permits recovery.
 
 ### `Compose.map`
 
 `map(source: ReadOnlyValue<T>, transform: (T) -> R) -> (use: Use) -> R`
 
-Returns a reactive body that reads one cell or formula and transforms its value. It works anywhere a body is accepted, such as `Compose.formula` or a bound property. A property bound directly to it on a new node takes the direct-binding path. The property writes `transform(value)` when the source changes, without dependency tracking or a watch run.
+Returns a reactive body that reads one cell or formula and transforms its value.
+It works anywhere a body is accepted, such as `Compose.formula` or a bound property.
+A property bound directly to it on a new node takes the direct-binding path.
+When the source changes, the property writes `transform(value)` without dependency tracking or a watch run.
 
 ```luau
 local index = Compose.cell(1)
@@ -212,15 +230,19 @@ Host.TextLabel {
 `tools/compile-map.luau` rewrites eligible bodies into `map` calls as a build step:
 
 ```sh
-lute run tools/compile-map.luau --binding Compose src/client/*.luau
+lute run tools/compile-map.luau --binding Compose build/client/*.luau
 ```
 
 It changes a function expression only if all of these hold:
+
 - It returns one expression.
 - It calls its parameter exactly once, on a local that is never reassigned.
 - It uses the parameter nowhere else.
 
-Named function declarations and files without the binding local are unchanged. `--check` lists the changes without writing. Run it on build output, not on source: the rewritten transform has an untyped parameter. Type-check the source.
+Named function declarations and files without the binding local are unchanged.
+Use `--check` to list changes without writing.
+Run it on build output. The rewritten transform has an untyped parameter.
+Type-check the source.
 
 ### `Compose.watch`
 
@@ -239,8 +261,9 @@ To stop the watch early, call the returned disposer. You do not need to retain i
 Disposing the owner stops the watch.
 Resources that you create inside the body follow the [per-run cleanup contract](#composecleanup).
 
-Outside a mount, use `Compose.owner.watch(owner, body, label?)` with an explicit owner, or `runtime:watch(body, label?)`, which falls back to the own owner of the runtime.
-The optional label names this otherwise handleless watch in a running [`Compose.profile`](#composeprofile) capture.
+Outside a mount, use `Compose.owner.watch(owner, body, label?)` with an explicit owner.
+Alternatively, use `runtime:watch(body, label?)`. Without an active owner, it uses the runtime root owner.
+The optional label names the watch in a running [`Compose.profile`](#composeprofile) capture.
 Compose does not retain it when the profiler is off.
 
 #### Reacting to changes only
@@ -452,7 +475,7 @@ If you omit it, the owner gets its own reactor.
 Creates a root that stays open after `body` returns. The body runs with the owner active.
 If it raises, Compose disposes the partly built root newest first and propagates the failure.
 
-It returns `{ owner, dispose }`. The `dispose` field is `owner.dispose`.
+It returns `{ owner, dispose }`. The `dispose` field is a function bound to that owner.
 To activate the scope for later work, use `owner` with `Compose.withOwner`.
 
 ```luau
@@ -587,14 +610,14 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `connect(node, event, handler)` | Subscribes to an event on an existing node. Returns the unsubscribe. |
 | `constructors` | A string-keyed table of lazily cached constructors that are bound to this runtime. Every host kind uses the same constructor path. The Roblox host accepts every class that its engine can create. Use `Host.Frame { ... }` or `Host[className] { ... }`. |
 | `create(kind)` | Selects a constructor for a dynamic host kind. Call it with props to build a node. |
-| `decorate(node, props)` | Applies props to a node that Compose did not create. |
+| `decorate(node, props)` | Applies props to an existing node. |
 | `mount(component, target)` | Mounts a one-node component. Returns `(dispose, node)`. |
 | `mountFragment(fragment, target)` | Mounts top-level sibling nodes and structural directives. Returns `(dispose, staticRoots)`. |
 | `adopt(node)` | Takes responsibility for destroying an existing node. |
 | `borrow(node)` | Returns the node and transfers destruction responsibility to its external owner. A constructor-created node survives its creating owner when borrowed before disposal. Bindings and other owned resources keep their original owners. See [external Instance construction](roblox.md#create-an-externally-owned-instance). |
 | `motion(codec)` | Selects typed `spring`, `tween` and `ramp` methods for the codec's value type. |
-| `spring(source, options?)` | Follows a numeric `source` with spring physics. |
-| `tween(source, options?)` | Follows a numeric `source` along an easing curve. `seconds` is a number or a source of seconds that Compose samples at each retarget. |
+| `spring(source, options?)` | Follows a numeric reactive body with spring physics. |
+| `tween(source, options?)` | Follows a numeric reactive body along an easing curve. `seconds` is a number or a source of seconds that Compose samples at each retarget. |
 | `timeline(options?)` | Creates one owned clock that many properties can read. |
 | `ramp(initial, options?)` | Creates a value that moves to each new target over a duration that you choose for each retarget. See [Ramp](#ramp). |
 | `scheduler(owner?)` | Creates owner-bound delayed work with cancellation and keyed replacement. See [Owner scheduler](#owner-scheduler). |
@@ -603,10 +626,16 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `clock(options?)` | Reads elapsed seconds, or remaining seconds for a duration or deadline, while observed. |
 | `sequence(options)` | Owns a choreography of waits, callbacks, tweens, timelines and parallel groups. |
 
-`running(value)` returns the boolean activity readable for a spring, tween or ramp value. It is false initially, true while frame work is scheduled, and false after completion, reduced-motion snapping or owner disposal. Retargeting an active animation keeps it true. Repeated queries return the same readable and need no active owner. A value that is not animated raises `animation/not-animated`. The typed methods from `motion(codec)` also expose `running(value)`.
+`running(value)` returns the boolean activity readable for a spring, tween or ramp value.
+It is false initially and true while frame work is scheduled.
+Completion, reduced-motion snapping and owner disposal set it to false.
+Retargeting an active animation keeps it true.
+Repeated queries return the same readable and need no active owner.
+A value that is not animated raises `animation/not-animated`.
+The typed methods from `motion(codec)` also expose `running(value)`.
 
 ```luau
-local opacity = runtime.tween(opacityTarget, { seconds = 0.25 })
+local opacity = runtime.tween(function(use) return use(opacityTarget) end, { seconds = 0.25 })
 local running = runtime.running(opacity)
 ```
 
@@ -738,7 +767,8 @@ Props: string keys are properties, function values bind reactively, and the arra
 Two wrappers cover the cases where a function is ambiguous: `Compose.event` and `Compose.static`.
 
 `decorate` is for something that already exists: a mount target, a model, or a layer that someone else owns.
-Bindings and subscriptions belong to the active owner. The node does not.
+Bindings and subscriptions belong to the active owner.
+Decoration does not change node custody.
 
 - Each mentioned property replaces its previous binding after the first successful host write, even when the replacement starts with the same value. The previous source stops writing that property.
 - Unmentioned properties and event subscriptions remain active.
@@ -1488,7 +1518,7 @@ local catalogue = useCatalogue()
 Each call acquires a reference and registers its release with the active owner.
 When the last reference is released, Compose disposes the resource. A later acquisition builds a fresh resource.
 
-**The factory runs under the own owner of the resource, never the owner of the consumer.**
+The factory runs under the resource's own owner.
 If the factory of A acquires B, A keeps that reference to B.
 The first departing consumer of A releases neither resource. The last consumer releases both, innermost last, exactly once.
 A failed factory releases its partial acquisitions and caches nothing.
@@ -1503,7 +1533,7 @@ Each takes normalized progress in `[0, 1]`.
 The `Back` and `Elastic` variants can return values outside that range to produce overshoot.
 
 ```luau
-runtime.tween(opacity, { seconds = 0.25, ease = Compose.easing.outQuad })
+runtime.tween(function(use) return use(opacity) end, { seconds = 0.25, ease = Compose.easing.outQuad })
 ```
 
 ### `Compose.cubicBezier`
@@ -1514,7 +1544,7 @@ Creates an easing function with endpoints `(0, 0)` and `(1, 1)` and the supplied
 The function solves the curve's x coordinate for each progress value, then returns its y coordinate. Pass it as `ease` to a tween, ramp or sequence.
 
 ```luau
-runtime.tween(opacity, { seconds = 0.25, ease = Compose.cubicBezier(0.42, 0, 1, 1) })
+runtime.tween(function(use) return use(opacity) end, { seconds = 0.25, ease = Compose.cubicBezier(0.42, 0, 1, 1) })
 ```
 
 ### Reduced motion
@@ -1526,7 +1556,7 @@ A value that is neither raises `animation/bad-reduced-motion`.
 
 ```luau
 local calm = Compose.cell(GuiService.ReducedMotionEnabled)
-runtime.spring(progress, { period = 0.3, reducedMotion = calm })
+runtime.spring(function(use) return use(progress) end, { period = 0.3, reducedMotion = calm })
 ```
 
 - While the policy reads true, the animated value reaches each new target on the frame that retargets it. Compose interpolates nothing, holds no frame listener, and writes once for each change instead of once for each frame.
@@ -1541,7 +1571,11 @@ Read the preference in your application and write it into a cell.
 
 `runtime.motion(codec: Compose.Codec<T>) -> Motion<T>`
 
-Selects a typed codec for `spring`, `tween` and `ramp`. Each method retains the selected value type. The runtime's direct `spring`, `tween` and `ramp` methods animate numbers using `Compose.numberCodec`.
+Selects a typed codec for `spring`, `tween` and `ramp`.
+Each method retains the selected value type.
+The runtime's direct `spring`, `tween` and `ramp` methods animate numbers using `Compose.numberCodec`.
+For `spring` and `tween`, pass a reactive body that reads the target through `use`.
+For `ramp`, pass the initial value.
 
 A codec has `arity`, `encode(value, out)`, `decode(components)` and an optional `normalise(components)`. Its arity is a positive integer. `encode` writes into an existing buffer; `decode` returns the same type accepted by `encode`. Selecting a codec creates no owned work or frame subscription. Animations retain the runtime's ownership, shared clock and reduced-motion behavior.
 
@@ -1869,7 +1903,8 @@ Returns the host itself. Pass it to `Compose.createRuntime` directly, or use it 
 `animatableTypes(engine?) -> { string }`
 
 Returns every Roblox datatype that this engine can animate, sorted.
-Currently these are `CFrame`, `Color3`, `UDim`, `UDim2`, `Vector2` and `Vector3`, plus `number` from the core.
+The available codecs are `CFrame`, `Color3`, `UDim`, `UDim2`, `Vector2` and `Vector3`.
+The list excludes the core `number` codec.
 
 ### `ComposeRoblox.cleanup`
 
@@ -2275,9 +2310,45 @@ An authored `Wall` node emits `Wall(UI, { name = "WestWall", ... })`, using the 
 
 `create(library: Design.Library, initial: Design.Document, parent: Compose.Node, options: Options) -> Editor`
 
-Require `src/design-editor`. `Options` requires `runtime: Compose.Runtime` and `environment: Environment`. `devices` selects named profiles from `DesignEditor.devices.all`; `device` names the initial profile. Without `devices`, an explicit `stageSize: Point` creates a custom Canvas profile; otherwise all eight standard profiles are available. `previews`, `token`, `resolveToken`, `tokens`, `slots`, `onExport` and `link` retain the protocols of `Design.render` and `Design.link`. `tokens` lists inspector token paths. `onExport(source: string)` receives generated source. Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`. Names and choices are nonempty and unique. The initial choice (or first choice) is applied before frames build. A failed selection preserves the displayed choice. Optional `backdrop: () -> unknown` builds an owned view behind the UI artboard, including in a frame context.
+Require `src/design-editor`.
+`Options` requires `runtime: Compose.Runtime` and `environment: Environment`.
+`devices` selects named profiles from `DesignEditor.devices.all`.
+`device` names the initial profile.
+Without `devices`, an explicit `stageSize: Point` creates a custom Canvas profile.
+Otherwise, all eight standard profiles are available.
 
-`Editor` returns `root`, `session`, `canvas`, `execute(request)` and an idempotent `dispose()`. Commands and structured results are documented in [editor commands](design-editor.md#editor-commands). Optional `identity = { commit, path }` binds results to source. `canvas.current()` returns the active `Frame`, with `device`, `root`, `scale` and either `stage` or `scene`. `canvas.select(id)` opens a profile, `showAll(enabled)` switches UI grid mode, `frames()` lists open frames, and `fit()` fits visible frames. A 3D Design always opens one full-size scene. Optional `scene = { world, camera, eyeHeight? }` borrows a host world and camera for a viewport overlay using normal world rendering and lighting. The scene adds `setCamera(preset)`, `orbit(yawDegrees, pitchDegrees)`, `preset`, `readCamera()` and `reframe()`; presets are `fit`, `eye-height`, `approach-20`, `close-up` and `top-down`. `canvas.zoom` follows the active view; `zoomTo(scale, around?)` controls it. All frames share one session, selection, history and source link. Each frame owns its rendered tree and layout context. Disposing the editor releases every frame and context, watcher, subscription and source link, and restores a borrowed scene camera. The supplied runtime, parent and services remain borrowed. Failed construction unwinds resources and raises the original failure.
+`previews`, `token`, `resolveToken`, `tokens`, `slots`, `onExport` and `link` retain the protocols of `Design.render` and `Design.link`.
+`tokens` lists inspector token paths.
+`onExport(source: string)` receives generated source.
+Optional `backdrop: () -> unknown` builds an owned view behind the UI artboard, including in a frame context.
+
+Each `Preview` is `{ name: string, choices: { string }, initial: string?, select: (choice: string) -> () }`.
+Names and choices are nonempty and unique.
+The editor applies the initial choice (or first choice) before it builds frames.
+A failed selection preserves the displayed choice.
+
+`Editor` returns `root`, `session`, `canvas`, `execute(request)` and an idempotent `dispose()`.
+See [editor commands](design-editor.md#editor-commands) for commands and structured results.
+Optional `identity = { commit, path }` binds results to source.
+
+`canvas.current()` returns the active `Frame`, with `device`, `root`, `scale` and either `stage` or `scene`.
+`canvas.select(id)` opens a profile.
+`showAll(enabled)` switches UI grid mode.
+`frames()` lists open frames, and `fit()` fits visible frames.
+`canvas.zoom` follows the active view. `zoomTo(scale, around?)` controls it.
+
+A 3D Design always opens one full-size scene.
+Optional `scene = { world, camera, eyeHeight? }` borrows a host world and camera for a viewport overlay.
+The overlay uses normal world rendering and lighting.
+The scene adds `setCamera(preset)`, `orbit(yawDegrees, pitchDegrees)`, `preset`, `readCamera()` and `reframe()`.
+Presets are `fit`, `eye-height`, `approach-20`, `close-up` and `top-down`.
+
+All frames share one session, selection, history and source link.
+Each frame owns its rendered tree and layout context.
+Editor disposal releases every frame and context, watcher, subscription and source link.
+It also restores a borrowed scene camera.
+The supplied runtime, parent and services remain borrowed.
+Failed construction unwinds resources and raises the original failure.
 
 `editor.stage` and `editor.scene` read the active canvas frame's `stage` and `scene`. A UI Design supplies only `stage`; a 3D Design supplies only `scene`. These aliases follow device selections and frame clicks immediately. Read them again after switching frames to reach the active view and its mounted nodes.
 

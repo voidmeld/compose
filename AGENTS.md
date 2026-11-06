@@ -1,7 +1,10 @@
 # Compose maintainer guide
 
 Compose is a scene composition library for Luau. It owns finite scene trees through a host-neutral protocol.
-The [README](README.md) links every guide. Read the contract for your task.
+First, run `git status --short` to inspect current work.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks.
+Then use the [README task table](README.md#documentation) to select the contract for your task.
+Read only the reference sections that the task needs.
 
 This file owns the contribution rules. Each fact has one owning document.
 
@@ -10,27 +13,19 @@ This file owns the contribution rules. Each fact has one owning document.
 - Only the host protocol creates, changes, parents or destroys nodes. Core has no engine and no ambient clock. Preserve fine-grained updates.
 - Dispose each owned resource once. Preserve borrowed resources. Unwind failed builds. Test those boundaries.
 - Use public package entry points. Before you cut a surface, inspect its production, dynamic, generated, CLI and test consumers. Exports and tests alone do not justify unused machinery.
-- Keep one current contract and one runnable falsifier. Headless checks prove no engine experience and no unmeasured speedup.
+- Keep one current contract and one runnable check that can disprove it. Headless checks do not prove engine behavior or unmeasured speed improvements.
 - Use existing tools. Add process only for a concrete consumer benefit.
 - Write automation in Lute Luau. Put exact dependencies only in `dependencies.lock.luau`.
 - Add no explanatory source comments. Keep tool directives and required license notices.
 - Keep adopter identity, destinations, policy and milestones out of the framework. Keep comparisons with other products out of this repository. Keep exact dependency, API and license identifiers.
 
-## Validate
-
-- During edits, run focused checks through the gate. Use `lute run tools/gate.luau --file tests/path/name.verify.luau` for one specification. Use `--name text` to select case names. Use `--tier fast` for the fast tier.
-- Write every test as a Verify case. Write every benchmark as a Verify benchmark and every engine check as a Verify case.
-- Use the test harness and declare `local describe, it, expect = Test.describe, Test.it, Test.expect` once per specification. The fast gate's `spec-style` producer runs `tools/check-spec-style.luau`; `tools/checks-config.luau` excludes specifications whose subject is Verify's raw harness API.
-- After you add or remove a specification, run `lute run tools/check-test-manifest.luau --write`.
-- Commit the candidate. Then run `lute run tools/gate.luau` once on the clean HEAD. Its fresh-clone check must pass before integration.
-- Do not change verified bytes after the gate.
-- Reuse evidence while its inputs stay unchanged.
+- Write every test and engine check as a Verify case. Write every benchmark as a Verify benchmark.
+- Use the test harness and declare `local describe, it, expect = Test.describe, Test.it, Test.expect` once per specification. Only specifications about Verify's raw harness API are excluded from this style check.
+- Every maintained Luau file requires `--!strict`, zero explicit `any` and zero type assertions (`::`), including concrete casts. The required gate rejects violations without a baseline or exemptions.
+- Follow the [validation procedure](CONTRIBUTING.md#check-a-change). Do not change verified bytes after the gate. Reuse evidence while its inputs stay unchanged.
 
 ## Repository
 
 Changes to this library use a pull request to `main` and the required `Gate` check. Do not push directly to `main` or bypass a failing check.
 
 Preserve license notices and exact consumer behavior when you simplify.
-
-Every maintained Luau file requires `--!strict`, zero explicit `any` and zero type assertions
-(`::`), including concrete casts. The required gate rejects violations without a baseline or exemptions.

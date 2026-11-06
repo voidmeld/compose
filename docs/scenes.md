@@ -3,6 +3,7 @@
 This guide covers existing nodes, 3D scene trees and tests without an engine.
 The [API reference](api.md) gives signatures.
 The [ownership guide](ownership.md) defines custody and disposal order.
+Use the [Roblox setup](roblox.md) before running these fragments.
 
 ## Decorating what already exists
 
@@ -60,11 +61,12 @@ A string after the class name supplies the Instance name.
 
 ```luau
 local Host = runtime.constructors
+local cframeMotion = runtime.motion(assert(ComposeRoblox.codecs().CFrame))
 
 local function Assembly(position, lit, tint)
     local base = Host.Part "Base" {
         Anchored = false,
-        CFrame = runtime.spring(position, { period = 0.25 }),
+        CFrame = cframeMotion.spring(function(use) return use(position) end, { period = 0.25 }),
     }
 
     local top = Host.Part "Top" {
@@ -96,8 +98,10 @@ end
 A function value binds a property.
 Spring and tween results can also bind properties directly.
 
-The core number codec animates `Brightness`.
-The Roblox codecs animate `CFrame` and `Color3`.
+The example animates `CFrame` with the Roblox codec.
+It binds `Brightness` and `Color` directly to state.
+The runtime's direct motion methods animate numbers.
+For other datatypes, select a codec with [runtime.motion](api.md#runtimemotion).
 For rotation limits, see [animatable types](roblox.md#what-is-animatable).
 
 Welds use normal constructors.
