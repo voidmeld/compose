@@ -185,7 +185,7 @@ The engine remains the authority.
 | --- | --- |
 | Property validation | The default environment accepts incorrect property datatypes. A reflected environment rejects wrong types and writes to read-only properties. |
 | Classes | The default supports built-in instance, folder, model, part, GUI, Humanoid and animation classes. Use `defineClass` to add classes. Reflection supports only its database classes. |
-| Methods | `WaitForChild` is absent. The environment models `Destroy`, `Clone`, `Archivable`, `FindFirst` methods and `IsA`. |
+| Methods | The environment models `Destroy`, `Clone`, `WaitForChild`, `FindFirst` methods and `IsA`. Waiting uses the virtual scheduler. |
 | Destruction | It locks the destroyed node's parent, destroys descendants and disconnects signals. |
 | Signals | Property, attribute, child, destruction, descendant and ancestry signals run immediately. Native signals can run later. |
 | Layout | There is no native layout engine to prove `LayoutOrder` behavior. |

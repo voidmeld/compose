@@ -1,12 +1,14 @@
-# Representative proof
+# Benchmarks
 
 Run correctness before timing.
 The benchmarks use the Verify testing library. Each workload and each scenario has one parity case and one benchmark collection.
 The runtime suite covers construction, reactive updates, identity, events, animation, unwind and teardown.
 The scene suite combines UI, 2D and 3D content, virtualized collections and keyed-entity churn.
-Both lanes run in the benchmark cost-model environment with deterministic input.
+Both implementations run in the benchmark cost-model environment with deterministic input.
 That environment is `bench/cost-model`. It is for benchmarks only. The tests use the simulated engine instead.
-It models only the members that the benchmarks use. It counts property writes and reads, parent changes, connections, events and deferred tasks, and it supplies the global table that the plain-Luau lane runs against.
+It models only the members that the benchmarks use.
+It counts property writes and reads, parent changes, connections, events and deferred tasks.
+It also supplies the global table for the plain-Luau implementation.
 The simulated engine has neither those counters nor that global table, so the benchmarks do not run on it. See [the simulated engine](roblox.md#the-simulated-engine).
 
 ## Commands
@@ -37,7 +39,9 @@ Use `--filter` and `--scale` for focused diagnostics. Do not claim that a filter
 
 ## Published results
 
-Each push to `main` publishes the candidate measurements of its paired performance shards to the `perf-results` branch, also when a shard fails its verdict. A manual run of the workflow on `main` publishes too.
+Each push to `main` publishes the candidate measurements from its paired performance shards to the `perf-results` branch.
+Publication also runs when a shard fails its verdict.
+A manual run of the workflow on `main` publishes too.
 `bench/publish.luau` keeps one file per commit under `results/`. It writes `README.md` with each benchmark's latest median and p95. The page also shows changes from the previous commit and trend charts for Compose timings.
 The runner is the CI Ubuntu runner, so compare values from the same branch history only.
 
@@ -46,8 +50,25 @@ The runner is the CI Ubuntu runner, so compare values from the same branch histo
 The comparison with other Roblox scene composition libraries is in the [Luau library benchmarks](https://github.com/voidmeld/luau-library-benchmarks) repository.
 
 ## Required CI comparison
-The required `Gate` check waits for `Repository suite` and the six `Paired performance` shards. These jobs run concurrently on separate Ubuntu runners. The suite shares a process budget between commands and isolated test workers. Each completed check frees a worker slot. The limit is eight workers, with one per 2 GiB after a 2 GiB reserve. Each shard runs its timing serially on its own runner.
-Each paired shard measures three complete rounds of its `--shard index/6` share of `--suite all` on one runner. Order alternates base/candidate, candidate/base, base/candidate. The timing and CPU-reference sample budgets span those rounds. A persistent regression continues through six rounds with the same alternating order. Calibration or execution failure stops comparison. A pull request uses its exact base commit. A main push uses the previous commit. A manual run uses its parent. Both revisions use the candidate's pinned tools, Verify dependency, benchmarks, fixtures and maintainer tools. The evidence includes the measurement archive and its hash. Each revision uses its own production `src` and `authoring`.
+
+The required `Gate` check waits for `Repository suite` and the six `Paired performance` shards.
+These jobs run concurrently on separate Ubuntu runners.
+The suite shares a process budget between commands and isolated test workers.
+Each completed check frees a worker slot.
+The limit is eight workers, with one per 2 GiB after a 2 GiB reserve.
+Each shard runs its timing serially on its own runner.
+
+Each paired shard measures three complete rounds on one runner.
+It runs its `--shard index/6` share of `--suite all`.
+Order alternates base/candidate, candidate/base, base/candidate.
+The timing and CPU-reference sample budgets span those rounds.
+A persistent regression continues through six rounds with the same alternating order.
+Calibration or execution failure stops comparison.
+A pull request uses its exact base commit.
+A main push uses the previous commit. A manual run uses its parent.
+Both revisions use the candidate's pinned tools, Verify dependency, benchmarks, fixtures and maintainer tools.
+The evidence includes the measurement archive and its hash.
+Each revision uses its own production `src` and `authoring`.
 
 Every pull request runs both jobs, including documentation-only changes.
 Verify compares timed medians with matching names, units and environments. A persistent regression must exceed both 50 percent and 5 microseconds in every paired round and the pooled samples. Raw reports retain `/counts` passes, but their durations do not enter timing comparison. Missing or renamed measurements fail the check. Every individual run must pass completely. Failed, skipped or unsupported producers cannot qualify the candidate. If benchmark changes prevent comparison, review those changes and provide a compatible comparison. Do not omit the CI step.
