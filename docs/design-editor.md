@@ -115,6 +115,81 @@ A kind's `value` field can forward attribute maps to `Attributes`.
 Keep measurements, docking, paging and input policy in the application.
 Pass their results through contract inputs and outputs.
 
+### Source bindings and calculations
+
+The Design source stores layout, style and tokens. Calculate values in the caller.
+Pass the results through contract inputs. A runtime can render more Luau expressions
+than the source reader can store.
+
+Metric helper calls can contain application rules. For example, a size helper can
+combine viewport scale and text scale. Call that helper in the caller. Declare a
+readable number input and bind the property to it. Use a library token when the
+library provides the required size.
+
+Environment layout functions also belong in the caller. This includes a named
+`Position` or `Size` helper that reads safe insets and calculates a `UDim2`.
+Declare the result as a typed readable input. Keep the helper and its environment
+reads outside the Design source.
+
+For example, this Design uses prepared size and position values:
+
+```luau
+local _design = {
+    name = "Action",
+    contract = {
+        inputs = {
+            { id = "textSize", kind = "readable", type = "number", required = true },
+            { id = "position", kind = "readable", type = "record", luauType = "UDim2", required = true },
+        },
+        outputs = {},
+    },
+}
+
+return function(UI: Controls, props: Props)
+    return UI.Button "Action" {
+        Position = props.position,
+        textSize = props.textSize,
+    }
+end
+```
+
+The caller supplies `textSize = Metrics.size(UI, 17, "control")`.
+It supplies `position` as a readable `UDim2`. That readable can calculate offsets
+from `use(environment.safeInsets)`. To bind `Size`, declare a `size` input with the
+same type and use `Size = props.size`.
+
+Direct item field reads are source bindings. A button glyph can read the same row
+as its button. The row function can name its parameter. The writer uses `current`
+when it writes the source. Type annotations do not change the binding.
+For a readable or cell input, `function(use) return use(props.image) end` also
+stores an input binding. The writer uses `props.image` for this form. This applies
+to the button properties and to properties inside its glyph subtree.
+For example, `row = { title = props.label }` keeps the declared input in the row
+record, and a glyph image can use `source = props.image`.
+
+```luau
+render = function(current: Core.ReadOnlyValue<RowsItem>)
+    return UI.Button "Action" {
+        label = function(use)
+            return use(current).label
+        end,
+        glyph = function()
+            return UI.Image "Glyph" {
+                image = function(use)
+                    return use(current).image
+                end,
+            }
+        end,
+    }
+end
+```
+
+Declare `label` and `image` in the list input's item fields. Prepare each value in
+the caller. For an item field that requires a lookup or a calculation, add the
+result to the item record. Bind that field with
+`function(use) return use(current).field end`. Do not read an external collection
+to calculate a row property inside the Design.
+
 ### Stages and source links
 
 The 2D stage supports zoom around the cursor, pan, fit, selection outlines, resize controls and a size label.

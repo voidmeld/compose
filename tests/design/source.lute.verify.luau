@@ -129,6 +129,231 @@ local function canonical(code: string)
 end
 
 describe("Design emitted source", function()
+	it("names the caller input form for computed metric calls", function()
+		local metrics = table.clone(library)
+		metrics.kinds = table.clone(library.kinds)
+		metrics.kinds.Button = table.clone(library.kinds.Button)
+		metrics.kinds.Button.fields = { textSize = { type = "number", tokens = true } }
+		metrics.token = "UI.token"
+		local value = Design.document.new("Metrics", metrics, "Button")
+		value = Design.document.change(value, metrics, "n1", "textSize", { literal = 17 })
+		local code = Design.emit(value, metrics)
+		for _, call in { 'Metrics.size(UI, 17, "control")', "Metrics.size(UI, 48)" } do
+			local custom = string.gsub(code, "textSize = 17", function(): string
+				return "textSize = " .. call
+			end)
+			expect(function()
+				Design.parse(custom, metrics)
+			end):toThrow "Metrics.size is custom code; compute it in the caller and bind props.<input> or a library token"
+		end
+		value = Design.document.change(value, metrics, "n1", "textSize", { token = "controlSize" })
+		local tokenCode = Design.emit(value, metrics)
+		expect(Design.emit(Design.parse(tokenCode, metrics), metrics)):toBe(tokenCode)
+	end)
+
+	it("names typed readable inputs for environment layout functions", function()
+		local value = Design.document.setContract(Design.document.new("Layout", library, "Box"), library, {
+			inputs = { { id = "size", kind = "readable", type = "record", luauType = "Dimension", required = true } },
+			outputs = {},
+		})
+		value = Design.document.change(value, library, "n1", "Size", { input = "size" })
+		local code = Design.emit(value, library)
+		for _, binding in
+			{
+				"function(use: Core.Use): Dimension return use(environment.safeInsets) end",
+				"function(use) return UDim2.fromOffset(use(environment.safeInsets).left, 0) end",
+				"function(use: Core.Use): Dimension local insets = use(environment.safeInsets) return UDim2.fromOffset(insets.left, insets.top) end",
+				"function(use: Core.Use): Dimension refreshLayout() return use(environment.safeInsets) end",
+			}
+		do
+			local custom = string.gsub(code, "Size = props.size", function(): string
+				return "Size = " .. binding
+			end)
+			expect(function()
+				Design.parse(custom, library)
+			end):toThrow "Layout functions use a typed readable input: compute the value in the caller and bind props.<input>"
+		end
+		for _, helper in { "Position", "Size", "frame" } do
+			for _, declaration in
+				{
+					`local function {helper}(use) return use(environment.safeInsets) end`,
+					`local function {helper}(use: Core.Use): Dimension return use(environment.safeInsets) end`,
+					`local {helper}: (Core.Use) -> Dimension = function(use) return use(environment.safeInsets) end`,
+				}
+			do
+				local custom = string.gsub(code, "\n\treturn UI.Box", function(): string
+					return `\n\t{declaration}\n\treturn UI.Box`
+				end)
+				expect(function()
+					Design.parse(custom, library)
+				end):toThrow "Layout functions use a typed readable input: compute the value in the caller and bind props.<input>"
+			end
+		end
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		analyze(code)
+	end)
+
+	it("reads declared row parameters in button glyphs and item fields", function()
+		local content = table.clone(library)
+		content.kinds = table.clone(library.kinds)
+		content.kinds.Button = table.clone(library.kinds.Button)
+		content.kinds.Button.fields = {
+			label = { type = "string" },
+			item = { type = "string" },
+			glyph = { type = "content" },
+		}
+		local value = Design.document.setContract(Design.document.new("Buttons", content, "Choices"), content, {
+			inputs = {
+				{
+					id = "rows",
+					kind = "readable",
+					type = "list",
+					required = true,
+					fields = { { id = "id", type = "string" }, { id = "text", type = "string" } },
+				},
+			},
+			outputs = {},
+		})
+		value = Design.document.bind(value, content, "n1", { from = "rows", key = "id" })
+		value = Design.document.insert(value, content, "n1", "Button")
+		value = Design.document.change(value, content, "n2", "label", { item = "text" })
+		value = Design.document.change(value, content, "n2", "item", { item = "id" })
+		local glyph
+		value, glyph = Design.document.content(value, content, "n2", "glyph", "Notice")
+		value = Design.document.change(value, content, glyph, "text", { item = "text" })
+		for _, named in { false, true } do
+			local options: Design.EmitOptions = { rowFunctions = named }
+			local code = Design.emit(value, content, options)
+			local custom = string.gsub(code, "current", "entry")
+			custom = string.gsub(custom, "function%(use%)", "function(use: Core.Use): string")
+			local parsed = Design.parse(custom, content)
+			expect(parsed):toEqual(value)
+			expect(Design.emit(parsed, content, options)):toBe(code)
+			local edited = Design.document.change(parsed, content, glyph, "text", { literal = "Edited" })
+			expect(Design.parse(Design.emit(edited, content, options), content)):toEqual(edited)
+			expect(edited.root.children[1].props.item):toEqual { item = "id" }
+			local shadowed = string.gsub(custom, "entry", "props")
+			expect(function()
+				Design.parse(shadowed, content)
+			end):toThrow "Row parameters must not shadow Design inputs"
+		end
+	end)
+
+	it("names the current item form for external row lookups", function()
+		local code = [[
+local _design = { name = "Rows", contract = { inputs = {}, outputs = {} } }
+return function(UI, props)
+    return UI.Button "Row" {
+        label = function(use) return use(external).label end,
+    }
+end
+]]
+		expect(function()
+			Design.parse(code, library)
+		end):toThrow "Item bindings read the declared row parameter; use function(use) return use(current).field end and prepare computed fields in the caller"
+	end)
+
+	it("round trips readable button row inputs and glyph content", function()
+		local content = table.clone(library)
+		content.kinds = table.clone(library.kinds)
+		content.kinds.Button = table.clone(library.kinds.Button)
+		content.kinds.Button.fields = {
+			label = { type = "string" },
+			row = { type = "value" },
+			glyph = { type = "content" },
+		}
+		local imageKind: Design.Kind = {
+			fields = {
+				Visible = { type = "boolean" },
+				failureLabel = { type = "string" },
+				source = { type = "string" },
+			},
+			children = "none",
+			call = "UI.AsyncImage",
+			build = build,
+		}
+		content.kinds.AsyncImage = imageKind
+		local value = Design.document.setContract(Design.document.new("Reward", content, "Button"), content, {
+			inputs = {
+				{ id = "label", kind = "readable", type = "string", required = true },
+				{ id = "image", kind = "readable", type = "image", required = true },
+				{ id = "hasImage", kind = "cell", type = "boolean", required = true },
+			},
+			outputs = {},
+		})
+		value = Design.document.change(value, content, "n1", "label", { input = "label" })
+		value = Design.document.change(value, content, "n1", "row", {
+			literal = { title = { ["$input"] = "label" } },
+		})
+		local glyph
+		value, glyph = Design.document.content(value, content, "n1", "glyph", "AsyncImage")
+		value = Design.document.rename(value, content, glyph, "ItemIconImage")
+		value = Design.document.change(value, content, glyph, "Visible", { input = "hasImage" })
+		value = Design.document.change(value, content, glyph, "failureLabel", { literal = "" })
+		value = Design.document.change(value, content, glyph, "source", { input = "image" })
+		local code = Design.emit(value, content)
+		expect(Design.emit(Design.parse(code, content), content)):toBe(code)
+		local custom = string.gsub(code, "label = props.label", "label = function(use) return use(props.label) end")
+		custom = string.gsub(custom, "source = props.image", "source = function(use) return use(props.image) end")
+		custom =
+			string.gsub(custom, "Visible = props.hasImage", "Visible = function(use) return use(props.hasImage) end")
+		local parsed = Design.parse(custom, content)
+		expect(parsed):toEqual(value)
+		expect(Design.emit(parsed, content)):toBe(code)
+		local edited = Design.document.change(parsed, content, glyph, "failureLabel", { literal = "Missing" })
+		expect(Design.parse(Design.emit(edited, content), content)):toEqual(edited)
+		local static = Design.document.copy(value)
+		static.contract.inputs[1].kind = "value"
+		local staticCode = Design.emit(static, content)
+		staticCode = string.gsub(staticCode, "label = props.label", "label = function(use) return use(props.label) end")
+		expect(function()
+			Design.parse(staticCode, content)
+		end):toThrow "Input formulas read a declared readable or cell input"
+	end)
+
+	it("restores the enclosing row after nested row content", function()
+		local code = [[
+local _design = {
+    name = "Nested",
+    contract = {
+        inputs = {
+            { id = "pages", kind = "readable", type = "list", required = true, fields = {
+                { id = "id", type = "string" },
+                { id = "rows", type = "list", fields = { { id = "id", type = "string" } } },
+            } },
+        },
+        outputs = {},
+    },
+}
+return function(UI, props)
+    return UI.Pages "Pages" {
+        from = props.pages,
+        key = "id",
+        render = function(page)
+            return UI.Box "Page" {
+                UI.Rows "Rows" {
+                    from = function(use) return use(page).rows end,
+                    key = "id",
+                    render = function(entry)
+                        return UI.Button "Item" { label = function(use) return use(entry).id end }
+                    end,
+                },
+                UI.Button "PageId" { label = function(use) return use(page).id end },
+            }
+        end,
+    }
+end
+]]
+		local parsed = Design.parse(code, library)
+		local canonicalCode = Design.emit(parsed, library)
+		expect(Design.parse(canonicalCode, library)):toEqual(parsed)
+		expect(parsed.root.children[1].children[2].props.label):toEqual { item = "id" }
+		local external = string.gsub(code, "use%(entry%)", "use(page)")
+		expect(function()
+			Design.parse(external, library)
+		end):toThrow "Item bindings read the declared row parameter"
+	end)
+
 	it("preserves static type import paths and deduplicates library declarations", function()
 		local value = Design.document.new("Imports", library, "Button")
 		for _, declaration in
