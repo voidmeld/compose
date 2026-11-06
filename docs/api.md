@@ -585,13 +585,13 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | --- | --- |
 | `host` | The host that the runtime renders to. |
 | `connect(node, event, handler)` | Subscribes to an event on an existing node. Returns the unsubscribe. |
-| `constructors` | A string-keyed table of lazily cached constructors that are bound to this runtime. Use `Host.Frame { ... }`. |
+| `constructors` | A string-keyed table of lazily cached constructors that are bound to this runtime. Every host kind uses the same constructor path. The Roblox host accepts every class that its engine can create. Use `Host.Frame { ... }` or `Host[className] { ... }`. |
 | `create(kind)` | Selects a constructor for a dynamic host kind. Call it with props to build a node. |
 | `decorate(node, props)` | Applies props to a node that Compose did not create. |
 | `mount(component, target)` | Mounts a one-node component. Returns `(dispose, node)`. |
 | `mountFragment(fragment, target)` | Mounts top-level sibling nodes and structural directives. Returns `(dispose, staticRoots)`. |
 | `adopt(node)` | Takes responsibility for destroying an existing node. |
-| `borrow(node)` | States that Compose must never destroy this node. |
+| `borrow(node)` | Returns the node and transfers destruction responsibility to its external owner. A constructor-created node survives its creating owner when borrowed before disposal. Bindings and other owned resources keep their original owners. See [external Instance construction](roblox.md#create-an-externally-owned-instance). |
 | `motion(codec)` | Selects typed `spring`, `tween` and `ramp` methods for the codec's value type. |
 | `spring(source, options?)` | Follows a numeric `source` with spring physics. |
 | `tween(source, options?)` | Follows a numeric `source` along an easing curve. `seconds` is a number or a source of seconds that Compose samples at each retarget. |

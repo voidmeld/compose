@@ -22,6 +22,7 @@ Use this page to find a task. Each linked page gives the details for that task.
 | Implement a host | [Host protocol](docs/host-protocol.md) |
 | Use the Roblox host | [Roblox](docs/roblox.md) |
 | Build or test a scene | [Scenes](docs/scenes.md) |
+| Check consumer ownership and names | [Consumer source checks](docs/checking.md) |
 | Use the visual editor | [Design editor](docs/design-editor.md) |
 | Plan repeated 3D parts with Pattern | [Geometric patterns](src/design/patterns.md) |
 | Generate content, layouts and project trees | [Build-time authoring](authoring/README.md) |

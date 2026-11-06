@@ -22,6 +22,47 @@ Core must not name engine objects, services or datatypes.
 Use the [ownership guide](ownership.md) to decide whether to create, adopt or borrow an Instance.
 The Roblox adapter follows the same lifetime rules as other hosts.
 
+### Construct any creatable class
+
+`runtime.constructors` has no class list. It creates and caches a constructor for each
+string key. The Roblox host passes that class name to the engine's `Instance.new`.
+Use `Host.InputBinding {}` or `Host[className] {}` inside an owner.
+`runtime.create(className)` returns the same constructor.
+The engine rejects classes that it cannot create. No node is created when you only
+select a constructor. Properties, labels, children and failed-build cleanup use the
+same runtime path for every class.
+
+Constructors return the host-neutral `Compose.Node` type. They do not infer a native
+Roblox subclass from a class-name literal. Keep checked native access at the adapter
+boundary when a consumer needs a specific Instance type.
+
+### Create an externally owned Instance
+
+Use the existing constructor and `runtime.borrow` calls. Create the bare node in a
+temporary owner and transfer custody before that owner ends:
+
+```luau
+local carrier = Compose.withRootOwner(function()
+    return runtime.borrow(Host.Folder {})
+end, runtime.reactor)
+```
+
+The returned node survives the temporary owner and `runtime:dispose()`.
+It has no parent. The caller can parent it and write attributes when needed.
+The caller or its external parent must destroy it. A failed constructor destroys its
+partial result before `borrow` can transfer custody.
+
+Borrowing transfers only responsibility for node destruction. It does not transfer
+bindings, event subscriptions, children or scheduled work to a new owner.
+For a bare external node, use empty props as shown above.
+To use Compose bindings later, activate their intended owner and call `runtime.decorate`.
+To return the node to Compose, let the creation scope end, then call `runtime.adopt`
+under the new owner.
+
+If Compose must own the node for a longer lifetime, create it under that longer-lived
+owner with `Compose.withOwner`. Release that owner when the lifetime ends.
+Both forms use the existing runtime, host and reactor.
+
 ## Events are discovered, not declared
 
 ```luau

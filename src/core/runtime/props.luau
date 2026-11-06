@@ -112,14 +112,7 @@ export type Props = { [unknown]: unknown }
 
 local classify = Host.classifyKey
 
-local function subscribe(
-	host: Host.Host,
-	node: Node,
-	owner: Owner.Owner,
-	name: string,
-	handler: Host.PropFunction,
-	fresh: boolean?
-)
+local function subscribe(host: Host.Host, node: Node, owner: Owner.Owner, name: string, handler: Host.PropFunction)
 	local events = host.events
 	if events == nil then
 		return Diagnostics.raise("host/no-events", ("host %q cannot subscribe to events"):format(host.name), {
@@ -129,12 +122,7 @@ local function subscribe(
 			fix = "implement host.events.connectEvent, or stop passing event keys to this host",
 		})
 	end
-	local attach = events.attachEvent
 	local callback = Dynamic.handler(handler)
-	if fresh and attach ~= nil then
-		attach(node, name, callback)
-		return
-	end
 	Owner.adopt(owner, events.connectEvent(node, name, callback))
 end
 
@@ -375,7 +363,7 @@ local function apply(host: Host.Host, node: Node, source: unknown, owner: Owner.
 							}
 						)
 					end
-					subscribe(host, node, owner, markerName, value, fresh)
+					subscribe(host, node, owner, markerName, value)
 				elseif type(value) == "function" or cellModule.isValue(value) then
 					local loaded = bindingsModule or require "./bindings"
 					bindingsModule = loaded
@@ -439,7 +427,7 @@ local function apply(host: Host.Host, node: Node, source: unknown, owner: Owner.
 			refuseNodeValue(host, node, name, value)
 		elseif type(value) == "function" then
 			if classify(host, node, name) == "event" then
-				subscribe(host, node, owner, name, value, fresh)
+				subscribe(host, node, owner, name, value)
 			elseif fresh then
 				bindFunction(host, node, owner, name, value, write)
 			else
