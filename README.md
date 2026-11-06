@@ -52,6 +52,11 @@ This repository keeps the paired performance check. It compares each change with
 Core has no engine dependency. The host creates and changes nodes.
 The application supplies its rules, networking, storage and assets.
 
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks and the pull request
+process.
+
 ## License
 
 Copyright (c) 2026 voidmeld. [MIT License](LICENSE).
