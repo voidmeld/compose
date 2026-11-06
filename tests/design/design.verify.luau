@@ -141,6 +141,24 @@ local function refused(callback: () -> ()): boolean
 end
 
 describe("Compose Design documents", function()
+	it("binds an event field to a writable cell input and still refuses other inputs", function()
+		local value = Design.document.new("Back", library, "Button")
+		value = Design.document.setContract(value, library, {
+			inputs = {
+				{ id = "back", kind = "cell", type = "boolean", required = true },
+				{ id = "shown", kind = "readable", type = "boolean", preview = true },
+			},
+			outputs = {},
+		})
+		value = Design.document.change(value, library, "n1", "onActivate", { input = "back" })
+		local code = Design.emit(value, library)
+		expect(code):toContain "onActivate = props.back"
+		expect(Design.emit(Design.parse(code, library), library)):toBe(code)
+		expect(refused(function()
+			Design.document.change(value, library, "n1", "onActivate", { input = "shown" })
+		end)):toBe(true)
+	end)
+
 	it("preserves ordered row and event arguments, false values and the current row key", function()
 		local value = Design.document.setContract(Design.document.new("Editable", library, "List"), library, {
 			inputs = { { id = "rows", kind = "readable", type = "list", fields = rowFields } },
