@@ -331,6 +331,14 @@ local function use<T>(value: Types.ReadOnlyValue<T>): T
 	local edge = consumer[following]
 	if edge ~= nil and rawequal(edge[1], value) then
 		consumer.reads = following
+		if node.state == CLEAN then
+			edge.version = node.version
+			local cached = value.cache
+			if cached ~= nil then
+				return cached.value
+			end
+			return Nodes.readCached(value)
+		end
 	else
 		local previous = consumer[at]
 		if previous ~= nil and rawequal(previous[1], value) then

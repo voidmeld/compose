@@ -146,13 +146,37 @@ function CELL.set<T>(self: Value<T>, incoming: T)
 		return
 	end
 	node.value = incoming
-	if node.first == nil and not statsOn.enabled then
+	local first = node.first
+	if first == nil and not statsOn.enabled then
 		local version = clockState.now + 1
 		clockState.now = version
 		node.version = version
 		return
 	end
-	local first = node.first
+	if
+		first ~= nil
+		and not statsOn.enabled
+		and rawget(first, 2) == nil
+		and (rawget(first, 4) == nil or first.listenerGroup)
+	then
+		local version = clockState.now + 1
+		clockState.now = version
+		node.version = version
+		local reactor = first.reactor
+		if reactor ~= nil and reactor.batching then
+			if not first.queued then
+				first.queued = true
+				local count = reactor.count + 1
+				reactor.count = count
+				reactor.queue[count] = first
+			elseif not validationState.validating then
+				Graph.coalesce(node, first, if type(incoming) == "number" then coalescedNumber else coalesced)
+			end
+		else
+			Reactor.runNow(first)
+		end
+		return
+	end
 	local consumer: Node? = if first ~= nil then first[2] else nil
 	local state = if consumer ~= nil then consumer.state else nil
 	if
@@ -179,24 +203,7 @@ function CELL.set<T>(self: Value<T>, incoming: T)
 	elseif first == nil then
 		return
 	else
-		if consumer == nil then
-			if rawget(first, 4) == nil or first.listenerGroup then
-				local reactor = first.reactor
-				if reactor ~= nil and reactor.batching then
-					if not first.queued then
-						first.queued = true
-						local count = reactor.count + 1
-						reactor.count = count
-						reactor.queue[count] = first
-					elseif not validationState.validating then
-						Graph.coalesce(node, first, if type(incoming) == "number" then coalescedNumber else coalesced)
-					end
-				else
-					Reactor.runNow(first)
-				end
-				return
-			end
-		elseif rawget(first, 4) == nil then
+		if consumer ~= nil and rawget(first, 4) == nil then
 			if state == DIRTY and not consumer.retry then
 				return
 			elseif state == CHECK and not consumer.retry then
@@ -289,10 +296,10 @@ Nodes.adopt(CELL)
 Nodes.adopt(EQUAL)
 Nodes.adopt(LAZY)
 
-type CellData<T> = { value: T, cache: { read value: T }?, equals: Equals<T>? }
+type CellData<T> = { value: T, cache: { read value: T }?, equals: Equals<T>?, state: number, version: number }
 
 local function cell<T>(initial: T, equals: Equals<T>?): Value<T>
-	local node: CellData<T> = { value = initial, cache = nil }
+	local node: CellData<T> = { value = initial, cache = nil, state = Graph.CLEAN, version = 0 }
 	node.cache = node
 	if equals ~= nil then
 		node.equals = equals
