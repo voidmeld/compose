@@ -21,6 +21,11 @@ export type Options<V, K = V> = StructureTypes.KeyedOptions<V, K>
 local UNREAD_INDEX = cellModule.cell(0)
 local KNOWN_FIELDS: { [string]: true } = { from = true, key = true, render = true }
 
+local function array<T>(count: number): { T }
+	local create: (number, T?) -> { T } = table.create
+	return create(count)
+end
+
 local function keyedWithKeys<V, K>(
 	from: Source<V>,
 	render: Render<V, K>,
@@ -93,6 +98,35 @@ local function keyedWithKeys<V, K>(
 			for index = from, to do
 				positions[order[index]] = index
 			end
+		end
+
+		local function compact()
+			local keptOwners = array<<Owners.Owner>>(count)
+			local keptNodes = array<<Host.Node>>(count)
+			local keptValues = array<<Types.Value<V>>>(count)
+			local keptIndices = array<<Types.Value<number>>>(count)
+			local keptKeys = array<<K>>(count)
+			local keptItems = array<<V>>(count)
+			local keptPositions = array<<number>>(count)
+			local keptMarks = array<<number>>(count)
+			for index = 1, count do
+				local at = base + index
+				local entry = order[at]
+				keptOwners[index] = owners[entry]
+				keptNodes[index] = nodes[entry]
+				keptValues[index] = values[entry]
+				keptIndices[index] = indices[entry]
+				keptKeys[index] = rowKeys[entry]
+				keptItems[index] = items[entry]
+				keptPositions[index] = at
+				keptMarks[index] = marks[entry]
+				entries[rowKeys[entry]] = index
+				order[at] = index
+			end
+			owners, nodes, values, indices = keptOwners, keptNodes, keptValues, keptIndices
+			rowKeys, items, positions, marks = keptKeys, keptItems, keptPositions, keptMarks
+			free, retired, nextEntry = {}, {}, count
+			table.clear(matched)
 		end
 
 		local function setIndex(entry: number, index: number)
@@ -545,6 +579,8 @@ local function keyedWithKeys<V, K>(
 					owners, nodes, values, indices = {}, {}, {}, {}
 					rowKeys, items, positions, marks = {}, {}, {}, {}
 					free, retired, nextEntry = {}, {}, 0
+				elseif nextEntry > count * 2 then
+					compact()
 				else
 					table.move(retired, 1, #retired, #free + 1, free)
 					table.clear(retired)
