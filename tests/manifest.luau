@@ -53,6 +53,7 @@ return table.freeze {
 	"tests/roblox/adapter.verify.luau",
 	"tests/roblox/constructors.verify.luau",
 	"tests/roblox/emulator.verify.luau",
+	"tests/roblox/event-ownership.verify.luau",
 	"tests/roblox/preferred-input.verify.luau",
 	"tests/roblox/viewport.verify.luau",
 	"tests/runtime/architecture.verify.luau",
