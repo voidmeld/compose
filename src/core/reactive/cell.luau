@@ -110,26 +110,11 @@ function CELL.peek<T>(self: Types.Cache<T>): T
 	return cached.value
 end
 
-local function plainSet(self: Node, incoming: unknown)
-	CELL.set(self, incoming)
-end
-
 local function coalesced(self: Node, incoming: unknown)
 	if self.coalescing == nil then
-		plainSet(self, incoming)
-	elseif self.value ~= incoming then
+		CELL.set(self, incoming)
+	elseif type(incoming) == "number" or self.value ~= incoming then
 		self.value = incoming
-	end
-end
-
-local function coalescedNumber(self: Node, incoming: unknown)
-	if self.set ~= coalescedNumber then
-		plainSet(self, incoming)
-		return
-	end
-	self.value = incoming
-	if type(incoming) ~= "number" then
-		Dynamic.write(self, "set", coalesced)
 	end
 end
 
@@ -170,7 +155,7 @@ function CELL.set<T>(self: Value<T>, incoming: T)
 				reactor.count = count
 				reactor.queue[count] = first
 			elseif not validationState.validating then
-				Graph.coalesce(node, first, if type(incoming) == "number" then coalescedNumber else coalesced)
+				Graph.coalesce(node, first, coalesced)
 			end
 		else
 			Reactor.runNow(first)
@@ -189,7 +174,7 @@ function CELL.set<T>(self: Value<T>, incoming: T)
 		and not consumer.retry
 	then
 		if consumer[2] == nil and consumer.queued then
-			Graph.coalesce(node, consumer, if type(incoming) == "number" then coalescedNumber else coalesced)
+			Graph.coalesce(node, consumer, coalesced)
 		end
 		return
 	end
