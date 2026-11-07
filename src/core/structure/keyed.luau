@@ -49,7 +49,7 @@ local function keyedWithKeys<V, K>(
 		local positions: { number } = {}
 		local marks: { number } = {}
 		local free: { number } = {}
-		local retired: { number } = {}
+		local retired: { [number]: true } = {}
 		local nextEntry = 0
 		local order: { number } = {}
 		local matched: { [number]: number? } = {}
@@ -101,6 +101,19 @@ local function keyedWithKeys<V, K>(
 		end
 
 		local function compact()
+			for _, entry in entries do
+				local at = positions[entry]
+				if at <= base or at > base + count or order[at] ~= entry then
+					return
+				end
+			end
+			for index = 1, count do
+				local at = base + index
+				local entry = order[at]
+				if entry == nil or positions[entry] ~= at or entries[rowKeys[entry]] ~= entry then
+					return
+				end
+			end
 			local keptOwners = array<<Owners.Owner>>(count)
 			local keptNodes = array<<Host.Node>>(count)
 			local keptValues = array<<Types.Value<V>>>(count)
@@ -181,14 +194,7 @@ local function keyedWithKeys<V, K>(
 			Owners.dispose(owners[entry])
 			entries[rowKeys[entry]] = nil
 			positions[entry] = 0
-			owners[entry] = nil
-			nodes[entry] = nil
-			values[entry] = nil
-			indices[entry] = nil
-			rowKeys[entry] = nil
-			items[entry] = nil
-			marks[entry] = nil
-			table.insert(retired, entry)
+			retired[entry] = true
 		end
 
 		local function trimHead(list: { V }, wanted: number, found: number): boolean
@@ -574,16 +580,40 @@ local function keyedWithKeys<V, K>(
 			local ok, failure: unknown = pcall(reconcile, use)
 			keys, matched = outerKeys, outerMatched
 			depth -= 1
-			if depth == 0 then
-				if count == 0 then
+			if depth == 0 and ok then
+				if count == 0 and next(entries) == nil and next(order) == nil then
 					owners, nodes, values, indices = {}, {}, {}, {}
 					rowKeys, items, positions, marks = {}, {}, {}, {}
 					free, retired, nextEntry = {}, {}, 0
-				elseif nextEntry > count * 2 then
-					compact()
 				else
-					table.move(retired, 1, #retired, #free + 1, free)
-					table.clear(retired)
+					if next(retired) ~= nil then
+						table.clear(matched)
+						for entry in retired do
+							matched[entry] = entry
+						end
+						for _, entry in order do
+							matched[entry] = nil
+						end
+						for _, entry in entries do
+							matched[entry] = nil
+						end
+						for entry in matched do
+							owners[entry] = nil
+							nodes[entry] = nil
+							values[entry] = nil
+							indices[entry] = nil
+							rowKeys[entry] = nil
+							items[entry] = nil
+							positions[entry] = nil
+							marks[entry] = nil
+							table.insert(free, entry)
+							retired[entry] = nil
+						end
+						table.clear(matched)
+					end
+					if nextEntry > count * 2 and next(retired) == nil then
+						compact()
+					end
 				end
 			end
 			if not ok then
