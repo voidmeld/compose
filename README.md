@@ -11,8 +11,8 @@ in a plain Lute process with a test host, so components can be tested without th
 
 Compose is not a control library and not a framework. It has no buttons, themes or
 navigation, no networking, storage or server logic, and it does not own your game loop.
-[Facet](https://github.com/josha/Facet) builds its Roblox controls on Compose; your game
-supplies the rules and the data.
+A control library or a game builds those on top; your game supplies the rules and the
+data.
 
 First, build one component with the [quickstart](docs/quickstart.md).
 
