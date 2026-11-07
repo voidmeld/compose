@@ -138,10 +138,11 @@ function CELL.set<T>(self: Value<T>, incoming: T)
 		node.version = version
 		return
 	end
+	local consumer: Node? = if first ~= nil then first[2] else nil
 	if
 		first ~= nil
 		and not statsOn.enabled
-		and rawget(first, 2) == nil
+		and consumer == nil
 		and (rawget(first, 4) == nil or first.listenerGroup)
 	then
 		local version = clockState.now + 1
@@ -162,7 +163,6 @@ function CELL.set<T>(self: Value<T>, incoming: T)
 		end
 		return
 	end
-	local consumer: Node? = if first ~= nil then first[2] else nil
 	local state = if consumer ~= nil then consumer.state else nil
 	if
 		state == DIRTY
@@ -281,10 +281,10 @@ Nodes.adopt(CELL)
 Nodes.adopt(EQUAL)
 Nodes.adopt(LAZY)
 
-type CellData<T> = { value: T, cache: { read value: T }?, equals: Equals<T>?, state: number, version: number }
+type CellData<T> = { value: T, cache: { read value: T }?, equals: Equals<T>? }
 
 local function cell<T>(initial: T, equals: Equals<T>?): Value<T>
-	local node: CellData<T> = { value = initial, cache = nil, state = Graph.CLEAN, version = 0 }
+	local node: CellData<T> = { value = initial, cache = nil }
 	node.cache = node
 	if equals ~= nil then
 		node.equals = equals

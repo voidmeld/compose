@@ -302,12 +302,10 @@ local function noEvaluation()
 end
 
 local function use<T>(value: Types.ReadOnlyValue<T>): T
-	local frame = evaluationCache.frame
-	local consumer = if frame ~= nil
-			and frame.order > 0
-			and evaluationCache.thread == coroutine.running()
-		then frame.consumer
-		else Evaluation.context()
+	local consumer = evaluationCache.consumer
+	if consumer == nil or evaluationCache.thread ~= coroutine.running() then
+		consumer = Evaluation.context()
+	end
 	if consumer == nil then
 		if type(value) ~= "table" or nodeOf(value).version == nil then
 			return notANode("use", value)
@@ -397,6 +395,7 @@ local function evaluate<A, T>(consumer: Node, body: (A) -> T, argument: A): T
 	evaluationCache.order = order
 	current.consumer = consumer
 	current.order = order
+	evaluationCache.consumer = consumer
 	consumer.reads = 0
 
 	local ok, result
@@ -413,6 +412,7 @@ local function evaluate<A, T>(consumer: Node, body: (A) -> T, argument: A): T
 	end
 	evaluationCache.thread = running
 	evaluationCache.frame = current
+	evaluationCache.consumer = if previousOrder > 0 then previousConsumer else nil
 	if not ok then
 		if consumer.run == nil then
 			consumer.state = DIRTY
@@ -456,6 +456,9 @@ local function runEffectIn(frame: Evaluation.Evaluation, consumer: Node)
 		resumeSet(producer)
 	end
 	frame.consumer = consumer
+	if evaluationCache.frame == frame then
+		evaluationCache.consumer = consumer
+	end
 	consumer.reads = 0
 	local effect = consumer.effect
 	if effect then

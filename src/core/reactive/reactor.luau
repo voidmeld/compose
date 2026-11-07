@@ -144,6 +144,9 @@ local function runInRest(reactor: Reactor): unknown
 			node.queued = false
 			local runIn = node.runIn
 			frame.consumer = previousConsumer
+			if evaluationCache.frame == frame then
+				evaluationCache.consumer = previousConsumer
+			end
 			if runIn ~= nil then
 				runIn(node, frame)
 			else

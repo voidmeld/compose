@@ -16,6 +16,50 @@ local function cellAsReadable<T>(value: Compose.ReadOnlyValue<T>): Compose.ReadO
 end
 
 describe("falsifiers", function()
+	it("inherits the active reader when an idle evaluation thread resumes again", function(own)
+		local _, owner = domain()
+		own(function()
+			Compose.owner.dispose(owner)
+		end)
+		local trigger, inherited, probe = Compose.cell(0), Compose.cell(10), Compose.cell(5)
+		local inner = Compose.formula(function(use)
+			return use(probe)
+		end)
+		own(function()
+			inner:dispose()
+		end)
+		local read: Compose.Use? = nil
+		local seen = 0
+		local worker = coroutine.create(function()
+			inner:peek()
+			coroutine.yield()
+			local use = assert(read)
+			seen = use(inherited)
+		end)
+		local started = false
+		Compose.owner.watch(owner, function(use)
+			use(trigger)
+			if started then
+				seen = use(inherited)
+				return
+			end
+			started = true
+			read = use
+			for _ = 1, 2 do
+				local ok, failure = coroutine.resume(worker)
+				if not ok then
+					error(failure, 0)
+				end
+			end
+		end)
+		expect(seen):toBe(10)
+		inherited:set(20)
+		expect(seen):toBe(20)
+		Compose.owner.dispose(owner)
+		inherited:set(30)
+		expect(seen):toBe(20)
+	end)
+
 	it("keeps mixed subscribers when the leading reactive subscriber detaches", function()
 		Support.world()
 		local _, owner = domain()
