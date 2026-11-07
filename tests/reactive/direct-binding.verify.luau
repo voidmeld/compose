@@ -7,6 +7,48 @@ local Test = require "../harness"
 local describe, it, expect = Test.describe, Test.it, Test.expect
 
 describe("direct property bindings", function()
+	it("continues a single queued listener through failures and appended work", function(own)
+		local reactor = Compose.reactor.create()
+		local owner = Compose.createOwner(reactor)
+		own(function()
+			Compose.owner.dispose(owner)
+		end)
+		local source, nextSource = Compose.cell(0), Compose.cell(0)
+		local seen: { string } = {}
+		Compose.owner.watchStatic(owner, nextSource, function(value)
+			if value > 0 then
+				table.insert(seen, "next " .. tostring(value))
+				if value == 1 then
+					error("appended listener failed", 0)
+				end
+			end
+		end)
+		Compose.owner.watchStatic(owner, source, function(value)
+			if value > 0 then
+				table.insert(seen, "source " .. tostring(value))
+				nextSource:set(value)
+				if value == 1 then
+					error("single listener failed", 0)
+				end
+			end
+		end)
+		local ok, failure = pcall(function()
+			Compose.reactor.batch(reactor, function()
+				source:set(1)
+			end)
+		end)
+		expect(ok):toBe(false)
+		expect(tostring(failure)):toContain "single listener failed"
+		expect(tostring(failure)):toContain "appended listener failed"
+		expect(table.concat(seen, ",")):toBe "source 1,next 1"
+		expect(Compose.reactor.pending(reactor)):toBe(0)
+		Compose.reactor.batch(reactor, function()
+			source:set(2)
+		end)
+		expect(table.concat(seen, ",")):toBe "source 1,next 1,source 2,next 2"
+		expect(Compose.reactor.pending(reactor)):toBe(0)
+	end)
+
 	it("continues formula bindings after a refresh fails and recovers on the next write", function(own)
 		local world = Support.world()
 		local source = Compose.cell(0)
