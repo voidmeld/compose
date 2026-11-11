@@ -218,6 +218,7 @@ local function orderedCollection<V, K>(options: Options<V, K>): Children.Directi
 	local measurementsChanged = false
 
 	local placements: { [number]: Layout.Placement } = {}
+	local placementCount = 0
 	local selection: retain.Selection<V, Layout.Placement, K> = { values = {}, keys = {}, states = {} }
 	local published: Status? = nil
 	local windowRange: Layout.Range = { first = 1, last = 0, firstRow = 1, lastRow = 0 }
@@ -226,6 +227,7 @@ local function orderedCollection<V, K>(options: Options<V, K>): Children.Directi
 
 	local function geometryChanged()
 		table.clear(placements)
+		placementCount = 0
 	end
 
 	local function placementFor(index: number): Layout.Placement
@@ -236,6 +238,7 @@ local function orderedCollection<V, K>(options: Options<V, K>): Children.Directi
 		local made = Layout.placementOf(geometry, index)
 		freeze(made)
 		placements[index] = made
+		placementCount += 1
 		return made
 	end
 
@@ -257,12 +260,23 @@ local function orderedCollection<V, K>(options: Options<V, K>): Children.Directi
 	end
 
 	local function rebuild(list: { V }, layout: Layout.Options)
+		local previous = geometry
 		indexMap = nil
 		builtFor = list
 		layout.count = #list
-		geometry = Layout.create(layout)
+		local created = Layout.create(layout)
+		geometry = created
 		measurementsChanged = true
-		geometryChanged()
+		if
+			not previous.uniform
+			or previous.columns ~= created.columns
+			or previous.rowSize ~= created.rowSize
+			or previous.gap ~= created.gap
+			or previous.crossSize ~= created.crossSize
+			or previous.crossGap ~= created.crossGap
+		then
+			geometryChanged()
+		end
 	end
 
 	local function findAnchorIndex(list: { V }, wanted: K): number?
@@ -424,6 +438,14 @@ local function orderedCollection<V, K>(options: Options<V, K>): Children.Directi
 			values[index] = nil
 			keys[index] = nil
 			states[index] = nil
+		end
+		if placementCount > 4 * retained + 256 then
+			for index in placements do
+				if index < first or index > last then
+					placements[index] = nil
+				end
+			end
+			placementCount = retained
 		end
 
 		lastOffset = viewportOffset
