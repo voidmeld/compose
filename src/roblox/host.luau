@@ -352,6 +352,7 @@ local function createHost(engine: Engine.Engine): Compose.Host
 			insertChild = insertChild,
 			removeChild = removeChild,
 			destroyNode = engine.destroy,
+			destroysDescendants = true,
 		},
 		events = {
 			connectEvent = connectEvent,

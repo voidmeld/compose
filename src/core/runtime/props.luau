@@ -295,6 +295,10 @@ local function forgetFast(node: Node)
 	end
 end
 
+local function tracks(node: Node): boolean
+	return fastEdges[node] ~= nil or attached[node] ~= nil or attachedMany[node] ~= nil
+end
+
 local function forget(node: Node)
 	attached[node] = nil
 	attachedMany[node] = nil
@@ -527,6 +531,7 @@ return {
 	applying = applying,
 	apply = apply,
 	forget = forget,
+	tracks = tracks,
 	detach = detach,
 	map = map,
 }

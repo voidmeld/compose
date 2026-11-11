@@ -64,6 +64,8 @@ export type Renderer = {
 	removeChild: (parent: Node, child: Node) -> (),
 
 	destroyNode: (node: Node) -> (),
+
+	destroysDescendants: boolean?,
 }
 
 export type Events = {

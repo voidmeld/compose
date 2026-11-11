@@ -311,6 +311,20 @@ local function forget(node: Node)
 	end
 end
 
+local function releasedWithParent<R>(node: Node, owner: OwnerTypes.Owner<R>): boolean
+	local known = custody[node]
+	if type(known) ~= "number" or known <= 0 or known ~= owner.nodeToken then
+		return false
+	end
+	if tracked.dependents > 0 and dependents[node] ~= nil then
+		return false
+	end
+	if tracked.labels > 0 and labels[node] ~= nil then
+		return false
+	end
+	return tracked.charges == 0
+end
+
 local function trackedCount(): number
 	local total = 0
 	for _ in custody do
@@ -346,6 +360,7 @@ return {
 	label = label,
 	labelOf = labelOf,
 	isDestructible = isDestructible,
+	releasedWithParent = releasedWithParent,
 	attachDependent = attachDependent,
 	releaseDependents = releaseDependents,
 	forget = forget,

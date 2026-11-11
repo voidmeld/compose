@@ -282,6 +282,40 @@ local function heldCount(owner: Owner): number
 	return if head == nil then 0 else heldSize(head)
 end
 
+local function forgetHeld(
+	owner: Owner,
+	releaseSubject: OwnerTypes.Release,
+	subject: OwnerTypes.Subject,
+	window: number
+): boolean
+	local head = owner.head
+	if head == nil then
+		return false
+	end
+	local size = #head
+	if head.batchRelease ~= nil then
+		if head.batchRelease ~= releaseSubject then
+			return false
+		end
+		for index = size, math.max(1, size - window + 1), -1 do
+			if head[index] == subject then
+				table.remove(head, index)
+				return true
+			end
+		end
+		return false
+	end
+	for index = size, math.max(2, size - window * 2 + 2), -2 do
+		if head[index] == subject and head[index - 1] == releaseSubject then
+			table.move(head, index + 1, size, index - 1)
+			head[size] = nil
+			head[size - 1] = nil
+			return true
+		end
+	end
+	return false
+end
+
 local function rollbackHeld(owner: Owner, keep: number)
 	local head = owner.head
 	if head == nil then
@@ -620,6 +654,7 @@ return {
 	own = own,
 	adopt = adopt,
 	holdSubject = holdSubject,
+	forgetHeld = forgetHeld,
 	listenHeld = listenHeld,
 	effectHeld = effectHeld,
 	heldCount = heldCount,

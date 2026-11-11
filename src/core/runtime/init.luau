@@ -19,6 +19,7 @@ local extensionsModule: typeof(require "@self/extensions")? = nil
 local motionModule: typeof(require "./animation/motion")? = nil
 
 local WEAK_KEYS = table.freeze { __mode = "ks" }
+local RELEASE_WINDOW = 64
 
 export type Node = Host.Node
 type Dispose = Types.Dispose
@@ -204,7 +205,7 @@ local function createRuntime(host: Host.Host): Runtime
 
 		local operation = ("create(%q)"):format(kind)
 
-		local function applyBuild(label: string?, props: unknown, node: Node, owner: Owner.Owner)
+		local function applyBuild(label: string?, props: unknown, node: Node, owner: Owner.Owner): { Node }?
 			assert(type(props) == "table")
 			local entries = Dynamic.entries(props)
 			if label ~= nil then
@@ -220,10 +221,12 @@ local function createRuntime(host: Host.Host): Runtime
 
 			local childCount = #entries
 			if childCount == 0 then
-				return
+				return nil
 			end
 
 			applying.key = nil
+			local cascades = supplied.render.destroysDescendants == true
+			local released: { Node }? = nil
 			local list: Children.ChildList? = nil
 			local staticSlot = 0
 			local staticChildren: { Node }? = nil
@@ -259,6 +262,15 @@ local function createRuntime(host: Host.Host): Runtime
 							end)
 						end
 						table.insert(assert(attached), child)
+					elseif
+						list == nil
+						and cascades
+						and Nodes.releasedWithParent(child, owner)
+						and not Props.tracks(child)
+					then
+						local collected = released or {}
+						released = collected
+						table.insert(collected, child)
 					end
 					if list == nil then
 						supplied.render.insertChild(node, child, index)
@@ -308,6 +320,7 @@ local function createRuntime(host: Host.Host): Runtime
 					})
 				end
 			end
+			return released
 		end
 		local function build(label: string?, props: unknown): Node
 			if type(props) ~= "table" then
@@ -336,9 +349,15 @@ local function createRuntime(host: Host.Host): Runtime
 			local savedKey = applying.key
 			applying.key = nil
 			local running = if top then nil else Active.push(owner)
-			local ok, err: unknown = pcall(applyBuild, label, props, node, owner)
+			local ok, outcome = pcall(applyBuild, label, props, node, owner)
+			local err: unknown = outcome
 			if running ~= nil then
 				Active.pop(owner, running)
+			end
+			if ok and outcome ~= nil then
+				for index = #outcome, 1, -1 do
+					Owner.forgetHeld(owner, destroyOwnedNode, outcome[index], RELEASE_WINDOW)
+				end
 			end
 			if not ok then
 				local released, cleanup: unknown =
