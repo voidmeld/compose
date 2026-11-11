@@ -466,6 +466,17 @@ local function createRuntime(host: Host.Host): Runtime
 	end
 
 	local function mount(component: Component, target: Node): (Dispose, Node)
+		local parent = Active.current()
+		if
+			parent ~= nil
+			and not runtimeDisposed
+			and not inspecting.active
+			and (type(target) == "table" or type(target) == "userdata")
+		then
+			claimTarget(target)
+			local owner, node = Block.mountSingle(host, target, parent, component)
+			return Owner.disposer(owner), node
+		end
 		local label = Block.nameOf(component)
 		local dispose, nodes = mountInto(function(): { Node }
 			return { component() }

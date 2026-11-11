@@ -601,6 +601,84 @@ describe("ownership", function()
 			expect(world.host.liveSubscriptions()):toBe(0)
 		end)
 
+		it("keeps no owner for a decoration that holds nothing", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Poked")
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local pokes = 0
+			local frame = Compose.withOwner(owner, function()
+				local made = world.create "Frame" {}
+				local held = Compose.owner.size(owner)
+				world.runtime.decorate(made, { Label = "static", Tint = "red" })
+				expect(Compose.owner.size(owner)):toBe(held)
+				world.runtime.decorate(made, {
+					Poked = function()
+						pokes += 1
+					end,
+				})
+				expect(Compose.owner.size(owner)):toBe(held + 1)
+				return made
+			end)
+			expect(world.host.propertyOf(frame, "Label")):toBe "static"
+			expect(world.host.propertyOf(frame, "Tint")):toBe "red"
+			world.host.dispatch(frame, "Poked")
+			expect(pokes):toBe(1)
+			Compose.owner.dispose(owner)
+			expect(world.host.isAlive(frame)):toBe(false)
+			expect(world.host.liveSubscriptions()):toBe(0)
+		end)
+
+		it("mounts one nested node with one insertion and removes it when the mount ends", function()
+			local world = Support.world()
+			local holder: Compose.Node? = nil
+			local inner: Compose.Node? = nil
+			local stopInner: (() -> ())? = nil
+			local dispose = world.runtime.mount(function()
+				local frame = world.create "Frame" {}
+				holder = frame
+				world.host.resetCounts()
+				local stop, node = world.runtime.mount(function()
+					return world.create "Row" {}
+				end, frame)
+				stopInner, inner = stop, node
+				expect(world.host.counts().insertChild):toBe(1)
+				return frame
+			end, world.root)
+			expect(world.host.parentOf(required(inner))):toBe(required(holder))
+			world.host.resetCounts()
+			required(stopInner)()
+			required(stopInner)()
+			expect(world.host.counts().removeChild):toBe(1)
+			expect(world.host.isAlive(required(inner))):toBe(false)
+			expect(world.host.isAlive(required(holder))):toBe(true)
+			dispose()
+			expectClean(world)
+		end)
+
+		it("keeps a nested mount that returns no node or several nodes", function()
+			local world = Support.world()
+			local dispose = world.runtime.mount(function()
+				local frame = world.create "Frame" {}
+				local _, none = Support.invoke(world.runtime.mount, function()
+					return nil
+				end, frame)
+				expect(none):toBeNil()
+				Support.invoke(world.runtime.mount, function()
+					return world.create "Row" {}, world.create "Row" {}
+				end, frame)
+				expect(#world.host.childrenOf(frame)):toBe(2)
+				expect(function()
+					Support.invoke(world.runtime.mount, function()
+						return 5
+					end, frame)
+				end):toThrow "mount/not-a-node"
+				expect(#world.host.childrenOf(frame)):toBe(2)
+				return frame
+			end, world.root)
+			dispose()
+			expectClean(world)
+		end)
+
 		it("refuses to add children through decorate", function()
 			local world = Support.world()
 			local external = world.host.makeNode "External"
