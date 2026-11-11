@@ -702,6 +702,77 @@ describe("OrderedCollection", function()
 			dispose()
 		end)
 
+		it("keeps the placements of a uniform layout when only the list changes", function()
+			local items = Compose.cell(rows(6))
+			local controls: Compose.OrderedCollectionControls<string> = {}
+			local dispose = world.runtime.mount(function()
+				return world.runtime.constructors.Frame {
+					Compose.OrderedCollection {
+						from = items,
+						key = idOf,
+						layout = { kind = "grid", columns = 2, itemSize = 10, crossSize = 20 },
+						controls = controls,
+						render = function()
+							return world.runtime.constructors.Row {}
+						end,
+					},
+				}
+			end, world.root)
+			local placementOf = assert(controls.placementOf)
+			local third = placementOf(3)
+			items:set(rows(8))
+			world.settle()
+			expect(placementOf(3)):toBe(third)
+			expect(placementOf(8)):toEqual {
+				index = 8,
+				row = 4,
+				column = 2,
+				offset = 30,
+				size = 10,
+				crossOffset = 20,
+				crossSize = 20,
+			}
+			dispose()
+		end)
+
+		it("leaves a row alone when a recomputed placement equals the one it holds", function()
+			local initialLayout: Compose.OrderedCollectionLayout =
+				{ kind = "grid", columns = 2, itemSize = 10, crossSize = 20 }
+			local layout = Compose.cell(initialLayout)
+			local held: { [string]: Compose.Placement } = {}
+			local runs = 0
+			local dispose = world.runtime.mount(function()
+				return world.runtime.constructors.Frame {
+					Compose.OrderedCollection {
+						from = Compose.cell(rows(6)),
+						key = idOf,
+						layout = layout,
+						render = function(_, placement, key)
+							return world.runtime.constructors.Row {
+								Placement = function(use)
+									runs += 1
+									local current = use(placement)
+									held[key] = current
+									return current
+								end,
+							}
+						end,
+					},
+				}
+			end, world.root)
+			local first = table.clone(held)
+			expect(runs):toBe(6)
+			layout:set { kind = "grid", columns = 2, itemSize = 10, crossSize = 20 }
+			world.settle()
+			expect(runs):toBe(6)
+			expect(held.r5):toBe(first.r5)
+			layout:set { kind = "grid", columns = 2, itemSize = 10, crossSize = 24 }
+			world.settle()
+			expect(runs):toBe(12)
+			expect(held.r5.crossSize):toBe(24)
+			dispose()
+		end)
+
 		it("reflows retained nodes and their component state from a layout cell", function()
 			local initialLayout: Compose.OrderedCollectionLayout =
 				{ kind = "grid", columns = 2, itemSize = 10, crossSize = 20 }

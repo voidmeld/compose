@@ -258,4 +258,80 @@ describe("teardown heap", function()
 	end)
 end)
 
+describe("mounted heap", function()
+	it("bounds cached placements while a window scrolls through a long list", function()
+		local host = TestScene.create()
+		local runtime = Compose.createRuntime(host.adapter)
+		local Frame = runtime.create "Frame"
+		local count = 20000
+		local values: { number } = table.create(count, 0)
+		for index = 1, count do
+			values[index] = index
+		end
+		local initial: Compose.OrderedCollectionViewport = { offset = 0, size = 200 }
+		local viewport = Compose.cell(initial)
+		local dispose = runtime.mount(function()
+			return Frame {
+				Compose.OrderedCollection {
+					from = Compose.cell(values),
+					mode = "windowed",
+					viewport = viewport,
+					layout = { itemSize = 10 },
+					render = function(value)
+						return Frame { Value = value }
+					end,
+				},
+			}
+		end, host.root)
+		runtime:settle()
+		local mounted = Lute.memory.settle({ cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 }).heapKb
+		for offset = 200, count * 10 - 200, 200 do
+			viewport:set { offset = offset, size = 200 }
+			runtime:settle()
+		end
+		local scrolled = Lute.memory.settle({ cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 }).heapKb
+		expect(scrolled - mounted):toBeLessThan(512)
+		dispose()
+		runtime:dispose()
+	end)
+
+	it("keeps the size of a bound function after formula-driven updates", function()
+		local host = TestScene.create()
+		local runtime = Compose.createRuntime(host.adapter)
+		local Frame = runtime.create "Frame"
+		local count = 2048
+		local sources: { Compose.Value<number> } = {}
+		local dispose = runtime.mount(function()
+			local children: { Compose.Node } = {}
+			for index = 1, count do
+				local source = Compose.cell(index)
+				sources[index] = source
+				local doubled = Compose.formula(function(use)
+					return use(source) * 2
+				end)
+				children[index] = Frame {
+					Value = function(use)
+						return use(doubled)
+					end,
+				}
+			end
+			return Frame(children)
+		end, host.root)
+		runtime:settle()
+		local mounted = Lute.memory.settle({ cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 }).heapKb
+		for round = 1, 3 do
+			runtime:batch(function()
+				for index = 1, count do
+					sources[index]:set(index + round * 7)
+				end
+			end)
+			runtime:settle()
+		end
+		local updated = Lute.memory.settle({ cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 }).heapKb
+		expect(updated - mounted):toBeLessThan(count * 96 / 1024)
+		dispose()
+		runtime:dispose()
+	end)
+end)
+
 return nil
