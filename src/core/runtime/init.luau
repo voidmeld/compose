@@ -227,10 +227,20 @@ local function createRuntime(host: Host.Host): Runtime
 			local list: Children.ChildList? = nil
 			local staticSlot = 0
 			local staticChildren: { Node }? = nil
+			local surveyed = false
+			local foreign: { [unknown]: true }? = nil
 			for index = 1, childCount do
 				local child = entries[index]
 				if type(child) == "table" or type(child) == "userdata" then
-					if not Nodes.belongsTo(child, owner) or not Nodes.isDestructible(child) then
+					local mine = Nodes.membership(child, owner)
+					if mine == nil then
+						if not surveyed then
+							surveyed = true
+							foreign = Nodes.foreignLeaves(entries, index, owner)
+						end
+						mine = foreign == nil or foreign[child] == nil
+					end
+					if not mine or not Nodes.isDestructible(child) then
 						local attached = staticChildren
 						if attached == nil then
 							local children: { Node } = {}

@@ -90,6 +90,117 @@ describe("constructor event ownership", function()
 		runtime:dispose()
 	end)
 
+	it("separates same-owner and foreign event children under one parent", function()
+		Compose.__resetForTests()
+		local emulator = Support.emulator()
+		local runtime = Compose.createRuntime(emulator.adapter)
+		local creator = Compose.createOwner(runtime.reactor)
+		local parentOwner = Compose.createOwner(runtime.reactor)
+		local function button(): Compose.Node
+			return runtime.constructors.TextButton {
+				[Compose.event "Activated"] = function() end,
+			}
+		end
+		local foreign = Compose.withOwner(creator, function()
+			return { button(), button() }
+		end)
+		local own = Compose.withOwner(parentOwner, function()
+			local first, plain, last = button(), runtime.constructors.Frame {}, button()
+			runtime.constructors.Frame { first, foreign[1], plain, foreign[2], last }
+			return { first, plain, last }
+		end)
+		expect(Compose.owner.size(parentOwner)):toBe(5)
+		Compose.owner.dispose(parentOwner)
+		for _, node in own do
+			expect(emulator.environment.isAlive(Support.instance(node))):toBe(false)
+		end
+		for _, node in foreign do
+			local instance = Support.instance(node)
+			expect(emulator.environment.isAlive(instance)):toBe(true)
+			expect(instance.Parent):toBe(nil)
+			expect(Compose.custodyOf(node)):toBe "owned"
+		end
+		expect(emulator.environment.liveConnections()):toBe(2)
+		Compose.owner.dispose(creator)
+		expect(emulator.environment.liveConnections()):toBe(0)
+		runtime:dispose()
+	end)
+
+	it("keeps many same-owner event children out of the static cleanup", function()
+		Compose.__resetForTests()
+		local emulator = Support.emulator()
+		local runtime = Compose.createRuntime(emulator.adapter)
+		local owner = Compose.createOwner(runtime.reactor)
+		local title = Compose.cell "Row"
+		local children = Compose.withOwner(owner, function()
+			local nodes: { Compose.Node } = {}
+			for index = 1, 200 do
+				nodes[index] = runtime.constructors.TextButton {
+					Text = title,
+					[Compose.event "Activated"] = function() end,
+				}
+			end
+			runtime.constructors.Frame(table.clone(nodes))
+			return nodes
+		end)
+		local held = Compose.owner.size(owner)
+		Compose.withOwner(owner, function()
+			runtime.constructors.Frame {}
+		end)
+		expect(Compose.owner.size(owner)):toBe(held + 1)
+		Compose.owner.dispose(owner)
+		expect(emulator.environment.liveConnections()):toBe(0)
+		for _, node in children do
+			expect(emulator.environment.isAlive(Support.instance(node))):toBe(false)
+		end
+		runtime:dispose()
+	end)
+
+	it("classifies event children around a directive sibling", function()
+		Compose.__resetForTests()
+		local emulator = Support.emulator()
+		local runtime = Compose.createRuntime(emulator.adapter)
+		local creator = Compose.createOwner(runtime.reactor)
+		local parentOwner = Compose.createOwner(runtime.reactor)
+		local visible = Compose.cell(true)
+		local foreign = Compose.withOwner(creator, function()
+			return runtime.constructors.TextButton {}
+		end)
+		local own = Compose.withOwner(parentOwner, function()
+			local first = runtime.constructors.TextButton {
+				[Compose.event "Activated"] = function() end,
+			}
+			local last = runtime.constructors.TextButton {
+				[Compose.event "Activated"] = function() end,
+			}
+			runtime.constructors.Frame {
+				first,
+				Compose.show(visible, function()
+					Compose.withOwner(creator, function()
+						runtime.decorate(foreign, {
+							[Compose.event "Activated"] = function() end,
+						})
+					end)
+					return runtime.constructors.TextLabel {}
+				end),
+				foreign,
+				last,
+			}
+			return { first, last }
+		end)
+		Compose.owner.dispose(parentOwner)
+		for _, node in own do
+			expect(emulator.environment.isAlive(Support.instance(node))):toBe(false)
+		end
+		local instance = Support.instance(foreign)
+		expect(emulator.environment.isAlive(instance)):toBe(true)
+		expect(instance.Parent):toBe(nil)
+		Compose.owner.dispose(creator)
+		expect(emulator.environment.isAlive(instance)):toBe(false)
+		expect(emulator.environment.liveConnections()):toBe(0)
+		runtime:dispose()
+	end)
+
 	it("detaches borrowed event children before their same-owner parent is destroyed", function()
 		Compose.__resetForTests()
 		local emulator = Support.emulator()
