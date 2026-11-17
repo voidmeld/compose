@@ -52,7 +52,13 @@ end
 local function portal(nodes: {NativeNode})
 	return Compose.portal(nativeNode, function() return nodes end)
 end
-return native, tableNode, child, decorate, mount, optional, fragment, portal
+local function adoptNative(runtime: Compose.Runtime): NativeNode
+	return runtime.adopt(nativeNode)
+end
+local function adoptTable(runtime: Compose.Runtime, node: { label: string }): { label: string }
+	return runtime.adopt(node)
+end
+return native, tableNode, child, decorate, mount, optional, fragment, portal, adoptNative, adoptTable
 ]]
 			)
 			local accepted = process.run {
@@ -86,7 +92,10 @@ end
 local function invalidPortal()
 	return Compose.portal(nativeNode, function() return {42} end)
 end
-return numberNode, functionNode, nilNode, inspect, invalidProperties, invalidFragment, invalidDirective, invalidPortal
+local function invalidAdopt(runtime: Compose.Runtime)
+	return runtime.adopt(42)
+end
+return numberNode, functionNode, nilNode, inspect, invalidProperties, invalidFragment, invalidDirective, invalidPortal, invalidAdopt
 ]]
 			)
 			local rejected = process.run {
@@ -98,7 +107,7 @@ return numberNode, functionNode, nilNode, inspect, invalidProperties, invalidFra
 			}
 			expect(rejected.ok):toBe(false)
 			local diagnostics = rejected.stdout .. rejected.stderr
-			for _, line in { 3, 4, 5, 7, 10, 13, 16, 19 } do
+			for _, line in { 3, 4, 5, 7, 10, 13, 16, 19, 22 } do
 				expect(diagnostics):toContain(`invalid.luau({line},`)
 			end
 			return 0
