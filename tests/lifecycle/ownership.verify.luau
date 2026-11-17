@@ -522,7 +522,7 @@ describe("ownership", function()
 			local world = Support.world()
 			local external = world.host.makeNode "External"
 			local dispose = world.runtime.mount(function()
-				world.runtime.adopt(external)
+				expect(world.runtime.adopt(external)):toBe(external)
 				return world.create "Frame" {}
 			end, world.root)
 

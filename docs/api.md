@@ -613,7 +613,7 @@ For root lifetimes, see [ownership](ownership.md#entry-points-and-what-happens-w
 | `decorate(node, props)` | Applies props to an existing node. |
 | `mount(component, target)` | Mounts a one-node component. Returns `(dispose, node)`. |
 | `mountFragment(fragment, target)` | Mounts top-level sibling nodes and structural directives. Returns `(dispose, staticRoots)`. |
-| `adopt(node)` | Takes responsibility for destroying an existing node. |
+| `adopt(node)` | Takes responsibility for destroying an existing node and returns that node with its input type preserved. |
 | `borrow(node)` | Returns the node and transfers destruction responsibility to its external owner. A constructor-created node survives its creating owner when borrowed before disposal. Bindings and other owned resources keep their original owners. See [external Instance construction](roblox.md#create-an-externally-owned-instance). |
 | `motion(codec)` | Selects typed `spring`, `tween` and `ramp` methods for the codec's value type. |
 | `spring(source, options?)` | Follows a numeric reactive body with spring physics. |
