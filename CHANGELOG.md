@@ -3,10 +3,11 @@
 Compose follows [semantic versioning](https://semver.org). While the version is `0.x`, a minor
 release may change a public contract.
 
-## Unreleased
+## 0.1.1
 
-- Follow-up: publish the Compose skill. Add `/.agents/skills/compose/**` to the `files` in
-  `pkg.luau` so consumers that mirror the skill read it from the installed package.
+- The package publishes the Compose skill (`.agents/skills/compose`), so a consumer that mirrors
+  the skill reads it from the installed package.
+- Verify, the development dependency, moves to 0.1.1.
 
 ## 0.1.0
 
