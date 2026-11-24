@@ -1,0 +1,210 @@
+--!strict
+
+local CoreTypes = require "./types"
+local Active = require "./ownership/active"
+local Diagnostics = require "./diagnostics"
+local Owner = require "./ownership/owner"
+local Host = require "./host"
+local ownedFrame = require "./ownership/frame"
+
+export type Cancel = CoreTypes.Cancel
+
+export type Scheduler = CoreTypes.Scheduler
+
+type Entry = {
+	due: number,
+	sequence: number,
+	key: unknown,
+	body: () -> (),
+	live: boolean,
+}
+
+local function noop(): boolean
+	return false
+end
+
+local function checkDelay(seconds: unknown)
+	if type(seconds) ~= "number" or seconds ~= seconds or seconds < 0 or seconds == math.huge then
+		return Diagnostics.raise(
+			"scheduler/invalid-delay",
+			"a scheduled task needs a finite delay of zero or more seconds",
+			{
+				actual = Diagnostics.describe(seconds),
+				expected = "seconds, e.g. 0.25; zero runs on the next frame",
+			}
+		)
+	end
+end
+
+local function checkBody(body: unknown)
+	if type(body) ~= "function" then
+		return Diagnostics.raise("scheduler/invalid-body", "a scheduled task needs a function to run", {
+			actual = Diagnostics.describe(body),
+			expected = "a function taking no arguments",
+		})
+	end
+end
+
+local function checkKey(key: unknown)
+	if key == nil or key ~= key then
+		return Diagnostics.raise("scheduler/invalid-key", "a replacement key must be a value other than nil or NaN", {
+			actual = Diagnostics.describe(key),
+			expected = "a string, number, boolean or table identifying the work",
+		})
+	end
+end
+
+local function createSchedulers(
+	host: Host.Host,
+	requireOwner: (operation: string) -> Owner.Owner
+): (owner: Owner.Owner?) -> Scheduler
+	return function(explicit: Owner.Owner?): Scheduler
+		local parent: Owner.Owner
+		if explicit ~= nil then
+			if not Owner.isOwner(explicit) then
+				return Diagnostics.raise("scheduler/invalid-owner", "a scheduler can only be bound to an owner", {
+					actual = Diagnostics.describe(explicit),
+					expected = "an owner from Compose.createOwner or Compose.owner.createChild",
+				})
+			end
+			parent = explicit
+		else
+			parent = requireOwner "scheduler"
+		end
+
+		local scope = Owner.createChild(parent)
+		local entries: { [Entry]: true } = {}
+		local keyed: { [unknown]: Entry } = {}
+		local count = 0
+		local sequence = 0
+		local frames = host.frames
+		if frames == nil then
+			Owner.dispose(scope)
+			return Diagnostics.raise("animation/no-frames", "a scheduler needs host.frames", {})
+		end
+		local loop = frames
+		local clock = 0
+		local pump: ownedFrame.Pump
+
+		local function retire(entry: Entry): boolean
+			if not entry.live then
+				return false
+			end
+			entry.live = false
+			entries[entry] = nil
+			count -= 1
+			if entry.key ~= nil and keyed[entry.key] == entry then
+				keyed[entry.key] = nil
+			end
+			if count == 0 then
+				pump.stop()
+			end
+			return true
+		end
+
+		local function drain(now: number)
+			local due: { Entry } = {}
+			for entry in entries do
+				if entry.due <= now then
+					table.insert(due, entry)
+				end
+			end
+			if #due == 0 then
+				return
+			end
+			table.sort(due, function(a: Entry, b: Entry): boolean
+				if a.due ~= b.due then
+					return a.due < b.due
+				end
+				return a.sequence < b.sequence
+			end)
+			local failures: { unknown } = {}
+			for _, entry in due do
+				if entry.live then
+					retire(entry)
+					local ok, problem: unknown = pcall(function()
+						Active.withOwner(scope, entry.body)
+						return nil
+					end)
+					if not ok then
+						table.insert(failures, problem)
+					end
+				end
+			end
+			Owner.raiseAll(failures)
+		end
+
+		pump = ownedFrame(scope, loop.onFrame, function(delta)
+			clock += delta
+			drain(clock)
+		end)
+		Owner.own(scope, function()
+			for entry in entries do
+				entry.live = false
+			end
+			table.clear(entries)
+			table.clear(keyed)
+			count = 0
+		end)
+
+		local function schedule(key: unknown, seconds: number, body: () -> ()): Cancel
+			checkDelay(seconds)
+			checkBody(body)
+			if Owner.isDisposed(scope) then
+				return noop
+			end
+			if key ~= nil then
+				local prior = keyed[key]
+				if prior ~= nil then
+					retire(prior)
+				end
+			end
+			sequence += 1
+			local entry: Entry = {
+				due = clock + seconds,
+				sequence = sequence,
+				key = key,
+				body = body,
+				live = true,
+			}
+			entries[entry] = true
+			if key ~= nil then
+				keyed[key] = entry
+			end
+			count += 1
+			if count == 1 then
+				pump.start()
+			end
+			return function(): boolean
+				return retire(entry)
+			end
+		end
+
+		return {
+			after = function(seconds: number, body: () -> ()): Cancel
+				return schedule(nil, seconds, body)
+			end,
+			replace = function(key: unknown, seconds: number, body: () -> ()): Cancel
+				checkKey(key)
+				return schedule(key, seconds, body)
+			end,
+			cancel = function(key: unknown): boolean
+				local entry = keyed[key]
+				return entry ~= nil and retire(entry)
+			end,
+			clear = function()
+				for entry in entries do
+					retire(entry)
+				end
+			end,
+			pending = function(): number
+				return count
+			end,
+			dispose = Owner.disposer(scope),
+		}
+	end
+end
+
+return {
+	createSchedulers = createSchedulers,
+}

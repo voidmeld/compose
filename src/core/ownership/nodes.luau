@@ -1,0 +1,357 @@
+--!strict
+--!native
+local Weak = require "../weak"
+
+local Diagnostics = require "../diagnostics"
+local Host = require "../host"
+local OwnerTypes = require "./types"
+
+type Node = Host.Node
+
+export type Custody = "owned" | "adopted" | "borrowed"
+
+local custody: { [unknown]: Custody | number | Node } = {}
+local preservedEvents: { [Node]: unknown } = {}
+local issuedToken = 0
+local TOKEN_STRIDE = 4
+local BORROWED_TAG = 1
+local ADOPTED_TAG = 2
+
+Weak.keys(custody)
+Weak.keys(preservedEvents)
+
+local tracked = { dependents = 0, labels = 0, charges = 0 }
+
+local inspecting = { active = false }
+
+local function assertReference(node: Node, operation: string)
+	local kind = type(node)
+	if kind == "table" or kind == "userdata" then
+		return
+	end
+	return Diagnostics.raise(
+		"host/node-not-a-reference",
+		("%s received a node that is not a reference value"):format(operation),
+		{
+			actual = Diagnostics.describe(node),
+			expected = "a table or userdata",
+			contract = "host nodes must be reference values so custody and identity can be tracked",
+		}
+	)
+end
+
+local function ownerToken(): number
+	issuedToken += TOKEN_STRIDE
+	return issuedToken
+end
+
+local function markOwned(node: Node, token: number)
+	assertReference(node, "createNode")
+	custody[node] = token
+end
+
+local function belongsTo<R>(node: Node, owner: OwnerTypes.Owner<R>): boolean
+	local known = custody[node]
+	if type(known) == "table" or type(known) == "userdata" then
+		local entry = owner.head
+		while entry ~= nil do
+			for index = 1, #entry do
+				if entry[index] == node then
+					return true
+				end
+			end
+			entry = entry.following
+		end
+		return false
+	end
+	local token = owner.nodeToken
+	if token == nil then
+		return false
+	end
+	return known == token or known == token + BORROWED_TAG or known == token + ADOPTED_TAG
+end
+
+local survey: { [unknown]: true } = {}
+
+local function membership<R>(node: Node, owner: OwnerTypes.Owner<R>): boolean?
+	local known = custody[node]
+	if type(known) == "table" or type(known) == "userdata" then
+		return nil
+	end
+	local token = owner.nodeToken
+	if token == nil then
+		return false
+	end
+	return known == token or known == token + BORROWED_TAG or known == token + ADOPTED_TAG
+end
+
+local function foreignLeaves<R>(
+	children: { [number]: Host.Child? },
+	first: number,
+	owner: OwnerTypes.Owner<R>
+): { [unknown]: true }?
+	local pending = 0
+	for index = first, #children do
+		local child = children[index]
+		local known = custody[child]
+		if (type(known) == "table" or type(known) == "userdata") and survey[child] == nil then
+			survey[child] = true
+			pending += 1
+		end
+	end
+	local entry = owner.head
+	while entry ~= nil and pending > 0 do
+		for index = #entry, 1, -1 do
+			local subject = entry[index]
+			if survey[subject] ~= nil then
+				survey[subject] = nil
+				pending -= 1
+				if pending == 0 then
+					break
+				end
+			end
+		end
+		entry = entry.following
+	end
+	if pending == 0 then
+		return nil
+	end
+	local foreign = table.clone(survey)
+	table.clear(survey)
+	return foreign
+end
+
+local function protect(node: Node)
+	local known = custody[node]
+	if type(known) == "number" and known > 0 then
+		custody[node] = -known
+	elseif type(known) == "table" or type(known) == "userdata" then
+		preservedEvents[node] = known
+		custody[node] = "owned"
+	end
+end
+
+local function changeCustody(node: Node, kind: Custody, tag: number)
+	local known = custody[node]
+	if type(known) == "number" then
+		local current = math.abs(known)
+		local token = current - current % TOKEN_STRIDE + tag
+		custody[node] = if known < 0 then -token else token
+	else
+		if type(known) == "table" or type(known) == "userdata" then
+			preservedEvents[node] = known
+		end
+		custody[node] = kind
+	end
+end
+
+local function markAdopted(node: Node)
+	assertReference(node, "adopt")
+	changeCustody(node, "adopted", ADOPTED_TAG)
+end
+
+local function markBorrowed(node: Node)
+	assertReference(node, "borrow")
+	changeCustody(node, "borrowed", BORROWED_TAG)
+end
+
+local function custodyOf(node: Node): Custody
+	local known = custody[node]
+	if type(known) == "number" then
+		local tag = math.abs(known) % TOKEN_STRIDE
+		if tag == BORROWED_TAG then
+			return "borrowed"
+		elseif tag == ADOPTED_TAG then
+			return "adopted"
+		end
+		return "owned"
+	end
+	if known ~= nil then
+		return if type(known) == "string" then known else "owned"
+	end
+	return "borrowed"
+end
+
+local function isDestructible(node: unknown): boolean
+	local known = custody[node]
+	if type(known) == "number" then
+		return math.abs(known) % TOKEN_STRIDE ~= BORROWED_TAG
+	end
+	return known == "owned" or known == "adopted" or type(known) == "table" or type(known) == "userdata"
+end
+
+local function rememberEvent(node: Node, connection: unknown): boolean
+	local known = custody[node]
+	if type(known) == "number" and known > 0 and known % TOKEN_STRIDE == 0 then
+		if type(connection) == "table" or type(connection) == "userdata" then
+			custody[node] = connection
+			return true
+		end
+	end
+	return false
+end
+
+local function takeEvent(node: Node): unknown
+	local known = custody[node]
+	if type(known) == "table" or type(known) == "userdata" then
+		custody[node] = "owned"
+		return known
+	end
+	local connection = preservedEvents[node]
+	preservedEvents[node] = nil
+	return connection
+end
+
+local dependents: { [Node]: { () -> () } } = {}
+
+Weak.keys(dependents)
+
+local function attachDependent(node: Node, dispose: () -> ()): () -> ()
+	assertReference(node, "mount")
+	local list = dependents[node]
+	if list == nil then
+		list = {}
+		dependents[node] = list
+		tracked.dependents += 1
+	end
+	table.insert(list, dispose)
+
+	local detached = false
+	return function()
+		if detached then
+			return
+		end
+		detached = true
+		local current = dependents[node]
+		if current == nil then
+			return
+		end
+		local index = table.find(current, dispose)
+		if index ~= nil then
+			table.remove(current, index)
+		end
+	end
+end
+
+local function releaseDependents(node: Node)
+	if tracked.dependents == 0 then
+		return
+	end
+	local list = dependents[node]
+	if list == nil then
+		return
+	end
+	dependents[node] = nil
+	tracked.dependents -= 1
+	local failure: string? = nil
+	for index = #list, 1, -1 do
+		local ok, err: unknown = pcall(list[index])
+		if not ok and failure == nil then
+			failure = tostring(err)
+		end
+	end
+	if failure ~= nil then
+		error(failure, 0)
+	end
+end
+
+local labels: { [Node]: string } = {}
+
+Weak.keys(labels)
+
+local function label(node: Node, name: string)
+	if labels[node] == nil then
+		tracked.labels += 1
+	end
+	labels[node] = name
+end
+
+local function labelOf(node: Node): string?
+	return labels[node]
+end
+
+export type OwnedCounts = { ownedNodes: number, borrowedNodes: number }
+
+type Charges = typeof((require "./charges")(tracked))
+local charges: Charges? = nil
+
+local function chargeToOwner(owner: unknown, node: Node, kind: Custody)
+	local loaded = charges or (require "./charges")(tracked)
+	charges = loaded
+	loaded.chargeToOwner(owner, node, kind)
+end
+
+local function resetCharges()
+	local loaded = charges
+	if loaded ~= nil then
+		loaded.reset()
+	end
+end
+
+local function ownedCounts(owner: unknown): OwnedCounts
+	local loaded = charges
+	return if loaded ~= nil then loaded.ownedCounts(owner) else { ownedNodes = 0, borrowedNodes = 0 }
+end
+
+local function forget(node: Node)
+	custody[node] = nil
+	preservedEvents[node] = nil
+	if tracked.labels > 0 and labels[node] ~= nil then
+		labels[node] = nil
+		tracked.labels -= 1
+	end
+	if tracked.charges > 0 then
+		local loaded = charges
+		if loaded ~= nil then
+			loaded.releaseCharge(node)
+		end
+	end
+	if tracked.dependents > 0 then
+		releaseDependents(node)
+	end
+end
+
+local function trackedCount(): number
+	local total = 0
+	for _ in custody do
+		total += 1
+	end
+	return total
+end
+
+local function resetForTests()
+	table.clear(custody)
+	table.clear(preservedEvents)
+	table.clear(dependents)
+	table.clear(labels)
+	tracked.dependents = 0
+	tracked.labels = 0
+	resetCharges()
+end
+
+return {
+	inspecting = inspecting,
+	tracked = tracked,
+	markOwned = markOwned,
+	ownerToken = ownerToken,
+	belongsTo = belongsTo,
+	membership = membership,
+	foreignLeaves = foreignLeaves,
+	rememberEvent = rememberEvent,
+	takeEvent = takeEvent,
+	protect = protect,
+	markAdopted = markAdopted,
+	markBorrowed = markBorrowed,
+	custodyOf = custodyOf,
+	label = label,
+	labelOf = labelOf,
+	isDestructible = isDestructible,
+	attachDependent = attachDependent,
+	releaseDependents = releaseDependents,
+	forget = forget,
+	trackedCount = trackedCount,
+	chargeToOwner = chargeToOwner,
+	resetCharges = resetCharges,
+	ownedCounts = ownedCounts,
+	resetForTests = resetForTests,
+}

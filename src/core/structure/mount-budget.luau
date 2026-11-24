@@ -1,0 +1,183 @@
+--!strict
+
+local CoreTypes = require "../types"
+local Owners = require "../ownership/owner"
+local Children = require "../runtime/children"
+local Admission = require "../collection/admission"
+local Diagnostics = require "../diagnostics"
+local FramePump = require "../collection/frame-pump"
+local Support = require "./support"
+local Types = require "../reactive/types"
+local cellModule = require "../reactive/cell"
+local keyed = require "./keyed"
+
+export type Status = CoreTypes.MountBudgetStatus
+
+export type Options<V, K> = CoreTypes.MountBudgetOptions<V, K>
+
+local KNOWN_FIELDS: { [string]: true } = {
+	from = true,
+	key = true,
+	render = true,
+	mountsPerFrame = true,
+	priority = true,
+	status = true,
+}
+
+local identity = require("../reactive/graph").identityKey
+
+local function mountBudget<V, K>(options: Options<V, K>): Children.Directive
+	local settings = Support.optionsOf(options, "MountBudget", "from = ..., mountsPerFrame = ..., render = ...")
+	Support.noUnknownFields(settings, "MountBudget", KNOWN_FIELDS)
+	local source: Types.Body<{ V }> = Support.sourceOf(settings.from, "MountBudget", "from")
+	local render = Support.builderOf(settings.render, "MountBudget", "render")
+	local keyOf: (value: V, index: number) -> K = if settings.key == nil
+		then identity
+		else Support.builderOf(settings.key, "MountBudget", "key")
+	local priority: ((value: V, index: number) -> number)? = if settings.priority == nil
+		then nil
+		else Support.builderOf(settings.priority, "MountBudget", "priority")
+	local rawLimit = settings.mountsPerFrame
+	if type(rawLimit) ~= "number" or rawLimit ~= rawLimit or rawLimit < 1 then
+		return Diagnostics.raise("mount-budget/invalid-limit", "MountBudget needs a positive mountsPerFrame", {
+			actual = Diagnostics.describe(rawLimit),
+			expected = "a positive number",
+		})
+	end
+	local limit = math.max(1, math.floor(rawLimit))
+	local status = if settings.status == nil then nil else Support.writableOf(settings.status, "MountBudget", "status")
+
+	return function(mountPoint: Children.MountPoint)
+		local owner = Support.ownerFor "MountBudget"
+		Support.mountPointOf(mountPoint, "MountBudget")
+		local admitted: { [K]: boolean } = {}
+		local selectedValues: { V } = {}
+		local selected = cellModule.cell(selectedValues, function()
+			return false
+		end)
+		local selectedKeys: { K } = {}
+		local tick = cellModule.cell(0)
+		local pump = FramePump(owner, mountPoint.host, tick, "MountBudget")
+		local builtFor: { V }? = nil
+		local keys: { K } = {}
+		local queue: { number } = {}
+		local priorities: { number } = {}
+		local cursor = 1
+		local prefix = false
+
+		Owners.watch(owner, function(use)
+			use(tick)
+			local list = source(use)
+			local changed = list ~= builtFor
+			if changed then
+				local present: { [K]: boolean } = {}
+				table.clear(keys)
+				table.clear(queue)
+				table.clear(priorities)
+				for index, value in list do
+					local key = keyOf(value, index)
+					if present[key] then
+						return Diagnostics.raise("structure/duplicate-key", "two MountBudget items share a key", {
+							index = index,
+							contract = "keys identify mounted items and must be unique",
+						})
+					end
+					present[key] = true
+					keys[index] = key
+				end
+				for key in admitted do
+					if not present[key] then
+						admitted[key] = nil
+					end
+				end
+				local candidates: { number } = {}
+				for index, value in list do
+					local key = keys[index]
+					local priority = priority
+					if not admitted[key] then
+						candidates[#candidates + 1] = index
+						if priority ~= nil then
+							local score = priority(value, index)
+							if type(score) ~= "number" or score ~= score or math.abs(score) == math.huge then
+								return Diagnostics.raise(
+									"mount-budget/invalid-priority",
+									"MountBudget.priority returned an invalid score",
+									{
+										index = index,
+										actual = Diagnostics.describe(score),
+										expected = "a finite number",
+									}
+								)
+							end
+							priorities[index] = score
+						end
+					end
+				end
+				local ranked = Admission(#candidates, if priority == nil then nil else 0, function(a, b)
+					local left, right = candidates[a], candidates[b]
+					return if priorities[left] == priorities[right]
+						then left < right
+						else priorities[left] > priorities[right]
+				end)
+				if ranked.order == nil then
+					queue = candidates
+				else
+					for _, at in ranked.order do
+						queue[#queue + 1] = candidates[at]
+					end
+				end
+				cursor = 1
+				builtFor = list
+			end
+
+			local added: { number } = {}
+			for _ = 1, limit do
+				local index = queue[cursor]
+				if index == nil then
+					break
+				end
+				cursor += 1
+				admitted[keys[index]] = true
+				added[#added + 1] = index
+			end
+
+			if not changed and priority == nil and prefix then
+				for _, index in added do
+					selectedValues[#selectedValues + 1] = list[index]
+					selectedKeys[#selectedKeys + 1] = keys[index]
+				end
+			else
+				table.clear(selectedValues)
+				table.clear(selectedKeys)
+				prefix = true
+				local foundGap = false
+				for index, value in list do
+					local key = keys[index]
+					if admitted[key] then
+						selectedValues[#selectedValues + 1] = value
+						selectedKeys[#selectedKeys + 1] = key
+						if foundGap then
+							prefix = false
+						end
+					else
+						foundGap = true
+					end
+				end
+			end
+			selected:set(selectedValues)
+			local pending = #list - #selectedValues
+			if status ~= nil then
+				status:set { total = #list, mounted = #selectedValues, pending = pending }
+			end
+			pump.update(pending > 0)
+		end)
+
+		local function selectedKey(_value: V, index: number): K
+			return selectedKeys[index]
+		end
+		local selectedOptions: keyed.Options<V, K> = { from = selected, key = selectedKey, render = render }
+		keyed(selectedOptions)(mountPoint)
+	end
+end
+
+return mountBudget

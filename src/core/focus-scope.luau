@@ -1,0 +1,241 @@
+--!strict
+
+local CoreTypes = require "./types"
+local Active = require "./ownership/active"
+local Diagnostics = require "./diagnostics"
+local Owner = require "./ownership/owner"
+local Types = require "./reactive/types"
+local cellModule = require "./reactive/cell"
+local formula = require "./reactive/formula"
+local Support = require "./structure/support"
+
+export type Options<V, K> = CoreTypes.FocusScopeOptions<V, K>
+
+export type FocusScope<K> = CoreTypes.FocusScope<K>
+
+export type Direction = CoreTypes.FocusDirection
+
+local KNOWN_FIELDS: { [string]: true } = {
+	from = true,
+	key = true,
+	disabled = true,
+	position = true,
+	wrap = true,
+	initial = true,
+	autoFocus = true,
+}
+
+local identity = require("./reactive/graph").identityKey
+
+local function createFocusScope<V, K>(options: Options<V, K>): FocusScope<K>
+	local settings = Support.optionsOf(options, "createFocusScope", "from = ..., key = ...")
+	Support.noUnknownFields(settings, "createFocusScope", KNOWN_FIELDS)
+	local owner = Active.current()
+	if owner == nil then
+		return Diagnostics.raise("focus-scope/no-active-owner", "createFocusScope ran outside an owner", {
+			contract = "a focus scope lives exactly as long as the component or owner that created it",
+			fix = "create it inside a component or Compose.withOwner(owner, ...)",
+		})
+	end
+	local source: Types.Body<{ V }> = Support.sourceOf(settings.from, "createFocusScope", "from")
+	local keyOf: (value: V, index: number) -> K = if settings.key == nil
+		then identity
+		else Support.builderOf(settings.key, "createFocusScope", "key")
+	local disabled: ((value: V, index: number) -> boolean)? = if settings.disabled == nil
+		then nil
+		else Support.builderOf(settings.disabled, "createFocusScope", "disabled")
+	local positionOf: ((value: V, index: number) -> (number, number))? = if settings.position == nil
+		then nil
+		else Support.builderOf(settings.position, "createFocusScope", "position")
+	local wrap = settings.wrap == true
+	local autoFocus = settings.autoFocus == true
+	local initial: K? = settings.initial
+	local current: Types.Value<K?> = cellModule.cell(initial)
+	local order: { K } = {}
+	local positions: { [K]: number } = {}
+	local points: { [K]: { number } } = {}
+	local alive = true
+	local holder = owner
+
+	Owner.own(holder, function()
+		alive = false
+		table.clear(order)
+		table.clear(positions)
+		table.clear(points)
+	end)
+	Owner.watch(holder, function(use)
+		local list = source(use)
+		table.clear(order)
+		table.clear(positions)
+		table.clear(points)
+		for index, value in list do
+			local disabled = disabled
+			if disabled == nil or not disabled(value, index) then
+				local key = keyOf(value, index)
+				if positions[key] ~= nil then
+					return Diagnostics.raise(
+						"focus-scope/duplicate-key",
+						"createFocusScope encountered the same key twice",
+						{
+							index = index,
+							contract = "focus candidates have stable unique keys",
+						}
+					)
+				end
+				order[#order + 1] = key
+				positions[key] = #order
+				local positionOf = positionOf
+				if positionOf ~= nil then
+					local x, y = positionOf(value, index)
+					if
+						type(x) ~= "number"
+						or type(y) ~= "number"
+						or x ~= x
+						or y ~= y
+						or math.abs(x) == math.huge
+						or math.abs(y) == math.huge
+					then
+						return Diagnostics.raise(
+							"focus-scope/invalid-position",
+							"createFocusScope.position returned invalid coordinates",
+							{
+								index = index,
+								expected = "two finite numbers",
+							}
+						)
+					end
+					points[key] = { x, y }
+				end
+			end
+		end
+		local selected = current:peek()
+		if selected ~= nil and positions[selected] == nil then
+			current:set(if autoFocus then order[1] else nil)
+		elseif selected == nil and autoFocus then
+			current:set(order[1])
+		end
+	end)
+
+	local function ensureAlive(): boolean
+		return alive
+	end
+
+	local function focus(key: K): boolean
+		if not ensureAlive() or positions[key] == nil then
+			return false
+		end
+		current:set(key)
+		return true
+	end
+
+	local function clear()
+		if ensureAlive() then
+			current:set(nil)
+		end
+	end
+
+	local function choose(index: number): K?
+		if not ensureAlive() or #order == 0 then
+			return nil
+		end
+		local target = index
+		if wrap then
+			target = ((target - 1) % #order) + 1
+		else
+			target = math.clamp(target, 1, #order)
+		end
+		local key = order[target]
+		current:set(key)
+		return key
+	end
+
+	local function first(): K?
+		return choose(1)
+	end
+
+	local function last(): K?
+		return choose(#order)
+	end
+
+	local function move(delta: number): K?
+		local selected = current:peek()
+		if selected == nil then
+			return if delta > 0 then first() else last()
+		end
+		return choose((positions[selected] or 1) + delta)
+	end
+
+	local function moveDirection(direction: Direction): K?
+		if direction ~= "left" and direction ~= "right" and direction ~= "up" and direction ~= "down" then
+			return Diagnostics.raise("focus-scope/unknown-direction", "focus movement needs a known direction", {
+				actual = Diagnostics.describe(direction),
+				expected = '"left", "right", "up", or "down"',
+			})
+		end
+		if positionOf == nil then
+			return Diagnostics.raise(
+				"focus-scope/no-positions",
+				"directional focus movement needs candidate positions",
+				{
+					fix = "pass position = function(item) return item.x, item.y end, or use next/previous",
+				}
+			)
+		end
+		local selected = current:peek()
+		if selected == nil or points[selected] == nil then
+			return first()
+		end
+		local origin = points[selected]
+		local axis = if direction == "left" or direction == "right" then 1 else 2
+		local crossAxis = 3 - axis
+		local sign = if direction == "left" or direction == "up" then -1 else 1
+		local along, across = origin[axis], origin[crossAxis]
+		local best: K? = nil
+		local bestScore = math.huge
+		for _, key in order do
+			if key ~= selected then
+				local point = points[key]
+				local primary = (point[axis] - along) * sign
+				if primary > 0 then
+					local score = primary + math.abs(point[crossAxis] - across) * 2
+					if score < bestScore then
+						best, bestScore = key, score
+					end
+				end
+			end
+		end
+		if best ~= nil then
+			current:set(best)
+			return best
+		end
+		return selected
+	end
+
+	local function isFocused(key: K): Types.ReadOnlyValue<boolean>
+		local value = formula(function(use)
+			return use(current) == key
+		end)
+		Owner.own(holder, function()
+			value:dispose()
+		end)
+		return value
+	end
+
+	return {
+		current = current,
+		focus = focus,
+		clear = clear,
+		next = function()
+			return move(1)
+		end,
+		previous = function()
+			return move(-1)
+		end,
+		move = moveDirection,
+		first = first,
+		last = last,
+		isFocused = isFocused,
+	}
+end
+
+return createFocusScope

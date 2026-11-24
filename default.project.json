@@ -1,0 +1,10 @@
+{
+  "name": "compose",
+  "tree": {
+    "$className": "Folder",
+    "core": { "$path": "src/core" },
+    "roblox": { "$path": "src/roblox" },
+    "design": { "$path": "src/design" },
+    "design-editor": { "$path": "src/design-editor" }
+  }
+}

@@ -1,0 +1,1302 @@
+--!strict
+
+local Compose = require "../../src/core"
+local Support = require "../support"
+local Test = require "../harness"
+
+local function required<T>(value: T?): T
+	assert(value ~= nil)
+	return value
+end
+
+local describe, it, expect = Test.describe, Test.it, Test.expect
+
+local function expectClean(world: Support.World)
+	expect(world.host.leaked()):toEqual { "Root#1" }
+	expect(world.host.liveSubscriptions()):toBe(0)
+	expect(Compose.outstandingMounts()):toBe(0)
+end
+
+describe("ownership", function()
+	describe("owners", function()
+		it("releases a dependency-free watch callback while preserving its cleanup", function()
+			for _, cleanup in { false, true } do
+				local root = Compose.createOwner()
+				local weak: { { number } } = {}
+				Support.weakValues(weak)
+				local runs, released = 0, 0
+				local function register(): () -> ()
+					local payload = { 1 }
+					weak[1] = payload
+					return Compose.owner.watch(root, function()
+						runs += payload[1]
+						if cleanup then
+							Compose.cleanup(function()
+								released += 1
+							end)
+						end
+					end)
+				end
+				local stop = register()
+				for _ = 1, 200 do
+					local garbage = table.create(4000)
+					for index = 1, 4000 do
+						garbage[index] = { index, index + 1 }
+					end
+				end
+				expect(weak[1]):toBe(nil)
+				expect(runs):toBe(1)
+				expect(released):toBe(0)
+				stop()
+				stop()
+				Compose.owner.dispose(root)
+				expect(released):toBe(if cleanup then 1 else 0)
+			end
+		end)
+
+		it("releases cleanup captures even while a used disposer is retained", function()
+			for _, method in { "release", "dispose", "rollback" } do
+				for _, after in { false, true } do
+					local root = Compose.createOwner()
+					local checkpoint = Compose.owner.checkpoint(root)
+					local weak: { { number } } = {}
+					Support.weakValues(weak)
+					local released = 0
+					local function register(): () -> ()
+						local payload = { 1 }
+						weak[1] = payload
+						return Compose.owner.own(
+							root,
+							function()
+								released += payload[1]
+							end,
+							if after
+								then function()
+									released += 1
+								end
+								else nil
+						)
+					end
+					local release = register()
+					if method == "release" then
+						release()
+					elseif method == "dispose" then
+						Compose.owner.dispose(root)
+					else
+						Compose.owner.rollbackTo(root, checkpoint)
+					end
+					for _ = 1, 200 do
+						local garbage = table.create(4000)
+						for index = 1, 4000 do
+							garbage[index] = { index, index + 1 }
+						end
+					end
+					expect(weak[1]):toBe(nil)
+					release()
+					Compose.owner.dispose(root)
+					expect(released):toBe(if after then 2 else 1)
+				end
+			end
+		end)
+
+		it("disposes newest first", function()
+			local order: { string } = {}
+			local owner = Compose.createOwner()
+			Compose.owner.own(owner, function()
+				table.insert(order, "first")
+			end)
+			Compose.owner.own(owner, function()
+				table.insert(order, "second")
+			end)
+			Compose.owner.own(owner, function()
+				table.insert(order, "third")
+			end)
+			Compose.owner.dispose(owner)
+			expect(order):toEqual { "third", "second", "first" }
+		end)
+
+		it("disposes deep owner trees iteratively in depth first reverse registration order", function()
+			local root = Compose.createOwner()
+			local current = root
+			local released: { number } = {}
+			for index = 1, 10000 do
+				Compose.owner.own(current, function()
+					table.insert(released, index)
+				end)
+				current = Compose.owner.createChild(current)
+			end
+			Compose.owner.dispose(root)
+			expect(#released):toBe(10000)
+			for index, value in released do
+				expect(value):toBe(10001 - index)
+			end
+			expect(Compose.owner.isDisposed(current)):toBe(true)
+			Compose.owner.dispose(root)
+			expect(#released):toBe(10000)
+		end)
+
+		it("disposes each entry exactly once, however it is reached", function()
+			local runs = 0
+			local owner = Compose.createOwner()
+			local detach = Compose.owner.own(owner, function()
+				runs += 1
+			end)
+			detach()
+			detach()
+			Compose.owner.dispose(owner)
+			Compose.owner.dispose(owner)
+			expect(runs):toBe(1)
+		end)
+
+		it("runs every disposer even when one raises, and reports them all", function()
+			local ran: { string } = {}
+			local owner = Compose.createOwner()
+			Compose.owner.own(owner, function()
+				table.insert(ran, "bottom")
+			end)
+			Compose.owner.own(owner, function()
+				error "middle blew up"
+			end)
+			Compose.owner.own(owner, function()
+				error "top blew up"
+			end)
+
+			local ok, err: unknown = pcall(function()
+				Compose.owner.dispose(owner)
+			end)
+			expect(ok):toBe(false)
+			expect(ran):toEqual { "bottom" }
+			expect(tostring(err)):toContain "top blew up"
+			expect(tostring(err)):toContain "middle blew up"
+		end)
+
+		it("hands back the one failure exactly as it was raised", function()
+			local raised = { code = "cleanup/exploded" }
+			local owner = Compose.createOwner()
+			local ran = false
+			Compose.owner.own(owner, function()
+				ran = true
+			end)
+			Compose.owner.own(owner, function()
+				error(raised, 0)
+			end)
+
+			local ok, err: unknown = pcall(function()
+				Compose.owner.dispose(owner)
+			end)
+			expect(ok):toBe(false)
+			expect(err):toBe(raised)
+			expect(ran):toBe(true)
+		end)
+
+		it("runs a cleanup a failing cleanup registered on the way out", function()
+			local ran: { string } = {}
+			local owner = Compose.createOwner()
+			Compose.owner.own(owner, function()
+				table.insert(ran, "bottom")
+			end)
+			Compose.owner.own(owner, function()
+				Compose.owner.own(owner, function()
+					table.insert(ran, "late")
+				end)
+				error "top blew up"
+			end)
+
+			local ok, err: unknown = pcall(function()
+				Compose.owner.dispose(owner)
+			end)
+			expect(ok):toBe(false)
+			expect(tostring(err)):toContain "top blew up"
+			expect(ran):toEqual { "late", "bottom" }
+			expect(Compose.owner.size(owner)):toBe(0)
+		end)
+
+		it("keeps disposing a parent whose child cleanup raised, and reports both levels", function()
+			local ran: { string } = {}
+			local parent = Compose.createOwner()
+			Compose.owner.own(parent, function()
+				table.insert(ran, "parent bottom")
+			end)
+			local child = Compose.owner.createChild(parent)
+			Compose.owner.own(child, function()
+				table.insert(ran, "child bottom")
+			end)
+			Compose.owner.own(child, function()
+				error "child blew up"
+			end)
+			Compose.owner.own(parent, function()
+				error "parent top blew up"
+			end)
+
+			local ok, err: unknown = pcall(Compose.owner.dispose, parent)
+			expect(ok):toBe(false)
+			expect(ran):toEqual { "child bottom", "parent bottom" }
+			expect(tostring(err)):toContain "child blew up"
+			expect(tostring(err)):toContain "parent top blew up"
+			expect(Compose.owner.isDisposed(child)):toBe(true)
+			expect(Compose.owner.size(parent)):toBe(0)
+		end)
+
+		it("disposes a child when its parent goes", function()
+			local owner = Compose.createOwner()
+			local child = Compose.owner.createChild(owner)
+			local released = false
+			Compose.owner.own(child, function()
+				released = true
+			end)
+			Compose.owner.dispose(owner)
+			expect(released):toBe(true)
+			expect(Compose.owner.isDisposed(child)):toBe(true)
+		end)
+
+		it("detaches a child that disposes itself first", function()
+			local owner = Compose.createOwner()
+			local child = Compose.owner.createChild(owner)
+			expect(Compose.owner.size(owner)):toBe(1)
+			Compose.owner.dispose(child)
+			expect(Compose.owner.size(owner)):toBe(0)
+			Compose.owner.dispose(owner)
+		end)
+
+		it("does not skip older cleanup when a disposer detaches the next entry", function()
+			local parent = Compose.createOwner()
+			local ran: { string } = {}
+			Compose.owner.own(parent, function()
+				table.insert(ran, "older")
+			end)
+			local child = Compose.owner.createChild(parent)
+			Compose.owner.own(child, function()
+				table.insert(ran, "child")
+			end)
+			Compose.owner.own(parent, function()
+				table.insert(ran, "later")
+				Compose.owner.dispose(child)
+			end)
+
+			Compose.owner.dispose(parent)
+			Compose.owner.dispose(parent)
+			expect(ran):toEqual { "later", "child", "older" }
+			expect(Compose.owner.isDisposed(child)):toBe(true)
+			expect(Compose.owner.size(parent)):toBe(0)
+		end)
+
+		it("runs a disposer immediately when registered after disposal", function()
+			local owner = Compose.createOwner()
+			Compose.owner.dispose(owner)
+			local ran = false
+			Compose.owner.own(owner, function()
+				ran = true
+			end)
+			expect(ran):toBe(true)
+			expect(Compose.owner.size(owner)):toBe(0)
+		end)
+	end)
+
+	describe("custody", function()
+		it("destroys what it created", function()
+			local world = Support.world()
+			local dispose, node = world.runtime.mount(function()
+				return world.create "Frame" {}
+			end, world.root)
+			expect(Compose.custodyOf(node)):toBe "owned"
+			dispose()
+			expect(world.host.isAlive(node)):toBe(false)
+			expectClean(world)
+		end)
+
+		it("never destroys a node it did not create", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			local dispose = world.runtime.mount(function()
+				local frame = world.create "Frame" {}
+				world.runtime.borrow(external)
+				return frame
+			end, world.root)
+
+			dispose()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(Compose.custodyOf(external)):toBe "borrowed"
+		end)
+
+		it("treats an unknown node as borrowed", function()
+			local world = Support.world()
+			local stranger = world.host.makeNode "Stranger"
+			expect(Compose.custodyOf(stranger)):toBe "borrowed"
+		end)
+
+		it("preserves borrowed static children when their containing owner ends", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { external }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.parentOf(external)):toBe(nil)
+			expect(Compose.custodyOf(external)):toBe "borrowed"
+		end)
+
+		it("lets parent destruction release static children from the ending owner", function()
+			local world = Support.world()
+			local dispose = world.runtime.mount(function()
+				local children: { Compose.Node } = {}
+				for _ = 1, 100 do
+					table.insert(children, world.create "Row" {})
+				end
+				return world.create "Frame"(children)
+			end, world.root)
+			world.host.resetCounts()
+			dispose()
+			expect(world.host.counts().removeChild):toBe(1)
+			expectClean(world)
+		end)
+
+		it("preserves static children owned by another owner", function()
+			local world = Support.world()
+			local original = Compose.createOwner(world.runtime.reactor)
+			local child = Compose.withOwner(original, function()
+				return world.create "Row" {}
+			end)
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { child, world.create "Row" {} }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "owned"
+			Compose.owner.dispose(original)
+			expectClean(world)
+		end)
+
+		it("keeps owner identities distinct across runtimes after earlier owners end", function()
+			local world = Support.world()
+			local other = Compose.createRuntime(world.host.adapter)
+			local first = Compose.createOwner(world.runtime.reactor)
+			Compose.withOwner(first, function()
+				world.create "Earlier" {}
+			end)
+			Compose.owner.dispose(first)
+			local original = Compose.createOwner(other.reactor)
+			local child = Compose.withOwner(original, function()
+				return other.create "External" {}
+			end)
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { world.create "Row" { child } }
+			end, world.root)
+			dispose()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "owned"
+			Compose.owner.dispose(original)
+			other:dispose()
+			expectClean(world)
+		end)
+
+		it("releases protected descendants before destroying a static ancestor", function()
+			for _, dynamic in { false, true } do
+				local world = Support.world()
+				local external = world.host.makeNode "External"
+				local dispose = world.runtime.mount(function()
+					local content = if dynamic
+						then world.create "Content" {
+							Compose.show(Compose.cell(true), function()
+								return external
+							end),
+						}
+						else world.create "Content" { external }
+					return world.create "Frame" { world.create "Row" { content } }
+				end, world.root)
+				dispose()
+				expect(world.host.isAlive(external)):toBe(true)
+				expect(world.host.parentOf(external)):toBe(nil)
+				expect(world.host.liveNodes()):toBe(2)
+			end
+		end)
+
+		it("detaches same-owner static children when their parent build fails", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local child = Compose.withOwner(owner, function()
+				return world.create "Row" {}
+			end)
+			world.host.failNext("insertChild", 1)
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { child, world.create "Row" {} }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			Compose.owner.dispose(owner)
+			expectClean(world)
+		end)
+
+		it("preserves an earlier child borrowed while its new parent build fails", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local child = Compose.withOwner(owner, function()
+				return world.create "Row" {}
+			end)
+			local function borrowChild(_mountPoint: Compose.MountPoint)
+				world.runtime.borrow(child)
+			end
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { child, borrowChild, false }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(child)):toBe(true)
+			expect(world.host.parentOf(child)):toBe(nil)
+			expect(Compose.custodyOf(child)):toBe "borrowed"
+			Compose.owner.dispose(owner)
+			expect(world.host.isAlive(child)):toBe(true)
+			world.host.adapter.render.destroyNode(child)
+			expectClean(world)
+		end)
+
+		it("continues unwinding earlier same-owner children after a detach failure", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local first, second = Compose.withOwner(owner, function()
+				return world.create "First" {}, world.create "Second" {}
+			end)
+			world.host.failNext "removeChild"
+			expect(function()
+				Compose.withOwner(owner, function()
+					return world.create "Frame" { first, second, false }
+				end)
+			end):toThrow()
+			expect(world.host.isAlive(first)):toBe(true)
+			expect(world.host.parentOf(first)):toBe(nil)
+			Compose.owner.dispose(owner)
+			expectClean(world)
+		end)
+
+		it("continues releasing static attachments after one detachment fails", function()
+			local world = Support.world()
+			local first = world.host.makeNode "First"
+			local second = world.host.makeNode "Second"
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" { first, second }
+			end, world.root)
+			world.host.resetCounts()
+			world.host.failNext("removeChild", 1)
+			expect(dispose):toThrow()
+			expect(world.host.isAlive(first)):toBe(true)
+			expect(world.host.parentOf(first)):toBe(nil)
+			expect(world.host.counts().removeChild):toBe(2)
+		end)
+
+		it("preserves a newer parent when an old static attachment ends", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			local disposeFirst = world.runtime.mount(function()
+				return world.create "Frame" { external }
+			end, world.root)
+			local disposeSecond, second = world.runtime.mount(function()
+				return world.create "Frame" { external }
+			end, world.root)
+			disposeFirst()
+			expect(world.host.parentOf(external)):toBe(second)
+			expect(world.host.childrenOf(second)):toEqual { external }
+			disposeSecond()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.parentOf(external)):toBe(nil)
+		end)
+
+		it("preserves borrowed children when a later property or child insertion fails", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			world.host.failNext("insertChild", 1)
+			expect(function()
+				world.runtime.mount(function()
+					return world.create "Frame" { external, world.create "Row" {} }
+				end, world.root)
+			end):toThrow()
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.parentOf(external)):toBe(nil)
+			expect(world.host.liveNodes()):toBe(2)
+		end)
+
+		it("destroys an adopted node exactly once", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			local dispose = world.runtime.mount(function()
+				expect(world.runtime.adopt(external)):toBe(external)
+				return world.create "Frame" {}
+			end, world.root)
+
+			expect(Compose.custodyOf(external)):toBe "adopted"
+			dispose()
+			expect(world.host.isAlive(external)):toBe(false)
+			expect(world.host.counts().destroyNode):toBe(2)
+		end)
+
+		it("immediately destroys a late result adopted through its ended owner's callback", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local receive = Compose.withOwner(owner, function()
+				return Compose.bindOwner(function(node: Compose.Node)
+					return world.runtime.adopt(node)
+				end)
+			end)
+			Compose.owner.dispose(owner)
+			local result = world.host.makeNode "LateResult"
+			world.host.resetCounts()
+			expect(receive(result)):toBe(result)
+			expect(world.host.isAlive(result)):toBe(false)
+			expect(world.host.counts().destroyNode):toBe(1)
+			Compose.owner.dispose(owner)
+			expect(world.host.counts().destroyNode):toBe(1)
+			expect(world.host.liveNodes()):toBe(1)
+		end)
+
+		it("refuses to adopt a node it already owns", function()
+			local world = Support.world()
+			local ok, err: unknown = pcall(function()
+				world.runtime.mount(function()
+					local frame = world.create "Frame" {}
+					world.runtime.adopt(frame)
+					return frame
+				end, world.root)
+			end)
+			expect(ok):toBe(false)
+			expect(tostring(err)):toContain "owner/already-owned"
+		end)
+
+		it("clears properties it wrote onto a borrowed node", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			world.host.declareEvent("External", "Poked")
+			local tint = Compose.cell "red"
+			local pokes = 0
+
+			local dispose = world.runtime.mount(function()
+				world.runtime.decorate(external, {
+					Tint = function(use)
+						return use(tint)
+					end,
+					Label = "static",
+					Poked = function()
+						pokes += 1
+					end,
+				})
+				return world.create "Frame" {}
+			end, world.root)
+
+			expect(world.host.propertyOf(external, "Tint")):toBe "red"
+			tint:set "blue"
+			world.settle()
+			expect(world.host.propertyOf(external, "Tint")):toBe "blue"
+			world.host.dispatch(external, "Poked")
+			expect(pokes):toBe(1)
+
+			dispose()
+
+			expect(world.host.isAlive(external)):toBe(true)
+			expect(world.host.propertyOf(external, "Tint")):toBeNil()
+			expect(world.host.propertyOf(external, "Label")):toBeNil()
+			world.host.dispatch(external, "Poked")
+			expect(pokes):toBe(1)
+			expect(world.host.liveSubscriptions()):toBe(0)
+		end)
+
+		it("keeps no owner for a decoration that holds nothing", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Poked")
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local pokes = 0
+			local frame = Compose.withOwner(owner, function()
+				local made = world.create "Frame" {}
+				local held = Compose.owner.size(owner)
+				world.runtime.decorate(made, { Label = "static", Tint = "red" })
+				expect(Compose.owner.size(owner)):toBe(held)
+				world.runtime.decorate(made, {
+					Poked = function()
+						pokes += 1
+					end,
+				})
+				expect(Compose.owner.size(owner)):toBe(held + 1)
+				return made
+			end)
+			expect(world.host.propertyOf(frame, "Label")):toBe "static"
+			expect(world.host.propertyOf(frame, "Tint")):toBe "red"
+			world.host.dispatch(frame, "Poked")
+			expect(pokes):toBe(1)
+			Compose.owner.dispose(owner)
+			expect(world.host.isAlive(frame)):toBe(false)
+			expect(world.host.liveSubscriptions()):toBe(0)
+		end)
+
+		it("mounts one nested node with one insertion and removes it when the mount ends", function()
+			local world = Support.world()
+			local holder: Compose.Node? = nil
+			local inner: Compose.Node? = nil
+			local stopInner: (() -> ())? = nil
+			local dispose = world.runtime.mount(function()
+				local frame = world.create "Frame" {}
+				holder = frame
+				world.host.resetCounts()
+				local stop, node = world.runtime.mount(function()
+					return world.create "Row" {}
+				end, frame)
+				stopInner, inner = stop, node
+				expect(world.host.counts().insertChild):toBe(1)
+				return frame
+			end, world.root)
+			expect(world.host.parentOf(required(inner))):toBe(required(holder))
+			world.host.resetCounts()
+			required(stopInner)()
+			required(stopInner)()
+			expect(world.host.counts().removeChild):toBe(1)
+			expect(world.host.isAlive(required(inner))):toBe(false)
+			expect(world.host.isAlive(required(holder))):toBe(true)
+			dispose()
+			expectClean(world)
+		end)
+
+		it("keeps a nested mount that returns no node or several nodes", function()
+			local world = Support.world()
+			local dispose = world.runtime.mount(function()
+				local frame = world.create "Frame" {}
+				local _, none = Support.invoke(world.runtime.mount, function()
+					return nil
+				end, frame)
+				expect(none):toBeNil()
+				Support.invoke(world.runtime.mount, function()
+					return world.create "Row" {}, world.create "Row" {}
+				end, frame)
+				expect(#world.host.childrenOf(frame)):toBe(2)
+				expect(function()
+					Support.invoke(world.runtime.mount, function()
+						return 5
+					end, frame)
+				end):toThrow "mount/not-a-node"
+				expect(#world.host.childrenOf(frame)):toBe(2)
+				return frame
+			end, world.root)
+			dispose()
+			expectClean(world)
+		end)
+
+		it("refuses to add children through decorate", function()
+			local world = Support.world()
+			local external = world.host.makeNode "External"
+			expect(function()
+				world.runtime.mount(function()
+					world.runtime.decorate(external, { world.create "Text" {} })
+					return world.create "Frame" {}
+				end, world.root)
+			end):toThrow "props/decorate-has-children"
+		end)
+	end)
+
+	describe("cleanup", function()
+		it("registers a function with the active owner", function()
+			local world = Support.world()
+			local released = false
+			local dispose = world.runtime.mount(function()
+				Compose.cleanup(function()
+					released = true
+				end)
+				return world.create "Frame" {}
+			end, world.root)
+
+			expect(released):toBe(false)
+			dispose()
+			expect(released):toBe(true)
+			expectClean(world)
+		end)
+
+		it("accepts an object with destroy or dispose", function()
+			local world = Support.world()
+			local destroyed = false
+			local disposed = false
+			local dispose = world.runtime.mount(function()
+				Compose.cleanup {
+					destroy = function()
+						destroyed = true
+					end,
+				}
+				Compose.cleanup {
+					dispose = function()
+						disposed = true
+					end,
+				}
+				return world.create "Frame" {}
+			end, world.root)
+
+			dispose()
+			expect(destroyed):toBe(true)
+			expect(disposed):toBe(true)
+		end)
+
+		it("refuses something it cannot tear down", function()
+			local world = Support.world()
+			expect(function()
+				world.runtime.mount(function()
+					Compose.cleanup(42)
+					return world.create "Frame" {}
+				end, world.root)
+			end):toThrow "owner/uncleanable"
+		end)
+
+		it("refuses outside a mount", function()
+			Compose.__resetForTests()
+			expect(function()
+				Compose.cleanup(function() end)
+			end):toThrow "owner/no-active-owner"
+		end)
+	end)
+	describe("across yields", function()
+		for _, checking in { false, true } do
+			it(
+				"keeps portal children and async environment watches under their scopes: " .. tostring(checking),
+				function()
+					local world = Support.world()
+					Compose.setYieldChecking(checking)
+					Compose.inspect.start()
+					local owner = Compose.createOwner(world.runtime.reactor)
+					local older, newer = Compose.createOwner(), Compose.createOwner()
+					local layer = world.host.makeNode "Layer"
+					local environment = world.host.makeNode "Environment"
+					world.host.poke(environment, "Size", 1)
+					local open, tab, projection = Compose.cell(false), Compose.cell "table", Compose.cell(1)
+					local allocated, released = 0, 0
+					local function nested(body: () -> ())
+						local ok, failure = coroutine.resume(coroutine.create(body))
+						assert(ok, tostring(failure))
+					end
+					local function signal(body: () -> ())
+						local callback = coroutine.create(function()
+							Compose.withOwner(older, function()
+								coroutine.yield()
+								nested(body)
+							end)
+						end)
+						local ok, failure = coroutine.resume(callback)
+						assert(ok, tostring(failure))
+						Compose.withOwner(newer, function()
+							local resumed, cause = coroutine.resume(callback)
+							assert(resumed, tostring(cause))
+						end)
+					end
+					local function content(kind: string): Compose.Node
+						local child: Compose.Node? = nil
+						nested(function()
+							local size = world.runtime.observe(environment, "Size")
+							Compose.watch(function(use)
+								use(size)
+								nested(function()
+									world.create "Measurement" {}
+									allocated += 1
+									Compose.cleanup(function()
+										released += 1
+									end)
+								end)
+							end)
+							child = world.create(kind) { Size = size }
+						end)
+						return assert(child)
+					end
+					Compose.withOwner(owner, function()
+						world.runtime.mount(function()
+							return world.create "Shell" {
+								Compose.show(open, function()
+									return Compose.portal(layer, function()
+										return {
+											world.create "Sheet" {
+												Compose.switch(tab, {
+													table = function()
+														return content "Table"
+													end,
+													stage = function()
+														return world.create "Stage" {
+															Compose.keyed {
+																from = function(use)
+																	return { use(projection) }
+																end,
+																key = function(value)
+																	return value
+																end,
+																render = function()
+																	return content "Projection"
+																end,
+															},
+														}
+													end,
+												}),
+											},
+										}
+									end)
+								end),
+							}
+						end, world.root)
+					end)
+					local function liveScopes(report: Compose.InspectOwner): number
+						local count = if report.disposed then 0 else 1
+						for _, child in report.children do
+							count += liveScopes(child)
+						end
+						return count
+					end
+					local baseline = required(Compose.inspect.owner(owner))
+					for cycle = 1, 2 do
+						signal(function()
+							open:set(true)
+						end)
+						local sheet = world.host.childrenOf(layer)[1]
+						expect(world.host.kindOf(sheet)):toBe "Sheet"
+						signal(function()
+							tab:set "stage"
+						end)
+						local previous = world.host.childrenOf(world.host.childrenOf(sheet)[1])[1]
+						signal(function()
+							projection:set(cycle + 1)
+							world.host.poke(environment, "Size", cycle + 1)
+						end)
+						local stage = world.host.childrenOf(sheet)[1]
+						local projected = world.host.childrenOf(stage)[1]
+						expect(world.host.kindOf(stage)):toBe "Stage"
+						expect(world.host.kindOf(projected)):toBe "Projection"
+						expect(projected == previous):toBe(false)
+						expect(world.host.isAlive(previous)):toBe(false)
+						expect(world.host.propertyOf(projected, "Size")):toBe(cycle + 1)
+						expect(world.host.liveSubscriptions()):toBe(1)
+						expect(allocated - released):toBe(1)
+						signal(function()
+							open:set(false)
+							tab:set "table"
+						end)
+						expect(world.host.childrenOf(layer)):toEqual {}
+						expect(world.host.liveSubscriptions()):toBe(0)
+						expect(allocated):toBe(released)
+						local closed = required(Compose.inspect.owner(owner))
+						expect(closed.totalHolding):toBe(baseline.totalHolding)
+						expect(liveScopes(closed)):toBe(liveScopes(baseline))
+					end
+					Compose.owner.dispose(owner)
+					Compose.owner.dispose(older)
+					Compose.owner.dispose(newer)
+					local disposed = required(Compose.inspect.owner(owner))
+					expect(disposed.totalHolding):toBe(0)
+					expect(liveScopes(disposed)):toBe(0)
+					expect(Compose.inspect.snapshot().outstandingMounts):toBe(0)
+					expect(world.host.isAlive(layer)):toBe(true)
+					expect(world.host.liveNodes()):toBe(3)
+					Compose.inspect.stop()
+					Compose.setYieldChecking(false)
+				end
+			)
+		end
+
+		it("keeps reactive run resources when distinct owners resume a host notification", function()
+			local world = Support.world()
+			local watcher = Compose.createOwner(world.runtime.reactor)
+			local source = Compose.cell(0)
+			local node: Compose.Node? = nil
+			local releases = 0
+			Compose.owner.watch(watcher, function(use)
+				if use(source) > 0 then
+					node = world.create "Frame" {}
+					Compose.cleanup(function()
+						releases += 1
+					end)
+				end
+			end)
+			local older, newer = Compose.createOwner(), Compose.createOwner()
+			local childOk, childCause: unknown = nil, nil
+			local callback = coroutine.create(function()
+				Compose.withOwner(older, function()
+					coroutine.yield()
+					childOk, childCause = coroutine.resume(coroutine.create(function()
+						source:set(1)
+					end))
+				end)
+			end)
+			local ok, failure = coroutine.resume(callback)
+			assert(ok, tostring(failure))
+			Compose.withOwner(newer, function()
+				local resumed, cause = coroutine.resume(callback)
+				assert(resumed, tostring(cause))
+			end)
+			Compose.owner.dispose(older)
+			Compose.owner.dispose(newer)
+			expect(childOk):toBe(true)
+			expect(childCause):toBe(nil)
+			expect(world.host.isAlive(assert(node))):toBe(true)
+			expect(releases):toBe(0)
+			source:set(2)
+			expect(releases):toBe(1)
+			Compose.owner.dispose(watcher)
+			expect(releases):toBe(2)
+			expectClean(world)
+		end)
+		for _, mode in { "unbound", "bindOwner", "withOwner", "scoped-unbound", "scoped-bindOwner", "scoped-withOwner" } do
+			it("refuses ambiguous resumers unless the child explicitly selects its owner: " .. mode, function()
+				local binding = string.gsub(mode, "^scoped%-", "")
+				local world = Support.world()
+				world.host.declareEvent("Frame", "Activated")
+				local borrowed = world.host.makeNode "Frame"
+				local older, newer = Compose.createOwner(), Compose.createOwner()
+				local node: Compose.Node? = nil
+				local releases = 0
+				local childOk, childCause: unknown = nil, nil
+				local callback = coroutine.create(function()
+					Compose.withOwner(older, function()
+						local function allocate()
+							world.runtime.borrow(borrowed)
+							node = world.create "Frame" {}
+							world.runtime.connect(borrowed, "Activated", function() end)
+							Compose.cleanup(function()
+								releases += 1
+							end)
+						end
+						local child = allocate
+						if binding == "bindOwner" then
+							child = Compose.bindOwner(allocate)
+						elseif binding == "withOwner" then
+							child = function()
+								Compose.withOwner(older, allocate)
+							end
+						end
+						coroutine.yield()
+						childOk, childCause = coroutine.resume(coroutine.create(child))
+					end)
+				end)
+				local function notify()
+					local ok, failure = coroutine.resume(callback)
+					assert(ok, tostring(failure))
+					Compose.withOwner(newer, function()
+						local resumed, cause = coroutine.resume(callback)
+						assert(resumed, tostring(cause))
+					end)
+				end
+				if binding ~= mode then
+					local watcher = Compose.createOwner(world.runtime.reactor)
+					Compose.owner.watch(watcher, notify)
+					Compose.owner.dispose(watcher)
+				else
+					notify()
+				end
+				Compose.owner.dispose(older)
+				local afterOlder = releases
+				Compose.owner.dispose(newer)
+				Compose.owner.dispose(older)
+				Compose.owner.dispose(newer)
+				if binding == "unbound" then
+					expect(childOk):toBe(false)
+					expect(tostring(childCause)):toContain "owner/no-active-owner"
+					expect(tostring(childCause)):toContain "bindOwner"
+					expect(node):toBe(nil)
+					expect(releases):toBe(0)
+				else
+					expect(childOk):toBe(true)
+					expect(afterOlder):toBe(1)
+					expect(releases):toBe(1)
+					expect(world.host.isAlive(assert(node))):toBe(false)
+				end
+				expect(world.host.isAlive(borrowed)):toBe(true)
+				expect(world.host.liveSubscriptions()):toBe(0)
+				expect(Compose.outstandingMounts()):toBe(0)
+			end)
+		end
+
+		it("keeps an explicit suspended mount when a reactive body resumes it", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Activated")
+			local borrowed = world.host.makeNode "Frame"
+			local node: Compose.Node? = nil
+			local dispose: (() -> ())? = nil
+			local releases = 0
+			local mounting = coroutine.create(function()
+				dispose = world.runtime.mount(function()
+					world.runtime.borrow(borrowed)
+					coroutine.yield()
+					node = world.create "Frame" {}
+					world.runtime.connect(borrowed, "Activated", function() end)
+					Compose.cleanup(function()
+						releases += 1
+					end)
+					return node
+				end, world.root)
+			end)
+			local ok, failure = coroutine.resume(mounting)
+			assert(ok, tostring(failure))
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local pulse = Compose.cell(0)
+			Compose.owner.watch(owner, function(use)
+				if use(pulse) == 0 then
+					local resumed, cause = coroutine.resume(mounting)
+					assert(resumed, tostring(cause))
+				end
+			end)
+			pulse:set(1)
+			Compose.owner.dispose(owner)
+			local retained = world.host.isAlive(assert(node))
+			local retainedSubscriptions = world.host.liveSubscriptions()
+			local prematureReleases = releases
+			local release = required(dispose)
+			release()
+			release()
+			expect(retained):toBe(true)
+			expect(retainedSubscriptions):toBe(1)
+			expect(prematureReleases):toBe(0)
+			expect(releases):toBe(1)
+			expect(world.host.isAlive(borrowed)):toBe(true)
+			expect(world.host.liveSubscriptions()):toBe(0)
+			expect(Compose.outstandingMounts()):toBe(0)
+		end)
+
+		it("contains a suspended reactive body without lending its run to an independent mount", function()
+			local world = Support.world()
+			local owner = Compose.createOwner(world.runtime.reactor)
+			local pulse = Compose.cell(0)
+			local released = 0
+			local watching = coroutine.create(function()
+				Compose.owner.watch(owner, function(use)
+					if use(pulse) == 0 then
+						coroutine.yield()
+						Compose.cleanup(function()
+							released += 1
+						end)
+					end
+				end)
+			end)
+			local ok, failure = coroutine.resume(watching)
+			assert(ok, tostring(failure))
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" {}
+			end, world.root)
+			local mountsBefore = Compose.outstandingMounts()
+			ok, failure = coroutine.resume(watching)
+			assert(ok, tostring(failure))
+			pulse:set(1)
+			local mountsAfter = Compose.outstandingMounts()
+			Compose.owner.dispose(owner)
+			dispose()
+			expect(mountsBefore):toBe(1)
+			expect(mountsAfter):toBe(1)
+			expect(released):toBe(1)
+			expectClean(world)
+		end)
+
+		it("preserves a suspended run when an unrelated activation ends before its nested owner returns", function()
+			local world = Support.world()
+			local unrelated = Compose.createOwner(world.runtime.reactor)
+			local external = coroutine.create(function()
+				Compose.withOwner(unrelated, function()
+					coroutine.yield()
+				end)
+			end)
+			local ok, failure = coroutine.resume(external)
+			assert(ok, tostring(failure))
+			local watcher = Compose.createOwner(world.runtime.reactor)
+			local nested = Compose.owner.createChild(watcher)
+			local pulse = Compose.cell(0)
+			local nestedReleases, runReleases = 0, 0
+			local watching = coroutine.create(function()
+				Compose.owner.watch(watcher, function(use)
+					if use(pulse) ~= 0 then
+						return
+					end
+					Compose.withOwner(nested, function()
+						coroutine.yield()
+						Compose.cleanup(function()
+							nestedReleases += 1
+						end)
+					end)
+					Compose.cleanup(function()
+						runReleases += 1
+					end)
+				end)
+			end)
+			ok, failure = coroutine.resume(watching)
+			assert(ok, tostring(failure))
+			ok, failure = coroutine.resume(external)
+			assert(ok, tostring(failure))
+			ok, failure = coroutine.resume(watching)
+			assert(ok, tostring(failure))
+			pulse:set(1)
+			local nestedBeforeDisposal = nestedReleases
+			local runBeforeDisposal = runReleases
+			Compose.owner.dispose(watcher)
+			Compose.owner.dispose(watcher)
+			Compose.owner.dispose(unrelated)
+			expect(nestedBeforeDisposal):toBe(0)
+			expect(runBeforeDisposal):toBe(1)
+			expect(nestedReleases):toBe(1)
+			expect(runReleases):toBe(1)
+			expectClean(world)
+		end)
+
+		it("keeps a body that resumed after another mount began under its own owner", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Activated")
+
+			local firstDispose: (() -> ())? = nil
+			local lateNode: Compose.Node? = nil
+			local suspended = coroutine.create(function()
+				firstDispose = world.runtime.mount(function()
+					local frame = world.create "Frame" {}
+					coroutine.yield()
+					local late = world.create "Frame" {}
+					world.runtime.connect(late, "Activated", function() end)
+					lateNode = late
+					return frame
+				end, world.root)
+			end)
+
+			coroutine.resume(suspended)
+			local secondDispose = world.runtime.mount(function()
+				return world.create "Frame" {}
+			end, world.root)
+			coroutine.resume(suspended)
+
+			expect(Compose.outstandingMounts()):toBe(2)
+
+			secondDispose()
+			expect(world.host.isAlive(assert(lateNode))):toBe(true)
+			expect(world.host.liveSubscriptions()):toBe(1)
+
+			local releaseFirst = required(firstDispose)
+			releaseFirst()
+			expect(world.host.isAlive(assert(lateNode))):toBe(false)
+			expectClean(world)
+		end)
+
+		it("disposes neither of two interleaved mounts when the other goes", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Activated")
+
+			local pokes: { [string]: number } = { first = 0, second = 0 }
+			local disposes: { [string]: () -> () } = {}
+			local nodes: { [string]: Compose.Node } = {}
+
+			local function mountLater(name: string): thread
+				return coroutine.create(function()
+					disposes[name] = world.runtime.mount(function()
+						local frame = world.create "Frame" {}
+						coroutine.yield()
+						nodes[name] = world.create "Frame" {}
+						world.runtime.connect(nodes[name], "Activated", function()
+							pokes[name] += 1
+						end)
+						return frame
+					end, world.root)
+				end)
+			end
+
+			local first, second = mountLater "first", mountLater "second"
+			coroutine.resume(first)
+			coroutine.resume(second)
+			coroutine.resume(first)
+			coroutine.resume(second)
+
+			expect(Compose.outstandingMounts()):toBe(2)
+
+			disposes.first()
+			world.host.dispatch(nodes.second, "Activated")
+			expect(pokes.second):toBe(1)
+			expect(pokes.first):toBe(0)
+			expect(world.host.liveSubscriptions()):toBe(1)
+
+			disposes.second()
+			expectClean(world)
+		end)
+
+		it("inherits the owner of the body that resumed it", function()
+			local world = Support.world()
+			local inner: Compose.Node? = nil
+			local dispose = world.runtime.mount(function()
+				local nested = coroutine.create(function()
+					inner = world.create "Frame" {}
+				end)
+				coroutine.resume(nested)
+				return world.create "Frame" {}
+			end, world.root)
+
+			expect(world.host.isAlive(assert(inner))):toBe(true)
+			dispose()
+			expect(world.host.isAlive(assert(inner))):toBe(false)
+			expectClean(world)
+		end)
+
+		it("still refuses a callback that runs on its own thread after the mount finished", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Activated")
+			local external = world.host.makeNode "Frame"
+
+			local dispose = world.runtime.mount(function()
+				return world.create "Frame" {}
+			end, world.root)
+
+			local failure: unknown = nil
+			local later = coroutine.create(function()
+				local ok, err: unknown = pcall(world.runtime.connect, external, "Activated", function() end)
+				failure = if ok then nil else err
+			end)
+			coroutine.resume(later)
+
+			expect(tostring(failure)):toContain "owner/no-active-owner"
+			dispose()
+			expect(world.host.liveSubscriptions()):toBe(0)
+			expect(Compose.outstandingMounts()):toBe(0)
+		end)
+	end)
+
+	describe("bindOwner", function()
+		it("re-enters the owner that created the callback", function()
+			local world = Support.world()
+			world.host.declareEvent("Frame", "Activated")
+			local external = world.host.makeNode "Frame"
+
+			local bound: ((Compose.Node) -> number)? = nil
+			local firstDispose = world.runtime.mount(function()
+				bound = Compose.bindOwner(function(node: Compose.Node): number
+					world.runtime.connect(node, "Activated", function() end)
+					return 7
+				end)
+				return world.create "Frame" {}
+			end, world.root)
+
+			local secondDispose = world.runtime.mount(function()
+				return world.create "Frame" {}
+			end, world.root)
+
+			local answer: number? = nil
+			local later = coroutine.create(function()
+				assert(bound ~= nil)
+				answer = bound(external)
+			end)
+			coroutine.resume(later)
+
+			expect(answer):toBe(7)
+			expect(world.host.liveSubscriptions()):toBe(1)
+
+			secondDispose()
+			expect(world.host.liveSubscriptions()):toBe(1)
+
+			firstDispose()
+			expect(world.host.liveSubscriptions()):toBe(0)
+			expect(Compose.outstandingMounts()):toBe(0)
+		end)
+
+		it("refuses outside any owner, and refuses something that is not a function", function()
+			Compose.__resetForTests()
+			expect(function()
+				Compose.bindOwner(function() end)
+			end):toThrow "owner/no-active-owner"
+
+			local owner = Compose.createOwner()
+			expect(function()
+				Compose.withOwner(owner, function()
+					Support.invoke(Compose.bindOwner, 42)
+				end)
+			end):toThrow "owner/bind-body-not-a-function"
+			Compose.owner.dispose(owner)
+		end)
+	end)
+end)
+
+return nil
