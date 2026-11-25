@@ -69,6 +69,38 @@ local function measure(context: Verify.Context, name: string, build: Build)
 end
 
 describe("teardown heap", function()
+	it("releases the final dependent registration while its mount target remains alive", function()
+		local host = TestScene.create()
+		local runtime = Compose.createRuntime(host.adapter)
+		local Frame = runtime.create "Frame"
+		local targets: { Compose.Node } = {}
+		local release = runtime.mount(function()
+			for index = 1, 1024 do
+				targets[index] = Frame {}
+			end
+			return Frame(targets)
+		end, host.root)
+		local function mountAndRelease(target: Compose.Node)
+			local dispose = runtime.mount(function()
+				return Frame {}
+			end, target)
+			dispose()
+		end
+		mountAndRelease(targets[1])
+		local function heap(): number
+			return Lute.memory.settle({ cycles = 8, maxAllocations = 2500000, deadlineSeconds = 10 }).heapKb
+		end
+		local before = heap()
+		for _, target in targets do
+			mountAndRelease(target)
+		end
+		local retained = heap() - before
+		release()
+		runtime:dispose()
+		expect(host.liveNodes()):toBe(1)
+		expect(retained):toBeLessThan(128)
+	end)
+
 	it("does not root unreachable owners through node metadata", function()
 		local host = table.clone(TestScene.create().adapter)
 		host.render = table.clone(host.render)
